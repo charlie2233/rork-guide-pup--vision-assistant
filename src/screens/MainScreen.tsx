@@ -1,40 +1,159 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AccessibilityInfo,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { CameraView as Camera, useCameraPermissions } from "expo-camera";
+import * as Speech from "expo-speech";
 
-const statusSamples = [
-  "Ready.",
-  "Last: I saw a chair and an open doorway ahead.",
-  "Lighting is low. Move closer to your subject.",
-] as const;
-
-type ScanMode = "object" | "text";
+import { describeImage, VisionMode } from "@/src/api/detect";
 
 export default function MainScreen() {
   console.log("[MainScreen] render");
+
+  const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSummaryRef = useRef<string>("Ready.");
+
+  const [cameraReady, setCameraReady] = useState<boolean>(false);
+  const [isDescribing, setIsDescribing] = useState<boolean>(false);
   const [continuousMode, setContinuousMode] = useState<boolean>(false);
-  const [scanMode, setScanMode] = useState<ScanMode>("object");
-  const [statusIndex, setStatusIndex] = useState<number>(0);
-  const isObjectMode = scanMode === "object";
-  const statusText = useMemo(() => statusSamples[statusIndex], [statusIndex]);
+  const [scanMode, setScanMode] = useState<VisionMode>("object");
+  const [statusMessage, setStatusMessage] = useState<string>("Ready.");
 
-  const handleDescribePress = useCallback(() => {
-    console.log("[MainScreen] Describe scene pressed", { continuousMode, scanMode });
-    setStatusIndex((prev) => (prev + 1) % statusSamples.length);
-  }, [continuousMode, scanMode]);
+  const [permission, requestPermission] = useCameraPermissions();
+  const permissionGranted = useMemo(() => Boolean(permission?.granted), [permission?.granted]);
 
-  const handleContinuousToggle = useCallback((value: boolean) => {
-    console.log("[MainScreen] Continuous mode toggled", { value });
-    setContinuousMode(value);
-  }, []);
+  useEffect(() => {
+    if (!permission) {
+      requestPermission().catch((error) => {
+        console.log("[MainScreen] Permission request failed", error);
+      });
+    }
+  }, [permission, requestPermission]);
 
-  const handleModeChange = useCallback((mode: ScanMode) => {
-    console.log("[MainScreen] Scan mode changed", { mode });
-    setScanMode(mode);
-  }, []);
+  const updateStatus = useCallback(
+    (message: string, options?: { speak?: boolean }) => {
+      console.log("[MainScreen] status update", { message });
+      setStatusMessage(message);
+      const shouldSpeak = options?.speak ?? true;
+
+      if (Platform.OS === "ios") {
+        AccessibilityInfo.announceForAccessibility(message);
+      }
+
+      if (shouldSpeak) {
+        Speech.stop();
+        Speech.speak(message, {
+          language: "en-US",
+          pitch: 1,
+          rate: 0.9,
+        });
+      }
+    },
+    [],
+  );
+
+  const describeScene = useCallback(async () => {
+    if (isDescribing) {
+      console.log("[MainScreen] Already describing, skipping tap");
+      return;
+    }
+
+    if (!permissionGranted) {
+      updateStatus("Camera permission needed. Please enable it in Settings.");
+      return;
+    }
+
+    if (!cameraRef.current || !cameraReady) {
+      updateStatus("Camera not ready yet. Hold steady.");
+      return;
+    }
+
+    try {
+      setIsDescribing(true);
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.4, skipProcessing: true });
+
+      if (!photo?.uri) {
+        updateStatus("I couldn't capture the scene. Please try again.");
+        return;
+      }
+
+      const summary = await describeImage(photo.uri, scanMode);
+
+      if (summary && summary !== lastSummaryRef.current) {
+        lastSummaryRef.current = summary;
+        updateStatus(summary);
+      } else if (!summary) {
+        updateStatus("I couldn't see clearly. Try again.");
+      }
+    } catch (error) {
+      console.error("[MainScreen] describeScene error", error);
+      updateStatus("I couldn't see clearly. Please try again.");
+    } finally {
+      setIsDescribing(false);
+    }
+  }, [cameraReady, isDescribing, permissionGranted, scanMode, updateStatus]);
+
+  useEffect(() => {
+    if (!continuousMode) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    intervalRef.current = setInterval(() => {
+      describeScene();
+    }, 5000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [continuousMode, describeScene]);
+
+  const handleContinuousToggle = useCallback(
+    (value: boolean) => {
+      console.log("[MainScreen] Continuous mode toggled", { value });
+      setContinuousMode(value);
+      updateStatus(value ? "Continuous mode on." : "Continuous mode off.", { speak: false });
+    },
+    [updateStatus],
+  );
+
+  const handleModeChange = useCallback(
+    (mode: VisionMode) => {
+      console.log("[MainScreen] Scan mode changed", { mode });
+      setScanMode(mode);
+      updateStatus(mode === "object" ? "Object mode selected." : "Text mode selected.", { speak: false });
+    },
+    [updateStatus],
+  );
 
   const handleSettingsPress = useCallback(() => {
     console.log("[MainScreen] Settings pressed");
-  }, []);
+    updateStatus("Settings not available yet.", { speak: false });
+  }, [updateStatus]);
+
+  const handlePermissionPrompt = useCallback(() => {
+    console.log("[MainScreen] prompting for permission again");
+    updateStatus("Camera permission needed. Please open device settings.");
+    requestPermission().catch((error) => {
+      console.log("[MainScreen] Permission prompt error", error);
+    });
+  }, [requestPermission, updateStatus]);
+
+  const describeButtonLabel = isDescribing ? "Describing…" : "Describe scene";
+  const isObjectMode = scanMode === "object";
 
   return (
     <View style={styles.container} testID="main-screen">
@@ -52,13 +171,45 @@ export default function MainScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.statusBadge} testID="main-status" accessible accessibilityLabel={`Status: ${statusText}`}>
-        <Text style={styles.statusText}>{statusText}</Text>
+      <View
+        style={styles.statusBadge}
+        testID="main-status"
+        accessible
+        accessibilityLabel={`Status: ${statusMessage}`}
+      >
+        <Text style={styles.statusText}>{statusMessage}</Text>
       </View>
 
-      <View style={styles.cameraShell} testID="main-camera-preview">
-        <Text style={styles.cameraCaption}>Camera preview</Text>
-        <Text style={styles.cameraHelper}>Visible for helpers. Voice feedback stays primary.</Text>
+      <View style={styles.cameraShell}>
+        {permissionGranted ? (
+          <Camera
+            ref={(node: React.ComponentRef<typeof Camera> | null) => {
+              cameraRef.current = node;
+            }}
+            facing="back"
+            style={styles.camera}
+            onCameraReady={() => {
+              console.log("[MainScreen] Camera ready");
+              setCameraReady(true);
+            }}
+            testID="main-camera-preview"
+          />
+        ) : (
+          <View style={styles.permissionPrompt} testID="main-permission-prompt">
+            <Text style={styles.permissionTitle}>Camera permission not granted</Text>
+            <Text style={styles.permissionDescription}>Enable access so Guide Pup can describe your surroundings.</Text>
+            <Pressable
+              onPress={handlePermissionPrompt}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              accessibilityHint="Double tap to grant camera permission"
+              style={({ pressed }) => [styles.permissionButton, pressed && styles.permissionButtonPressed]}
+              testID="main-permission-button"
+            >
+              <Text style={styles.permissionButtonText}>Open settings</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       <View style={styles.togglesCard} testID="main-toggle-card">
@@ -72,6 +223,10 @@ export default function MainScreen() {
             onValueChange={handleContinuousToggle}
             thumbColor="#05060B"
             trackColor={{ false: "#343843", true: "#F5C63C" }}
+            accessibilityRole="switch"
+            accessibilityLabel="Continuous mode"
+            accessibilityHint="Double tap to turn continuous descriptions on or off"
+            accessibilityState={{ checked: continuousMode }}
             testID="main-continuous-switch"
           />
         </View>
@@ -102,14 +257,20 @@ export default function MainScreen() {
       </View>
 
       <Pressable
-        onPress={handleDescribePress}
+        onPress={describeScene}
         accessibilityRole="button"
         accessibilityLabel="Describe scene"
         accessibilityHint="Double tap to hear what is in front of you"
-        style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
+        accessibilityState={{ busy: isDescribing }}
+        disabled={isDescribing}
+        style={({ pressed }) => [
+          styles.primaryButton,
+          (pressed || isDescribing) && styles.primaryButtonPressed,
+          !permissionGranted && styles.primaryButtonDisabled,
+        ]}
         testID="main-describe-button"
       >
-        <Text style={styles.primaryButtonText}>{continuousMode ? "Describing..." : "Describe scene"}</Text>
+        <Text style={styles.primaryButtonText}>{describeButtonLabel}</Text>
       </Pressable>
     </View>
   );
@@ -168,18 +329,43 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
-    padding: 24,
-    justifyContent: "space-between",
+    overflow: "hidden",
   },
-  cameraCaption: {
+  camera: {
+    flex: 1,
+  },
+  permissionPrompt: {
+    flex: 1,
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  permissionTitle: {
     color: "#FDFDFD",
     fontSize: 20,
     fontWeight: "700",
+    textAlign: "center",
   },
-  cameraHelper: {
+  permissionDescription: {
     color: "#C2C6D4",
     fontSize: 16,
+    textAlign: "center",
     lineHeight: 22,
+  },
+  permissionButton: {
+    backgroundColor: "#F5C63C",
+    borderRadius: 30,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+  },
+  permissionButtonPressed: {
+    opacity: 0.85,
+  },
+  permissionButtonText: {
+    color: "#1A1302",
+    fontSize: 18,
+    fontWeight: "700",
   },
   togglesCard: {
     backgroundColor: "#090B14",
@@ -240,7 +426,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   primaryButtonPressed: {
-    opacity: 0.85,
+    opacity: 0.75,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
   },
   primaryButtonText: {
     color: "#1A1302",
