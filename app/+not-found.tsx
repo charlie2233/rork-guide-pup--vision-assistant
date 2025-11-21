@@ -1,16 +1,26 @@
-// template
 import { Link, Stack } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Compass } from "lucide-react-native";
+
+import Colors from "@/constants/colors";
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: "Oops!" }} />
+      <Stack.Screen options={{ title: "Off route" }} />
       <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn&apos;t exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
+        <View style={styles.badge}>
+          <Compass color={Colors.palette.accent} size={32} />
+        </View>
+        <Text style={styles.title}>We lost this path</Text>
+        <Text style={styles.message}>
+          The scene you were tracking drifted away. Jump back to the vault and keep exploring.
+        </Text>
+        <Link href="/capture" asChild>
+          <Pressable style={styles.cta} testID="return-home">
+            <Text style={styles.ctaText}>Return to capture</Text>
+          </Pressable>
         </Link>
       </View>
     </>
@@ -20,20 +30,42 @@ export default function NotFoundScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.palette.background,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
+    gap: 18,
+  },
+  badge: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.palette.elevated,
   },
   title: {
-    fontSize: 20,
-    fontWeight: "bold",
+    color: Colors.palette.textPrimary,
+    fontSize: 26,
+    fontWeight: "700",
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
+  message: {
+    color: Colors.palette.textMuted,
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
   },
-  linkText: {
-    fontSize: 14,
-    color: "#2e78b7",
+  cta: {
+    backgroundColor: Colors.palette.accent,
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+  },
+  ctaText: {
+    color: Colors.palette.background,
+    fontSize: 15,
+    fontWeight: "700",
   },
 });
