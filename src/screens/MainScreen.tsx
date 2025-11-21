@@ -22,7 +22,7 @@ export default function MainScreen() {
 
   const [cameraReady, setCameraReady] = useState<boolean>(false);
   const [isDescribing, setIsDescribing] = useState<boolean>(false);
-  const [continuousMode, setContinuousMode] = useState<boolean>(false);
+  const [continuousMode, setContinuousMode] = useState<boolean>(true);
   const [scanMode, setScanMode] = useState<VisionMode>("object");
   const [statusMessage, setStatusMessage] = useState<string>("Ready.");
 
