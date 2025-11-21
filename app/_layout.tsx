@@ -15,14 +15,11 @@ function RootLayoutNav() {
   return (
     <Stack
       screenOptions={{
-        headerBackTitle: "Back",
-        headerTintColor: Colors.palette.textPrimary,
-        headerStyle: { backgroundColor: Colors.palette.background },
+        headerShown: false,
         contentStyle: { backgroundColor: Colors.palette.background },
       }}
     >
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="modal" options={{ presentation: "transparentModal", headerShown: false }} />
+      <Stack.Screen name="index" options={{ headerShown: false }} />
     </Stack>
   );
 }
