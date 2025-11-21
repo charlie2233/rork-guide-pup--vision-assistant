@@ -32,7 +32,8 @@
       "package": "app.rork.guide_pup_vision_assist",
       "permissions": [
         "CAMERA",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {

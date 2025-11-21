@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { CameraView as Camera, useCameraPermissions } from "expo-camera";
 import * as Speech from "expo-speech";
+import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { describeImage, VisionMode } from "@/src/api/detect";
@@ -68,20 +69,32 @@ export default function MainScreen() {
     }
 
     if (!permissionGranted) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
       updateStatus("Camera permission needed. Please enable it in Settings.");
       return;
     }
 
     if (!cameraRef.current || !cameraReady) {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
       updateStatus("Camera not ready yet. Hold steady.");
       return;
     }
 
     try {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
       setIsDescribing(true);
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.4, skipProcessing: true });
 
       if (!photo?.uri) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
         updateStatus("I couldn't capture the scene. Please try again.");
         return;
       }
@@ -90,12 +103,21 @@ export default function MainScreen() {
 
       if (summary && summary !== lastSummaryRef.current) {
         lastSummaryRef.current = summary;
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
         updateStatus(summary);
       } else if (!summary) {
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
         updateStatus("I couldn't see clearly. Try again.");
       }
     } catch (error) {
       console.error("[MainScreen] describeScene error", error);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
       updateStatus("I couldn't see clearly. Please try again.");
     } finally {
       setIsDescribing(false);
@@ -126,28 +148,64 @@ export default function MainScreen() {
   const handleContinuousToggle = useCallback(
     (value: boolean) => {
       console.log("[MainScreen] Continuous mode toggled", { value });
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
       setContinuousMode(value);
-      updateStatus(value ? "Continuous mode on." : "Continuous mode off.", { speak: false });
+      const message = value ? "Continuous mode on." : "Continuous mode off.";
+      Speech.speak(message, {
+        language: "en-US",
+        pitch: 1,
+        rate: 0.9,
+      });
+      if (Platform.OS === "ios") {
+        AccessibilityInfo.announceForAccessibility(message);
+      }
     },
-    [updateStatus],
+    [],
   );
 
   const handleModeChange = useCallback(
     (mode: VisionMode) => {
       console.log("[MainScreen] Scan mode changed", { mode });
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
       setScanMode(mode);
-      updateStatus(mode === "object" ? "Object mode selected." : "Text mode selected.", { speak: false });
+      const message = mode === "object" ? "Object mode selected." : "Text mode selected.";
+      Speech.speak(message, {
+        language: "en-US",
+        pitch: 1,
+        rate: 0.9,
+      });
+      if (Platform.OS === "ios") {
+        AccessibilityInfo.announceForAccessibility(message);
+      }
     },
-    [updateStatus],
+    [],
   );
 
   const handleSettingsPress = useCallback(() => {
     console.log("[MainScreen] Settings pressed");
-    updateStatus("Settings not available yet.", { speak: false });
-  }, [updateStatus]);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const message = "Settings not available yet.";
+    Speech.speak(message, {
+      language: "en-US",
+      pitch: 1,
+      rate: 0.9,
+    });
+    if (Platform.OS === "ios") {
+      AccessibilityInfo.announceForAccessibility(message);
+    }
+  }, []);
 
   const handlePermissionPrompt = useCallback(() => {
     console.log("[MainScreen] prompting for permission again");
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     updateStatus("Camera permission needed. Please open device settings.");
     requestPermission().catch((error) => {
       console.log("[MainScreen] Permission prompt error", error);
@@ -283,7 +341,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#05060B",
     paddingHorizontal: 24,
-    gap: 20,
+    gap: 24,
   },
   headerRow: {
     flexDirection: "row",
@@ -291,37 +349,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   appTitle: {
-    color: "#FDFDFD",
-    fontSize: 26,
+    color: "#FFFFFF",
+    fontSize: 28,
     fontWeight: "800",
   },
   settingsButton: {
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    minWidth: 60,
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
   },
   settingsButtonPressed: {
     opacity: 0.8,
   },
   settingsButtonText: {
-    color: "#FDFDFD",
-    fontSize: 16,
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
   },
   statusBadge: {
     backgroundColor: "#0E1019",
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    borderWidth: 2,
+    borderColor: "#F5C63C",
+    minHeight: 80,
+    justifyContent: "center",
   },
   statusText: {
-    color: "#F5F7FF",
-    fontSize: 18,
-    lineHeight: 24,
+    color: "#FFFFFF",
+    fontSize: 22,
+    lineHeight: 32,
+    fontWeight: "600",
   },
   cameraShell: {
     flex: 1,
@@ -370,10 +435,10 @@ const styles = StyleSheet.create({
   togglesCard: {
     backgroundColor: "#090B14",
     borderRadius: 28,
-    padding: 22,
-    gap: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    padding: 26,
+    gap: 24,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.15)",
   },
   toggleRow: {
     flexDirection: "row",
@@ -386,14 +451,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   toggleTitle: {
-    color: "#FDFDFD",
-    fontSize: 18,
+    color: "#FFFFFF",
+    fontSize: 20,
     fontWeight: "700",
   },
   toggleDescription: {
-    color: "#B4B9C9",
-    fontSize: 16,
-    lineHeight: 22,
+    color: "#D0D4E0",
+    fontSize: 17,
+    lineHeight: 24,
   },
   modeSegment: {
     flexDirection: "row",
@@ -405,15 +470,17 @@ const styles = StyleSheet.create({
   segmentButton: {
     flex: 1,
     borderRadius: 18,
-    paddingVertical: 12,
+    paddingVertical: 16,
     alignItems: "center",
+    minHeight: 56,
+    justifyContent: "center",
   },
   segmentButtonActive: {
     backgroundColor: "#F5C63C",
   },
   segmentText: {
     color: "#AEB4C5",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
   },
   segmentTextActive: {
@@ -421,9 +488,13 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: "#F5C63C",
-    borderRadius: 36,
-    paddingVertical: 22,
+    borderRadius: 40,
+    paddingVertical: 28,
     alignItems: "center",
+    minHeight: 80,
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#1A1302",
   },
   primaryButtonPressed: {
     opacity: 0.75,
@@ -433,8 +504,8 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#1A1302",
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: "800",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
   },
 });
