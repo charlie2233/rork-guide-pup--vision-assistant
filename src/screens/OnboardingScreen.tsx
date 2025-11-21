@@ -1,39 +1,81 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { RootStackParamList } from "@/src/navigation/types";
 
-const headline = "Guide Pup" as const;
-const subtext = "Your AI-powered accessibility co-pilot" as const;
+const onboardingSteps = [
+  {
+    title: "Welcome to Guide Pup",
+    description: "I use your camera and voice to guide you through any space.",
+    buttonLabel: "Continue",
+  },
+  {
+    title: "Permissions",
+    description: "Guide Pup needs camera and microphone access to describe scenes aloud.",
+    buttonLabel: "Allow camera and microphone",
+  },
+  {
+    title: "How to use",
+    description: "Tap the big button for a scene description. Turn on continuous mode for regular updates.",
+    buttonLabel: "Start using Guide Pup",
+  },
+] as const;
+
+const howToBullets = [
+  "Tap the large button at the bottom to hear what is ahead.",
+  "Toggle continuous mode if you want steady updates.",
+  "Switch between object and text modes for different tasks.",
+] as const;
 
 export default function OnboardingScreen() {
   console.log("[OnboardingScreen] render");
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, "Onboarding">>();
+  const [stepIndex, setStepIndex] = useState<number>(0);
+
+  const currentStep = useMemo(() => onboardingSteps[stepIndex], [stepIndex]);
+  const isLastStep = stepIndex === onboardingSteps.length - 1;
 
   const handleContinue = useCallback(() => {
-    console.log("[OnboardingScreen] Continue pressed");
-    navigation.navigate("Main");
-  }, [navigation]);
+    console.log("[OnboardingScreen] Continue pressed", { stepIndex });
+    if (isLastStep) {
+      navigation.navigate("Main");
+      return;
+    }
+    setStepIndex((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
+  }, [isLastStep, navigation, stepIndex]);
 
   return (
     <View style={styles.container} testID="onboarding-screen">
-      <View style={styles.heroBadge} testID="onboarding-hero-badge">
-        <Text style={styles.heroBadgeText}>Beta</Text>
-      </View>
-      <Text style={styles.headline}>{headline}</Text>
-      <Text style={styles.subtitle}>{subtext}</Text>
-      <View style={styles.card} testID="onboarding-highlights-card">
-        <Text style={styles.cardTitle}>Instant Assistance</Text>
-        <Text style={styles.cardBody}>Use camera, audio, and haptic cues to interpret the world in real time.</Text>
-      </View>
+      <Text style={styles.kicker}>Guide Pup</Text>
+      <Text style={styles.headline}>{currentStep.title}</Text>
+      <Text style={styles.subtitle}>{currentStep.description}</Text>
+      {isLastStep ? (
+        <View style={styles.howToCard} testID="onboarding-how-to-card">
+          {howToBullets.map((bullet) => (
+            <View key={bullet} style={styles.bulletRow}>
+              <View style={styles.bulletDot} />
+              <Text style={styles.bulletText}>{bullet}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.permissionCard} testID="onboarding-info-card">
+          <Text style={styles.permissionCardText}>
+            Everything is designed for voice-first navigation with large, forgiving controls.
+          </Text>
+        </View>
+      )}
       <Pressable
         onPress={handleContinue}
+        accessibilityLabel={currentStep.buttonLabel}
+        accessibilityHint={isLastStep ? "Double tap to open the main screen" : "Double tap to advance"}
+        accessibilityRole="button"
         style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
-        testID="onboarding-continue-button"
+        testID="onboarding-primary-action"
       >
-        <Text style={styles.primaryButtonText}>Enter Guide Pup</Text>
+        <Text style={styles.primaryButtonText}>{currentStep.buttonLabel}</Text>
       </Pressable>
     </View>
   );
@@ -42,68 +84,80 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020204",
+    backgroundColor: "#05060B",
     paddingHorizontal: 28,
+    paddingBottom: 48,
     justifyContent: "center",
     gap: 24,
   },
-  heroBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    backgroundColor: "rgba(125,252,192,0.12)",
-  },
-  heroBadgeText: {
-    color: "#7DFCC0",
-    fontSize: 14,
+  kicker: {
+    color: "#F7F8FB",
+    fontSize: 18,
     fontWeight: "600",
-    letterSpacing: 0.5,
+    letterSpacing: 2,
+    textTransform: "uppercase",
   },
   headline: {
-    color: "#F5F5F7",
-    fontSize: 42,
+    color: "#FDFDFD",
+    fontSize: 40,
     fontWeight: "800",
-    lineHeight: 48,
+    lineHeight: 46,
   },
   subtitle: {
-    color: "#C9CBD3",
+    color: "#CDD0DC",
+    fontSize: 20,
+    lineHeight: 30,
+  },
+  permissionCard: {
+    backgroundColor: "#0B0D16",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    padding: 24,
+  },
+  permissionCardText: {
+    color: "#E5E7EE",
     fontSize: 18,
     lineHeight: 26,
   },
-  card: {
-    backgroundColor: "#0B0C12",
-    borderRadius: 24,
-    padding: 24,
+  howToCard: {
+    backgroundColor: "#0B0D16",
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 26,
+    gap: 18,
   },
-  cardTitle: {
-    color: "#F5F5F7",
+  bulletRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  bulletDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#F5C63C",
+  },
+  bulletText: {
+    color: "#FDFDFD",
     fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  cardBody: {
-    color: "#C9CBD3",
-    fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 26,
+    flex: 1,
   },
   primaryButton: {
-    backgroundColor: "#7DFCC0",
-    borderRadius: 18,
-    paddingVertical: 16,
+    backgroundColor: "#F5C63C",
+    borderRadius: 32,
+    paddingVertical: 20,
     alignItems: "center",
   },
   primaryButtonPressed: {
     opacity: 0.85,
   },
   primaryButtonText: {
-    color: "#051814",
-    fontSize: 17,
-    fontWeight: "700",
-    letterSpacing: 0.4,
+    color: "#1A1302",
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: 0.8,
   },
 });
