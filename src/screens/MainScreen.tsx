@@ -15,13 +15,16 @@ import * as Speech from "expo-speech";
 import { describeImage, VisionMode } from "@/src/api/detect";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
+const FAST_SCAN_INTERVAL_MS = 1500;
+const INITIAL_SCAN_DELAY_MS = 400;
+
 export default function MainScreen() {
   console.log("[MainScreen] render");
 
   const router = useRouter();
   const { getSpeechRateValue } = useSettings();
   const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSummaryRef = useRef<string>("Ready.");
 
   const [cameraReady, setCameraReady] = useState<boolean>(false);
@@ -112,23 +115,39 @@ export default function MainScreen() {
   }, [cameraReady, isDescribing, permissionGranted, scanMode, updateStatus]);
 
   useEffect(() => {
-    if (!continuousMode) {
+    let cancelled = false;
+
+    const clearTimer = () => {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearTimeout(intervalRef.current);
         intervalRef.current = null;
       }
-      return;
+    };
+
+    const loop = async () => {
+      if (cancelled || !continuousMode) {
+        return;
+      }
+
+      await describeScene();
+
+      if (cancelled || !continuousMode) {
+        return;
+      }
+
+      intervalRef.current = setTimeout(loop, FAST_SCAN_INTERVAL_MS);
+    };
+
+    if (continuousMode) {
+      clearTimer();
+      intervalRef.current = setTimeout(loop, INITIAL_SCAN_DELAY_MS);
+    } else {
+      clearTimer();
     }
 
-    intervalRef.current = setInterval(() => {
-      describeScene();
-    }, 5000);
-
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      cancelled = true;
+      clearTimer();
     };
   }, [continuousMode, describeScene]);
 

@@ -82,6 +82,10 @@ Guide Pup uses OpenAI's multimodal models to describe what the camera sees. Prov
 
 If you prefer, you can also place these values under `expo.extra` inside `app.json`. Without a key, the app will surface a “vision service unavailable” error whenever you try to scan.
 
+### Real-time object scanning
+
+Continuous scanning now fires roughly every 1.5 seconds to mimic video-style narration. This provides much richer situational awareness but also increases API usage—keep an eye on your OpenAI rate limits or temporarily disable the continuous toggle while testing text mode.
+
 ## How can I test my app?
 
 ### **On your phone (Recommended)**

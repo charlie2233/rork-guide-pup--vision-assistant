@@ -28,15 +28,23 @@ const DEFAULT_MODEL = "gpt-4o-mini";
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const CHAT_COMPLETIONS_PATH = "/chat/completions";
 
+const OBJECT_RESPONSE_FORMAT =
+  "Respond like a live video narrator: start with 'Objects:' and list the most important things with LEFT/CENTER/RIGHT tags and distance (near/mid/far). " +
+  "Follow with 'Action:' describing any motion, hazards, or next steps in under 15 words.";
+
 const MODE_PROMPTS: Record<VisionMode, string> = {
   object:
-    "Describe this scene for a blind user. Mention people, obstacles, and anything the user should be aware of. Keep it to two concise sentences.",
-  text: "Read any visible text in this image. Preserve line order when possible and mention context like the type of sign.",
+    "Treat this frame as part of a live video feed for a blind user. " +
+    "Detect the most salient people, obstacles, doorways, vehicles, pets, and moving objects. " +
+    "Include direction (left/center/right) and proximity (near/mid/far). " +
+    `${OBJECT_RESPONSE_FORMAT}`,
+  text:
+    "Read any visible text in this image. Preserve line order when possible, note casing that conveys emphasis, and mention context such as whether it is a sign, label, or document.",
 };
 
 const SYSTEM_PROMPT =
-  "You are Guide Pup, an assistant that provides calm, descriptive narration for blind users. " +
-  "Focus on the most important objects, hazards, and text. Respond in under 60 words.";
+  "You are Guide Pup, an assistant delivering calm but energetic real-time guidance. " +
+  "Focus on salient objects, hazards, and legible text. Keep answers under 60 words.";
 
 const openAIClient = axios.create({
   baseURL: OPENAI_BASE_URL,
