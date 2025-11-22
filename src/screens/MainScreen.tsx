@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
@@ -12,10 +13,13 @@ import { CameraView as Camera, useCameraPermissions } from "expo-camera";
 import * as Speech from "expo-speech";
 
 import { describeImage, VisionMode } from "@/src/api/detect";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 export default function MainScreen() {
   console.log("[MainScreen] render");
 
+  const router = useRouter();
+  const { getSpeechRateValue } = useSettings();
   const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSummaryRef = useRef<string>("Ready.");
@@ -52,11 +56,11 @@ export default function MainScreen() {
         Speech.speak(message, {
           language: "en-US",
           pitch: 1,
-          rate: 0.9,
+          rate: getSpeechRateValue(),
         });
       }
     },
-    [],
+    [getSpeechRateValue],
   );
 
   const describeScene = useCallback(async () => {
@@ -141,8 +145,8 @@ export default function MainScreen() {
 
   const handleSettingsPress = useCallback(() => {
     console.log("[MainScreen] Settings pressed");
-    updateStatus("Settings not available yet.", { speak: false });
-  }, [updateStatus]);
+    router.push("/settings");
+  }, [router]);
 
   const handlePermissionPrompt = useCallback(() => {
     console.log("[MainScreen] prompting for permission again");

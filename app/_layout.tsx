@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import Colors from "@/constants/colors";
+import { SettingsProvider } from "@/src/providers/SettingsProvider";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,6 +23,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="main" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -33,9 +35,11 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={styles.root}>
-        <RootLayoutNav />
-      </GestureHandlerRootView>
+      <SettingsProvider>
+        <GestureHandlerRootView style={styles.root}>
+          <RootLayoutNav />
+        </GestureHandlerRootView>
+      </SettingsProvider>
     </QueryClientProvider>
   );
 }
