@@ -1,5 +1,4 @@
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
-import { useIsFocused } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -24,7 +23,6 @@ const sliderHeight = 160;
 
 export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
-  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
   const pulse = useRef(new Animated.Value(1)).current;
@@ -125,10 +123,6 @@ export default function CaptureScreen() {
           </Pressable>
         </View>
       );
-    }
-
-    if (!isFocused) {
-      return <View style={styles.camera} />;
     }
 
     return (
