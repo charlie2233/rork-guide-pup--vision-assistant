@@ -86,6 +86,14 @@ If you prefer, you can also place these values under `expo.extra` inside `app.js
 
 Continuous scanning now fires roughly every 1.5 seconds to mimic video-style narration. This provides much richer situational awareness but also increases API usage—keep an eye on your OpenAI rate limits or temporarily disable the continuous toggle while testing text mode.
 
+## Accessibility-first interface
+
+Guide Pup is tuned for blind and low-vision users:
+
+- Large tactile buttons, pill-shaped mode selectors, and a high-contrast palette keep targets easy to feel and see.
+- Inline guidance cards remind users how to hold the phone, stay aware of surroundings, and pick the right scan mode.
+- Every actionable element exposes accessibility labels, hints, and VoiceOver-friendly summaries, and the primary button speaks feedback automatically.
+
 ## How can I test my app?
 
 ### **On your phone (Recommended)**

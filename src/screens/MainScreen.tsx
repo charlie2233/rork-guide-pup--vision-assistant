@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { CameraView as Camera, useCameraPermissions } from "expo-camera";
 import * as Speech from "expo-speech";
+import { Eye, Shield, Smartphone, Type, Volume2 } from "lucide-react-native";
 
 import { describeImage, VisionMode } from "@/src/api/detect";
 import { useSettings } from "@/src/providers/SettingsProvider";
@@ -184,6 +185,38 @@ export default function MainScreen() {
 
   const describeButtonLabel = isDescribing ? "Describing…" : "Describe scene";
   const isObjectMode = scanMode === "object";
+  const tipIconProps = useMemo(
+    () => ({
+      color: "#7DFCC0",
+      size: 26,
+      strokeWidth: 1.4,
+    }),
+    [],
+  );
+
+  const accessibilityTips = useMemo(
+    () => [
+      {
+        key: "steady",
+        title: "Hold steady",
+        description: "Keep the rear camera at chest height and point toward the space you need described.",
+        Icon: Smartphone,
+      },
+      {
+        key: "audio",
+        title: "Use sound",
+        description: "Wear headphones or turn volume up so Speech feedback is easy to hear outdoors.",
+        Icon: Volume2,
+      },
+      {
+        key: "safety",
+        title: "Stay aware",
+        description: "Object mode calls out people and hazards, while text mode reads nearby signage.",
+        Icon: Shield,
+      },
+    ],
+    [],
+  );
 
   return (
     <View style={styles.container} testID="main-screen">
@@ -208,6 +241,30 @@ export default function MainScreen() {
         accessibilityLabel={`Status: ${statusMessage}`}
       >
         <Text style={styles.statusText}>{statusMessage}</Text>
+      </View>
+
+      <View
+        style={styles.accessibilityGuide}
+        testID="main-accessibility-guide"
+        accessible
+        accessibilityLabel="How to get the clearest guidance"
+      >
+        {accessibilityTips.map(({ key, title, description, Icon }) => (
+          <View
+            key={key}
+            style={styles.accessibilityTip}
+            accessibilityRole="text"
+            accessibilityLabel={`${title}. ${description}`}
+          >
+            <View style={styles.tipIconBadge} accessibilityElementsHidden>
+              <Icon {...tipIconProps} />
+            </View>
+            <View style={styles.tipTextWrap}>
+              <Text style={styles.tipTitle}>{title}</Text>
+              <Text style={styles.tipDescription}>{description}</Text>
+            </View>
+          </View>
+        ))}
       </View>
 
       <View style={styles.cameraShell}>
@@ -270,7 +327,20 @@ export default function MainScreen() {
             accessibilityHint="Describe people and objects"
             testID="segment-object-mode"
           >
-            <Text style={[styles.segmentText, isObjectMode && styles.segmentTextActive]}>Object mode</Text>
+            <View style={styles.segmentContent}>
+              <Eye
+                size={24}
+                color={isObjectMode ? "#1A1302" : "#F5C63C"}
+                strokeWidth={1.5}
+                accessibilityElementsHidden
+              />
+              <View>
+                <Text style={[styles.segmentText, isObjectMode && styles.segmentTextActive]}>Object mode</Text>
+                <Text style={[styles.segmentSubText, isObjectMode && styles.segmentSubTextActive]}>
+                  Hazards + people
+                </Text>
+              </View>
+            </View>
           </Pressable>
           <Pressable
             onPress={() => handleModeChange("text")}
@@ -281,7 +351,20 @@ export default function MainScreen() {
             accessibilityHint="Read signs and documents"
             testID="segment-text-mode"
           >
-            <Text style={[styles.segmentText, !isObjectMode && styles.segmentTextActive]}>Text mode</Text>
+            <View style={styles.segmentContent}>
+              <Type
+                size={24}
+                color={!isObjectMode ? "#1A1302" : "#F5C63C"}
+                strokeWidth={1.5}
+                accessibilityElementsHidden
+              />
+              <View>
+                <Text style={[styles.segmentText, !isObjectMode && styles.segmentTextActive]}>Text mode</Text>
+                <Text style={[styles.segmentSubText, !isObjectMode && styles.segmentSubTextActive]}>
+                  Signs + documents
+                </Text>
+              </View>
+            </View>
           </Pressable>
         </View>
       </View>
@@ -350,8 +433,43 @@ const styles = StyleSheet.create({
   },
   statusText: {
     color: "#F5F7FF",
+    fontSize: 20,
+    lineHeight: 28,
+  },
+  accessibilityGuide: {
+    backgroundColor: "#090B14",
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    padding: 18,
+    gap: 14,
+  },
+  accessibilityTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  tipIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(125,252,192,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tipTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  tipTitle: {
+    color: "#FDFDFD",
     fontSize: 18,
-    lineHeight: 24,
+    fontWeight: "700",
+  },
+  tipDescription: {
+    color: "#CBCFD9",
+    fontSize: 16,
+    lineHeight: 22,
   },
   cameraShell: {
     flex: 1,
@@ -436,10 +554,16 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 18,
     paddingVertical: 12,
-    alignItems: "center",
+    paddingHorizontal: 12,
   },
   segmentButtonActive: {
     backgroundColor: "#F5C63C",
+  },
+  segmentContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
   },
   segmentText: {
     color: "#AEB4C5",
@@ -448,6 +572,13 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: "#1A1302",
+  },
+  segmentSubText: {
+    color: "#AEB4C5",
+    fontSize: 14,
+  },
+  segmentSubTextActive: {
+    color: "#2E1C02",
   },
   primaryButton: {
     backgroundColor: "#F5C63C",
