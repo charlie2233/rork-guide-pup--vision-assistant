@@ -1,9 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
-import { RootStackParamList } from "@/src/navigation/types";
+import { useRouter } from "expo-router";
 
 const onboardingSteps = [
   {
@@ -31,7 +28,7 @@ const howToBullets = [
 
 export default function OnboardingScreen() {
   console.log("[OnboardingScreen] render");
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, "Onboarding">>();
+  const router = useRouter();
   const [stepIndex, setStepIndex] = useState<number>(0);
 
   const currentStep = useMemo(() => onboardingSteps[stepIndex], [stepIndex]);
@@ -40,11 +37,11 @@ export default function OnboardingScreen() {
   const handleContinue = useCallback(() => {
     console.log("[OnboardingScreen] Continue pressed", { stepIndex });
     if (isLastStep) {
-      navigation.navigate("Main");
+      router.replace("/main" as any);
       return;
     }
     setStepIndex((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
-  }, [isLastStep, navigation, stepIndex]);
+  }, [isLastStep, router, stepIndex]);
 
   return (
     <View style={styles.container} testID="onboarding-screen">
