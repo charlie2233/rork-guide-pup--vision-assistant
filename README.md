@@ -66,6 +66,22 @@ This project is built with the most popular native mobile cross-platform technic
 - **React Query** - Server state management
 - **Lucide React Native** - Beautiful icons
 
+## AI Vision Setup
+
+Guide Pup uses OpenAI's multimodal models to describe what the camera sees. Provide a key before launching the app:
+
+1. Create a `.env` file (or update your existing one) in the project root and add:
+
+   ```bash
+   EXPO_PUBLIC_OPENAI_API_KEY=sk-your-key
+   # Optional: override the default model
+   EXPO_PUBLIC_OPENAI_MODEL=gpt-4o-mini
+   ```
+
+2. Restart the Expo dev server so the new environment variables are available.
+
+If you prefer, you can also place these values under `expo.extra` inside `app.json`. Without a key, the app will surface a “vision service unavailable” error whenever you try to scan.
+
 ## How can I test my app?
 
 ### **On your phone (Recommended)**

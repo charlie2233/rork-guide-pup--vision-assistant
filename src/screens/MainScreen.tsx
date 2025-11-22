@@ -81,14 +81,21 @@ export default function MainScreen() {
 
     try {
       setIsDescribing(true);
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.4, skipProcessing: true });
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.4,
+        skipProcessing: true,
+        base64: true,
+      });
 
       if (!photo?.uri) {
         updateStatus("I couldn't capture the scene. Please try again.");
         return;
       }
 
-      const summary = await describeImage(photo.uri, scanMode);
+      const summary = await describeImage(
+        { uri: photo.uri, base64: photo.base64 },
+        scanMode,
+      );
 
       if (summary && summary !== lastSummaryRef.current) {
         lastSummaryRef.current = summary;
