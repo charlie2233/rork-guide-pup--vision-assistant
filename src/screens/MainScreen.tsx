@@ -23,10 +23,10 @@ export default function MainScreen() {
   console.log("[MainScreen] render");
 
   const router = useRouter();
-  const { getSpeechRateValue } = useSettings();
+  const { settings, getSpeechRateValue } = useSettings();
   const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSummaryRef = useRef<string>("Ready.");
+  const lastSummaryRef = useRef<string>("");
 
   const [cameraReady, setCameraReady] = useState<boolean>(false);
   const [isDescribing, setIsDescribing] = useState<boolean>(false);
@@ -96,9 +96,15 @@ export default function MainScreen() {
         return;
       }
 
+      const previousSummary = continuousMode ? lastSummaryRef.current.trim() : "";
       const summary = await describeImage(
         { uri: photo.uri, base64: photo.base64 },
         scanMode,
+        {
+          descriptionMode: settings.descriptionMode,
+          lastSummary: previousSummary || undefined,
+          isContinuous: continuousMode,
+        },
       );
 
       if (summary && summary !== lastSummaryRef.current) {
@@ -113,7 +119,7 @@ export default function MainScreen() {
     } finally {
       setIsDescribing(false);
     }
-  }, [cameraReady, isDescribing, permissionGranted, scanMode, updateStatus]);
+  }, [cameraReady, continuousMode, isDescribing, permissionGranted, scanMode, settings.descriptionMode, updateStatus]);
 
   useEffect(() => {
     let cancelled = false;
