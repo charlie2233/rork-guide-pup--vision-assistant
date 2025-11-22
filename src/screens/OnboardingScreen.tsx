@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const onboardingSteps = [
   {
@@ -29,6 +30,7 @@ const howToBullets = [
 export default function OnboardingScreen() {
   console.log("[OnboardingScreen] render");
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [stepIndex, setStepIndex] = useState<number>(0);
 
   const currentStep = useMemo(() => onboardingSteps[stepIndex], [stepIndex]);
@@ -44,7 +46,7 @@ export default function OnboardingScreen() {
   }, [isLastStep, router, stepIndex]);
 
   return (
-    <View style={styles.container} testID="onboarding-screen">
+    <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 48) }]} testID="onboarding-screen">
       <Text style={styles.kicker}>Guide Pup</Text>
       <Text style={styles.headline}>{currentStep.title}</Text>
       <Text style={styles.subtitle}>{currentStep.description}</Text>
@@ -83,7 +85,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#05060B",
     paddingHorizontal: 28,
-    paddingBottom: 48,
     justifyContent: "center",
     gap: 24,
   },
