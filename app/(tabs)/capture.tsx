@@ -145,7 +145,8 @@ export default function CaptureScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.backgroundGlow} />
-      <View style={[styles.safeLayer, { paddingTop: insets.top }]}>
+      {renderCamera()}
+      <View style={[styles.overlayTop, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
         <View style={styles.topBar}>
           <View>
             <Text style={styles.sessionLabel}>Auric session</Text>
@@ -156,8 +157,7 @@ export default function CaptureScreen() {
           </Pressable>
         </View>
       </View>
-      <View style={styles.cameraWrapper}>{renderCamera()}</View>
-      <View style={styles.overlayContent} pointerEvents="box-none">
+      <View style={[styles.overlayBottom, { paddingBottom: insets.bottom + 8 }]} pointerEvents="box-none">
         <View style={styles.statRow}>
           {statCards.map(({ label, value, icon: Icon }) => (
             <View key={label} style={styles.statPill} testID={`stat-pill-${label}`}>
@@ -255,16 +255,21 @@ const styles = StyleSheet.create({
     borderRadius: Dimensions.get("window").width,
     top: -Dimensions.get("window").width * 0.4,
     alignSelf: "center",
-    opacity: 0.9,
+    opacity: 0.3,
+    zIndex: 0,
   },
-  safeLayer: {
+  overlayTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 24,
+    zIndex: 10,
   },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
   },
   sessionLabel: {
     color: Colors.palette.textMuted,
@@ -286,23 +291,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(5,6,13,0.4)",
   },
-  cameraWrapper: {
-    flex: 1,
-    marginHorizontal: 16,
-    borderRadius: 32,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
   camera: {
-    flex: 1,
-  },
-  overlayContent: {
     position: "absolute",
-    inset: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+  },
+  overlayBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 24,
-    paddingBottom: 32,
     justifyContent: "flex-end",
+    zIndex: 10,
   },
   statRow: {
     flexDirection: "row",
