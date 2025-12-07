@@ -39,7 +39,7 @@ export default function OnboardingScreen() {
   const handleContinue = useCallback(() => {
     console.log("[OnboardingScreen] Continue pressed", { stepIndex });
     if (isLastStep) {
-      router.replace("/main" as any);
+      router.replace("/");
       return;
     }
     setStepIndex((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
