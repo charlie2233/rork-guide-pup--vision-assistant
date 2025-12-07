@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 import * as Speech from 'expo-speech';
 
 interface VoiceContextType {
@@ -11,20 +11,48 @@ const VoiceContext = createContext<VoiceContextType | undefined>(undefined);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const queueRef = useRef<string[]>([]);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const optionsRef = useRef<Speech.SpeechOptions | undefined>(undefined);
 
-  const speak = (text: string, options?: Speech.SpeechOptions) => {
-    Speech.speak(text, {
-      ...options,
-      onStart: () => setIsSpeaking(true),
-      onDone: () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-    });
-  };
+  const speak = useCallback((text: string, options?: Speech.SpeechOptions) => {
+    // Add to queue
+    queueRef.current.push(text);
+    if (options) {
+      optionsRef.current = options;
+    }
 
-  const stop = () => {
+    // Clear existing timeout to batch calls
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Set timeout to speak queued messages
+    timeoutRef.current = setTimeout(() => {
+      if (queueRef.current.length > 0) {
+        const combinedMessage = queueRef.current.join('. ');
+        queueRef.current = []; // Clear queue
+
+        Speech.speak(combinedMessage, {
+          ...optionsRef.current,
+          onStart: () => setIsSpeaking(true),
+          onDone: () => setIsSpeaking(false),
+          onStopped: () => setIsSpeaking(false),
+        });
+      }
+      timeoutRef.current = null;
+    }, 300); // 300ms debounce to gather all messages
+  }, []);
+
+  const stop = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    queueRef.current = [];
     Speech.stop();
     setIsSpeaking(false);
-  };
+  }, []);
 
   return (
     <VoiceContext.Provider value={{ speak, stop, isSpeaking }}>
