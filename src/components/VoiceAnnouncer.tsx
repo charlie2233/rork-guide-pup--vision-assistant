@@ -14,6 +14,41 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const queueRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optionsRef = useRef<Speech.SpeechOptions | undefined>(undefined);
+  const sessionRef = useRef(0);
+
+  const flushQueue = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    if (queueRef.current.length === 0) {
+      return;
+    }
+
+    const combinedMessage = queueRef.current.join('. ');
+    queueRef.current = [];
+    const sessionId = sessionRef.current + 1;
+    sessionRef.current = sessionId;
+
+    // Stop any ongoing speech so the new batch starts immediately.
+    Speech.stop();
+    setIsSpeaking(true);
+
+    Speech.speak(combinedMessage, {
+      ...optionsRef.current,
+      onStart: () => setIsSpeaking(true),
+      onDone: () => {
+        if (sessionRef.current === sessionId) setIsSpeaking(false);
+      },
+      onStopped: () => {
+        if (sessionRef.current === sessionId) setIsSpeaking(false);
+      },
+      onError: () => {
+        if (sessionRef.current === sessionId) setIsSpeaking(false);
+      },
+    });
+  }, []);
 
   const speak = useCallback((text: string, options?: Speech.SpeechOptions) => {
     // Add to queue
@@ -28,21 +63,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
 
     // Set timeout to speak queued messages
-    timeoutRef.current = setTimeout(() => {
-      if (queueRef.current.length > 0) {
-        const combinedMessage = queueRef.current.join('. ');
-        queueRef.current = []; // Clear queue
-
-        Speech.speak(combinedMessage, {
-          ...optionsRef.current,
-          onStart: () => setIsSpeaking(true),
-          onDone: () => setIsSpeaking(false),
-          onStopped: () => setIsSpeaking(false),
-        });
-      }
-      timeoutRef.current = null;
-    }, 300); // 300ms debounce to gather all messages
-  }, []);
+    timeoutRef.current = setTimeout(flushQueue, 300); // 300ms debounce to gather all messages
+  }, [flushQueue]);
 
   const stop = useCallback(() => {
     if (timeoutRef.current) {
@@ -51,6 +73,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
     queueRef.current = [];
     Speech.stop();
+    sessionRef.current += 1; // invalidate any in-flight callbacks
     setIsSpeaking(false);
   }, []);
 
