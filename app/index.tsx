@@ -1,5 +1,5 @@
-import { Redirect } from "expo-router";
+import HomeScreen from '@/src/screens/HomeScreen';
 
 export default function Index() {
-  return <Redirect href="/capture" />;
+  return <HomeScreen />;
 }
