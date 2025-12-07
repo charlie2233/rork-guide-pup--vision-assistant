@@ -8,14 +8,6 @@
     "start-web-dev": "DEBUG=expo* bunx rork start -p o92l1fv7jc2abl7qruyjj --web --tunnel",
     "lint": "expo lint"
   },
-  "overrides": {
-    "@react-navigation/bottom-tabs": "7.5.0",
-    "@react-navigation/core": "7.13.2",
-    "@react-navigation/elements": "2.8.3",
-    "@react-navigation/native": "7.1.21",
-    "@react-navigation/native-stack": "7.6.4",
-    "@react-navigation/routers": "7.5.2"
-  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@nkzw/create-context-hook": "^1.1.0",
