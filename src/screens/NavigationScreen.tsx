@@ -80,7 +80,7 @@ export default function NavigationScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     speak("Stopping guidance.");
     if (navigation.canGoBack()) {
-      router.back();
+      navigation.goBack();
     } else {
       router.replace('/');
     }

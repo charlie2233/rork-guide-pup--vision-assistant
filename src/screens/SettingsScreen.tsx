@@ -30,7 +30,7 @@ export default function SettingsScreen() {
       AccessibilityInfo.announceForAccessibility("Navigating back");
     }
     if (navigation.canGoBack()) {
-      router.back();
+      navigation.goBack();
     } else {
       router.replace("/");
     }

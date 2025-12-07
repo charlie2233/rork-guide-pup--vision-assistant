@@ -21,7 +21,7 @@ export default function MoodboardModal() {
   const handleClose = () => {
     console.log("Closing moodboard modal");
     if (navigation.canGoBack()) {
-      router.back();
+      navigation.goBack();
     } else {
       router.replace("/");
     }
