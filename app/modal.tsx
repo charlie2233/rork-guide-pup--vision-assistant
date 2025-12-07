@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React from "react";
 import {
@@ -16,10 +16,15 @@ import Colors from "@/constants/colors";
 
 export default function MoodboardModal() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
 
   const handleClose = () => {
     console.log("Closing moodboard modal");
-    router.back();
+    if (navigation.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter, useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import React, { useCallback } from "react";
 import {
@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   console.log("[SettingsScreen] render");
 
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes } = useSettings();
 
@@ -28,8 +29,12 @@ export default function SettingsScreen() {
     if (Platform.OS === "ios") {
       AccessibilityInfo.announceForAccessibility("Navigating back");
     }
-    router.back();
-  }, [router]);
+    if (navigation.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
+    }
+  }, [router, navigation]);
 
   const handleSpeechRateChange = useCallback(
     (rate: SpeechRate) => {
