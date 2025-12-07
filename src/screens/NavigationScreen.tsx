@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, Text, Animated, TouchableOpacity } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
 import { GuideAI, GuideAIDirection } from '@/src/logic/GuideAI';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function NavigationScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const { speak } = useVoice();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [direction, setDirection] = useState<GuideAIDirection | null>(null);
@@ -78,7 +79,11 @@ export default function NavigationScreen() {
     setIsGuiding(false);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     speak("Stopping guidance.");
-    router.back();
+    if (navigation.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
   };
 
   const handleSOS = () => {
