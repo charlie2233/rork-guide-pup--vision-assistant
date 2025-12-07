@@ -19,7 +19,7 @@ const captureModes = ["Photo", "Video", "Story"] as const;
 type CaptureMode = (typeof captureModes)[number];
 
 const sliderRange = { min: 3200, max: 8200 } as const;
-const sliderHeight = 160;
+const sliderHeight = 140;
 
 export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -129,7 +129,7 @@ export default function CaptureScreen() {
       <CameraView
         testID="capture-camera"
         ref={cameraRef}
-        style={styles.camera}
+        style={[styles.camera, { backgroundColor: "black" }]}
         facing={facing}
         enableTorch={false}
       />
@@ -417,9 +417,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   shutterButton: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     borderWidth: 2,
     borderColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
@@ -427,9 +427,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.palette.surface,
   },
   shutterInner: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: Colors.palette.background,
     alignItems: "center",
     justifyContent: "center",

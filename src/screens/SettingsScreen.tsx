@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import Colors from "@/constants/colors";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
@@ -145,8 +146,8 @@ export default function SettingsScreen() {
               <Switch
                 value={settings.showBoundingBoxes}
                 onValueChange={handleBoundingBoxesToggle}
-                thumbColor="#05060B"
-                trackColor={{ false: "#343843", true: "#F5C63C" }}
+                thumbColor={Colors.palette.textPrimary}
+                trackColor={{ false: "#343843", true: Colors.palette.accent }}
                 accessibilityRole="switch"
                 accessibilityLabel="Show bounding boxes"
                 accessibilityHint="Double tap to toggle bounding boxes around detected objects"
@@ -191,7 +192,7 @@ function OptionButton({ label, selected, onPress, testID }: OptionButtonProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#05060B",
+    backgroundColor: Colors.palette.background,
   },
   headerRow: {
     flexDirection: "row",
@@ -211,12 +212,12 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   backButtonText: {
-    color: "#FDFDFD",
+    color: Colors.palette.textPrimary,
     fontSize: 18,
     fontWeight: "600",
   },
   headerTitle: {
-    color: "#FDFDFD",
+    color: Colors.palette.textPrimary,
     fontSize: 26,
     fontWeight: "800",
     flex: 1,
@@ -233,12 +234,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: {
-    color: "#FDFDFD",
+    color: Colors.palette.textPrimary,
     fontSize: 22,
     fontWeight: "700",
   },
   sectionDescription: {
-    color: "#B4B9C9",
+    color: Colors.palette.textMuted,
     fontSize: 17,
     lineHeight: 24,
   },
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     flex: 1,
-    backgroundColor: "#090B14",
+    backgroundColor: Colors.palette.surface,
     borderRadius: 20,
     paddingVertical: 18,
     paddingHorizontal: 16,
@@ -260,22 +261,22 @@ const styles = StyleSheet.create({
     minHeight: 64,
   },
   optionButtonSelected: {
-    backgroundColor: "#F5C63C",
-    borderColor: "#F5C63C",
+    backgroundColor: Colors.palette.accent,
+    borderColor: Colors.palette.accent,
   },
   optionButtonPressed: {
     opacity: 0.8,
   },
   optionButtonText: {
-    color: "#B4B9C9",
+    color: Colors.palette.textMuted,
     fontSize: 18,
     fontWeight: "700",
   },
   optionButtonTextSelected: {
-    color: "#1A1302",
+    color: Colors.palette.background,
   },
   toggleCard: {
-    backgroundColor: "#090B14",
+    backgroundColor: Colors.palette.surface,
     borderRadius: 24,
     padding: 20,
     borderWidth: 1,
@@ -293,12 +294,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   toggleLabel: {
-    color: "#FDFDFD",
+    color: Colors.palette.textPrimary,
     fontSize: 18,
     fontWeight: "700",
   },
   toggleHint: {
-    color: "#B4B9C9",
+    color: Colors.palette.textMuted,
     fontSize: 16,
     lineHeight: 22,
   },
