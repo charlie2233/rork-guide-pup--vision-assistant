@@ -21,7 +21,6 @@ const SETTINGS_KEY = "@guidepup:settings";
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     loadSettings();
@@ -36,8 +35,6 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
       }
     } catch (error) {
       console.error("[SettingsProvider] Failed to load settings", error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -75,10 +72,9 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
 
   return useMemo(() => ({
     settings,
-    isLoading,
     updateSpeechRate,
     updateDescriptionMode,
     toggleBoundingBoxes,
     getSpeechRateValue,
-  }), [settings, isLoading, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes, getSpeechRateValue]);
+  }), [settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes, getSpeechRateValue]);
 });
