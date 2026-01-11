@@ -8,11 +8,14 @@ import {
   StyleSheet,
   Text,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Aperture, Droplet, Sparkles, SwitchCamera, Zap } from "lucide-react-native";
+import { Droplet, Sparkles, SwitchCamera, Zap, Eye, AlertTriangle, ArrowLeft, ArrowRight, ArrowUp, Square } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
+import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 
 const filterOptions = ["Solstice", "Neon Drift", "Midnight Bloom"] as const;
 const captureModes = ["Photo", "Video", "Story"] as const;
@@ -20,6 +23,22 @@ type CaptureMode = (typeof captureModes)[number];
 
 const sliderRange = { min: 3200, max: 8200 } as const;
 const sliderHeight = 140;
+
+const DirectionIcon = ({ direction }: { direction: GuideAIDirection["direction"] }) => {
+  const iconProps = { color: Colors.palette.textPrimary, size: 24 };
+  switch (direction) {
+    case "turn-left":
+      return <ArrowLeft {...iconProps} />;
+    case "turn-right":
+      return <ArrowRight {...iconProps} />;
+    case "forward":
+      return <ArrowUp {...iconProps} />;
+    case "stop":
+      return <Square {...iconProps} />;
+    default:
+      return null;
+  }
+};
 
 export default function CaptureScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -32,6 +51,9 @@ export default function CaptureScreen() {
   const [filter, setFilter] = useState<(typeof filterOptions)[number]>(filterOptions[0]);
   const [colorBalance, setColorBalance] = useState<number>(6200);
   const [exposure, setExposure] = useState<number>(0.0);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [visionResult, setVisionResult] = useState<GuideAIDirection | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.loop(
@@ -84,6 +106,49 @@ export default function CaptureScreen() {
       return updated;
     });
   }, []);
+
+  const handleVisionAnalysis = useCallback(async () => {
+    if (!cameraRef.current || isAnalyzing) return;
+
+    try {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+      console.log("[CaptureScreen] Taking photo for Vision AI analysis...");
+
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.5,
+        skipProcessing: true,
+      });
+
+      if (!photo?.base64) {
+        throw new Error("Failed to capture image");
+      }
+
+      console.log("[CaptureScreen] Photo captured, analyzing with Vision AI...");
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      const result = await GuideAI.analyzeWithVision(photo.base64);
+
+      if (result) {
+        setVisionResult(result);
+        console.log("[CaptureScreen] Vision AI result:", result);
+        
+        if (result.obstacle) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Analysis failed";
+      console.error("[CaptureScreen] Vision analysis error:", errorMessage);
+      setAnalysisError(errorMessage);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [isAnalyzing]);
 
   const indicatorProgress = useMemo(() => {
     return (colorBalance - sliderRange.min) / (sliderRange.max - sliderRange.min);
@@ -208,8 +273,17 @@ export default function CaptureScreen() {
               style={[styles.shutterButton, { transform: [{ scale: pulse }] }]}
               testID="capture-shutter-button"
             >
-              <Pressable style={styles.shutterInner} android_ripple={{ color: "rgba(0,0,0,0.2)" }}>
-                <Aperture color={Colors.palette.accent} size={28} />
+              <Pressable 
+                style={styles.shutterInner} 
+                android_ripple={{ color: "rgba(0,0,0,0.2)" }}
+                onPress={handleVisionAnalysis}
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <ActivityIndicator color={Colors.palette.accent} size="small" />
+                ) : (
+                  <Eye color={Colors.palette.accent} size={28} />
+                )}
               </Pressable>
             </Animated.View>
             <View style={styles.exposureColumn}>
@@ -231,6 +305,47 @@ export default function CaptureScreen() {
             </View>
           </View>
         </View>
+
+        {visionResult && (
+          <View style={styles.visionResultCard} testID="vision-result">
+            <View style={styles.visionResultHeader}>
+              <View style={[styles.directionBadge, visionResult.obstacle && styles.directionBadgeWarning]}>
+                <DirectionIcon direction={visionResult.direction} />
+              </View>
+              <View style={styles.visionResultContent}>
+                <Text style={styles.visionResultDirection}>
+                  {visionResult.direction.replace("-", " ").toUpperCase()}
+                </Text>
+                <Text style={styles.visionResultMessage}>{visionResult.message}</Text>
+              </View>
+              {visionResult.obstacle && (
+                <AlertTriangle color={Colors.palette.accent} size={20} />
+              )}
+            </View>
+            {visionResult.sceneDescription && (
+              <Text style={styles.sceneDescription}>{visionResult.sceneDescription}</Text>
+            )}
+            <View style={styles.visionMetaRow}>
+              {visionResult.lighting && (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText}>{visionResult.lighting}</Text>
+                </View>
+              )}
+              {visionResult.surfaceType && (
+                <View style={styles.metaChip}>
+                  <Text style={styles.metaChipText}>{visionResult.surfaceType}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {analysisError && (
+          <View style={styles.errorCard} testID="vision-error">
+            <AlertTriangle color="#ff6b6b" size={18} />
+            <Text style={styles.errorText}>{analysisError}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -486,6 +601,80 @@ const styles = StyleSheet.create({
   permissionButtonText: {
     color: Colors.palette.background,
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "600" as const,
+  },
+  visionResultCard: {
+    backgroundColor: "rgba(5,6,13,0.85)",
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  visionResultHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 12,
+  },
+  directionBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(76, 175, 80, 0.3)",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  directionBadgeWarning: {
+    backgroundColor: "rgba(255, 152, 0, 0.3)",
+  },
+  visionResultContent: {
+    flex: 1,
+  },
+  visionResultDirection: {
+    color: Colors.palette.textPrimary,
+    fontSize: 16,
+    fontWeight: "700" as const,
+    letterSpacing: 1,
+  },
+  visionResultMessage: {
+    color: Colors.palette.textMuted,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  sceneDescription: {
+    color: Colors.palette.textMuted,
+    fontSize: 13,
+    marginTop: 12,
+    fontStyle: "italic" as const,
+  },
+  visionMetaRow: {
+    flexDirection: "row" as const,
+    gap: 8,
+    marginTop: 12,
+  },
+  metaChip: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  metaChipText: {
+    color: Colors.palette.textMuted,
+    fontSize: 12,
+    textTransform: "capitalize" as const,
+  },
+  errorCard: {
+    backgroundColor: "rgba(255, 107, 107, 0.15)",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+  },
+  errorText: {
+    color: "#ff6b6b",
+    fontSize: 13,
+    flex: 1,
   },
 });

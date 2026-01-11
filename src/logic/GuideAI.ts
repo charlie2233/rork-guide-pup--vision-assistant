@@ -1,9 +1,12 @@
-// Lightweight, deterministic navigation heuristics for the guide experience.
-// Public interface remains unchanged; all enhancements are internal.
+import { VisionAI, VisionAnalysis } from "./VisionAI";
+
 export interface GuideAIDirection {
   direction: "turn-left" | "turn-right" | "forward" | "stop";
   obstacle: boolean;
   message: string;
+  sceneDescription?: string;
+  surfaceType?: string;
+  lighting?: string;
 }
 
 type Direction = GuideAIDirection["direction"];
@@ -307,6 +310,46 @@ const buildMessage = (
     : "Continue forward.";
 };
 
+const buildAIMessage = (
+  direction: Direction,
+  analysis: VisionAnalysis
+): string => {
+  const hazardPhrases: Record<string, string> = {
+    none: "",
+    low: "Minor caution advised. ",
+    medium: "Be careful. ",
+    high: "Warning! ",
+  };
+
+  const prefix = hazardPhrases[analysis.hazardLevel] || "";
+  
+  if (direction === "stop") {
+    const obstacleTypes = analysis.obstacles
+      .filter((o) => o.distance === "very-close" || o.distance === "close")
+      .map((o) => o.type)
+      .slice(0, 2);
+    
+    if (obstacleTypes.length > 0) {
+      return `${prefix}Stop. ${obstacleTypes.join(" and ")} detected ahead.`;
+    }
+    return `${prefix}Stop. Path is not clear.`;
+  }
+
+  if (direction === "turn-left") {
+    return `${prefix}Turn left. ${analysis.pathClear ? "Path opening on your left." : "Obstacle on right side."}`;
+  }
+
+  if (direction === "turn-right") {
+    return `${prefix}Turn right. ${analysis.pathClear ? "Path opening on your right." : "Obstacle on left side."}`;
+  }
+
+  if (analysis.surfaceType && analysis.surfaceType !== "unknown") {
+    return `${prefix}Continue forward on ${analysis.surfaceType}.`;
+  }
+
+  return `${prefix}Continue forward. Path is clear.`;
+};
+
 export const GuideAI = {
   startCameraStream() {
     return "mock-stream";
@@ -314,6 +357,62 @@ export const GuideAI = {
   startGPSTracking() {
     return { lat: 0, lng: 0 };
   },
+
+  async analyzeWithVision(
+    base64Image: string
+  ): Promise<GuideAIDirection | null> {
+    console.log("[GuideAI] Starting Vision AI analysis...");
+    
+    const result = await VisionAI.analyzeFrame(base64Image);
+
+    if (!result.success || !result.analysis) {
+      console.log("[GuideAI] Vision AI failed, using fallback");
+      lastDirection = "stop";
+      lastConfidence = 0;
+      return {
+        direction: "stop",
+        obstacle: true,
+        message: "Stopping: vision analysis unavailable.",
+      };
+    }
+
+    const analysis = result.analysis;
+
+    const hazardToConfidence: Record<string, number> = {
+      none: 0.95,
+      low: 0.75,
+      medium: 0.5,
+      high: 0.2,
+    };
+
+    const confidence = hazardToConfidence[analysis.hazardLevel] || 0.5;
+    const obstacle = analysis.hazardLevel !== "none" || analysis.obstacles.length > 0;
+
+    const smoothed = smoothDirection(
+      analysis.recommendedDirection,
+      confidence,
+      obstacle
+    );
+
+    const message = buildAIMessage(smoothed.direction, analysis);
+
+    console.log("[GuideAI] Vision AI result:", {
+      direction: smoothed.direction,
+      obstacle,
+      hazardLevel: analysis.hazardLevel,
+      obstacleCount: analysis.obstacles.length,
+    });
+
+    return {
+      direction: smoothed.direction,
+      obstacle,
+      message,
+      sceneDescription: analysis.sceneDescription,
+      surfaceType: analysis.surfaceType,
+      lighting: analysis.lighting,
+    };
+  },
+
   async getNextDirection(
     cameraFrame: any,
     gps: any
@@ -331,7 +430,6 @@ export const GuideAI = {
       };
     }
 
-    // Fallback: if camera is missing, do not move without vision.
     if (missingCamera) {
       lastDirection = "stop";
       lastConfidence = 0;
