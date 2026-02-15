@@ -146,19 +146,16 @@ export default function NavigationScreen() {
     speak("Emergency SOS activated.");
   }, [speak]);
 
-  const directionColor = direction?.obstacle ? '#FF4444' : '#44FF44';
-
   return (
     <View style={styles.container}>
       {permission?.granted && (
         <CameraView
           ref={cameraRef}
-          style={StyleSheet.absoluteFill}
+          style={styles.hiddenCamera}
           facing="back"
           enableTorch={false}
         />
       )}
-      <View style={styles.cameraOverlay} />
       <SafeAreaView style={styles.safeArea}>
         <TouchableOpacity
           style={styles.touchable}
@@ -169,8 +166,8 @@ export default function NavigationScreen() {
           accessibilityHint="Guidance in progress. Tap to stop. Long press for SOS."
         >
           <View style={styles.content}>
-            <Animated.View style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }], borderColor: directionColor }]}>
-              <View style={[styles.innerCircle, { backgroundColor: directionColor }]} />
+            <Animated.View style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]}>
+              <View style={styles.innerCircle} />
             </Animated.View>
 
             <Text style={styles.statusText}>
@@ -178,7 +175,7 @@ export default function NavigationScreen() {
             </Text>
 
             {direction && (
-              <Text style={[styles.directionText, { color: directionColor }]}>
+              <Text style={styles.directionText}>
                 {direction.direction.replace('-', ' ').toUpperCase()}
               </Text>
             )}
@@ -204,11 +201,13 @@ export default function NavigationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111111',
+    backgroundColor: '#FFFFFF',
   },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+  hiddenCamera: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
   },
   safeArea: {
     flex: 1,
@@ -223,41 +222,41 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   pulseCircle: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 40,
   },
   innerCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: '#111111',
   },
   statusText: {
-    color: '#FFFFFF',
-    fontSize: 44,
+    color: '#111111',
+    fontSize: 48,
     fontWeight: 'bold' as const,
-    marginBottom: 12,
+    marginBottom: 20,
   },
   directionText: {
-    fontSize: 30,
+    color: '#222222',
+    fontSize: 32,
     fontWeight: 'bold' as const,
     letterSpacing: 2,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   messageText: {
-    color: '#FFFFFF',
+    color: '#333333',
     fontSize: 20,
     textAlign: 'center' as const,
     lineHeight: 28,
-    opacity: 0.9,
   },
   sceneText: {
-    color: 'rgba(255,255,255,0.6)',
+    color: '#888888',
     fontSize: 15,
     textAlign: 'center' as const,
     marginTop: 16,
@@ -268,7 +267,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
   },
   hintText: {
-    color: 'rgba(255,255,255,0.4)',
+    color: '#AAAAAA',
     fontSize: 14,
   },
 });
