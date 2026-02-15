@@ -16,6 +16,7 @@ import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
+import { useVoice } from "@/src/components/VoiceAnnouncer";
 
 const filterOptions = ["Solstice", "Neon Drift", "Midnight Bloom"] as const;
 const captureModes = ["Photo", "Video", "Story"] as const;
@@ -54,6 +55,7 @@ export default function CaptureScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [visionResult, setVisionResult] = useState<GuideAIDirection | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const { speak } = useVoice();
 
   useEffect(() => {
     Animated.loop(
@@ -133,7 +135,14 @@ export default function CaptureScreen() {
       if (result) {
         setVisionResult(result);
         console.log("[CaptureScreen] Vision AI result:", result);
-        
+
+        if (result.message) {
+          speak(result.message);
+        }
+        if (result.sceneDescription) {
+          speak(result.sceneDescription);
+        }
+
         if (result.obstacle) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         } else {
