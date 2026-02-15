@@ -17,7 +17,7 @@ export default function NotFoundScreen() {
         <Text style={styles.message}>
           The scene you were tracking drifted away. Jump back to the vault and keep exploring.
         </Text>
-        <Link href="/capture" asChild>
+        <Link href={"/(tabs)/capture" as never} asChild>
           <Pressable style={styles.cta} testID="return-home">
             <Text style={styles.ctaText}>Return to capture</Text>
           </Pressable>

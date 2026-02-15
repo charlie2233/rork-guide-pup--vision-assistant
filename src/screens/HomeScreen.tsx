@@ -16,7 +16,7 @@ export default function HomeScreen() {
   const handlePress = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     speak("Guidance started.");
-    router.push('/navigation');
+    router.push('/navigation' as never);
   };
 
   const handleLongPress = () => {
