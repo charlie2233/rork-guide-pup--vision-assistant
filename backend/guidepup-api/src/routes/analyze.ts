@@ -34,7 +34,7 @@ export async function handleAnalyze(
   const sessionToken = getBearerToken(request);
 
   if (!deviceId || !sessionToken) {
-    return jsonResponse(env, {
+    return jsonResponse(request, env, {
       error: {
         code: "unauthorized",
         message: "Missing device bootstrap credentials.",
@@ -44,7 +44,7 @@ export async function handleAnalyze(
 
   const sessionIsValid = await verifySessionToken(sessionToken, deviceId, env);
   if (!sessionIsValid) {
-    return jsonResponse(env, {
+    return jsonResponse(request, env, {
       error: {
         code: "unauthorized",
         message: "Invalid or expired device bootstrap token.",
@@ -71,7 +71,7 @@ export async function handleAnalyze(
       resetAt: rateLimit.resetAt,
     });
 
-    return jsonResponse(env, AnalyzeVisionErrorSchema.parse({
+    return jsonResponse(request, env, AnalyzeVisionErrorSchema.parse({
       error: {
         code: "rate_limited",
         message: "Too many analyze requests for this device.",
@@ -113,10 +113,11 @@ export async function handleAnalyze(
       hazardLevel: normalized.hazardLevel,
       latencyMs: normalized.latencyMs,
       provider: normalized.provider,
+      transport: providerResult.transport,
       requestId,
     });
 
-    return jsonResponse(env, normalized, {
+    return jsonResponse(request, env, normalized, {
       headers: {
         "x-rate-limit-limit": String(rateLimit.limit),
         "x-rate-limit-remaining": String(rateLimit.remaining),
@@ -145,6 +146,6 @@ export async function handleAnalyze(
       route: "/v1/vision/analyze",
     }, env, ctx);
 
-    return jsonResponse(env, safeResponse);
+    return jsonResponse(request, env, safeResponse);
   }
 }

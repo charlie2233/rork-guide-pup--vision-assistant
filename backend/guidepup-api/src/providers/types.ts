@@ -14,6 +14,7 @@ export type ProviderResult = {
   model: string;
   parsed: ProviderVision;
   provider: string;
+  transport: string;
   rawText: string;
 };
 

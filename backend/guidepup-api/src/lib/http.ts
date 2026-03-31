@@ -1,11 +1,40 @@
-function corsHeaders(env: Env) {
-  return {
-    "access-control-allow-headers": "authorization, content-type, x-guidepup-device-id",
+import { getCorsConfiguration } from "./config";
+
+function getAllowedOrigin(request: Request, env: Env) {
+  const requestOrigin = request.headers.get("origin")?.trim();
+  const { allowAll, allowedOrigins } = getCorsConfiguration(env);
+
+  if (allowAll) {
+    return requestOrigin || "*";
+  }
+
+  if (!requestOrigin) {
+    return undefined;
+  }
+
+  if (allowedOrigins.includes(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  return undefined;
+}
+
+function corsHeaders(request: Request, env: Env) {
+  const allowedOrigin = getAllowedOrigin(request, env);
+  const headers: Record<string, string> = {
+    "access-control-allow-headers": "authorization, content-type, x-guidepup-device-id, x-guidepup-debug-token",
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-origin": env.CORS_ORIGIN || "*",
+    "access-control-allow-origin": allowedOrigin || "",
+    "access-control-expose-headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset-at",
     "access-control-max-age": "86400",
     "vary": "origin",
   };
+
+  if (!allowedOrigin) {
+    delete headers["access-control-allow-origin"];
+  }
+
+  return headers;
 }
 
 export function handleOptions(request: Request, env: Env) {
@@ -15,11 +44,12 @@ export function handleOptions(request: Request, env: Env) {
 
   return new Response(null, {
     status: 204,
-    headers: corsHeaders(env),
+    headers: corsHeaders(request, env),
   });
 }
 
 export function jsonResponse(
+  request: Request | undefined,
   env: Env,
   data: unknown,
   options: {
@@ -29,7 +59,7 @@ export function jsonResponse(
 ) {
   const headers = new Headers({
     "content-type": "application/json; charset=utf-8",
-    ...corsHeaders(env),
+    ...(request ? corsHeaders(request, env) : {}),
     ...options.headers,
   });
 

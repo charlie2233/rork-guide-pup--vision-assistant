@@ -1,5 +1,7 @@
 import { buildVisionSystemPrompt, buildVisionUserPrompt } from "../lib/prompts";
+import { logWarn } from "../lib/logging";
 import { ProviderVisionSchema } from "../schemas/vision";
+import { getOpenAIProviderAttempts } from "./config";
 import type { ProviderInput, ProviderResult, VisionProvider } from "./types";
 
 type OpenAIChatCompletionResponse = {
@@ -10,18 +12,6 @@ type OpenAIChatCompletionResponse = {
   }>;
   model?: string;
 };
-
-function getBaseUrl(env: Env) {
-  return (env.AI_GATEWAY_BASE_URL || env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/g, "");
-}
-
-function getApiKey(env: Env) {
-  const apiKey = env.AI_GATEWAY_API_KEY || env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
-  }
-  return apiKey;
-}
 
 function getModel(env: Env) {
   return env.OPENAI_MODEL || "gpt-4.1-mini";
@@ -51,6 +41,64 @@ function extractJsonObject(text: string) {
   return stripped.slice(firstBrace, lastBrace + 1);
 }
 
+async function analyzeWithAttempt(input: ProviderInput, attempt: ReturnType<typeof getOpenAIProviderAttempts>[number], model: string) {
+  const startedAt = Date.now();
+  const response = await fetch(`${attempt.baseUrl}${attempt.path}`, {
+    method: "POST",
+    headers: {
+      [attempt.authHeader]: `${attempt.authPrefix}${attempt.apiKey}`.trim(),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      response_format: {
+        type: "json_object",
+      },
+      temperature: 0.1,
+      max_tokens: 500,
+      messages: [
+        {
+          role: "system",
+          content: buildVisionSystemPrompt(input.promptVersion),
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: buildVisionUserPrompt(),
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${input.mimeType};base64,${input.imageBase64}`,
+                detail: input.detail,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`${attempt.name} failed (${response.status}): ${body.slice(0, 240)}`);
+  }
+
+  const payload = (await response.json()) as OpenAIChatCompletionResponse;
+  const text = extractTextContent(payload.choices?.[0]?.message?.content);
+  const parsed = ProviderVisionSchema.parse(JSON.parse(extractJsonObject(text)));
+
+  return {
+    latencyMs: Date.now() - startedAt,
+    model: payload.model || model,
+    parsed,
+    rawText: text,
+    transport: attempt.name,
+  } satisfies Omit<ProviderResult, "provider">;
+}
+
 export class OpenAICompatibleProvider implements VisionProvider {
   readonly name = "openai-compatible";
   readonly model: string;
@@ -60,61 +108,29 @@ export class OpenAICompatibleProvider implements VisionProvider {
   }
 
   async analyze(input: ProviderInput, env: Env): Promise<ProviderResult> {
-    const startedAt = Date.now();
-    const response = await fetch(`${getBaseUrl(env)}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "authorization": `Bearer ${getApiKey(env)}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.model,
-        response_format: {
-          type: "json_object",
-        },
-        temperature: 0.1,
-        max_tokens: 500,
-        messages: [
-          {
-            role: "system",
-            content: buildVisionSystemPrompt(input.promptVersion),
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: buildVisionUserPrompt(),
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${input.mimeType};base64,${input.imageBase64}`,
-                  detail: input.detail,
-                },
-              },
-            ],
-          },
-        ],
-      }),
-    });
+    const attempts = getOpenAIProviderAttempts(env);
+    let lastError: unknown;
 
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`OpenAI-compatible provider failed (${response.status}): ${body.slice(0, 240)}`);
+    for (const attempt of attempts) {
+      try {
+        const result = await analyzeWithAttempt(input, attempt, this.model);
+        return {
+          ...result,
+          provider: this.name,
+        };
+      } catch (error) {
+        logWarn("vision.provider_attempt_failed", {
+          attempt: attempt.name,
+          message: error instanceof Error ? error.message : String(error),
+          provider: this.name,
+        });
+        lastError = error;
+      }
     }
 
-    const payload = (await response.json()) as OpenAIChatCompletionResponse;
-    const text = extractTextContent(payload.choices?.[0]?.message?.content);
-    const parsed = ProviderVisionSchema.parse(JSON.parse(extractJsonObject(text)));
-
-    return {
-      latencyMs: Date.now() - startedAt,
-      model: payload.model || this.model,
-      parsed,
-      provider: this.name,
-      rawText: text,
-    };
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("OpenAI-compatible provider failed without a typed error.");
   }
 }
 
