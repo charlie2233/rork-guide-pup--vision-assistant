@@ -5,6 +5,10 @@ import { Platform } from "react-native";
 import { z } from "zod";
 
 import { requireApiBaseUrl } from "./config";
+import {
+  recordSessionBootstrapState,
+  recordSessionCleared,
+} from "./diagnostics";
 
 const STORAGE_KEYS = {
   deviceId: "@guidepup/device-id",
@@ -80,6 +84,7 @@ export async function clearDeviceSession() {
     removeStoredValue(STORAGE_KEYS.expiresAt),
     removeStoredValue(STORAGE_KEYS.sessionToken),
   ]);
+  recordSessionCleared();
 }
 
 export async function getStoredDeviceSession(): Promise<StoredDeviceSession | null> {
@@ -101,6 +106,11 @@ export async function getStoredDeviceSession(): Promise<StoredDeviceSession | nu
 }
 
 async function bootstrapDevice(existingDeviceId?: string) {
+  recordSessionBootstrapState({
+    deviceId: existingDeviceId,
+    status: "bootstrapping",
+  });
+
   const response = await fetch(`${requireApiBaseUrl()}/v1/device/bootstrap`, {
     method: "POST",
     headers: {
@@ -117,6 +127,11 @@ async function bootstrapDevice(existingDeviceId?: string) {
   });
 
   if (!response.ok) {
+    recordSessionBootstrapState({
+      deviceId: existingDeviceId,
+      error: `Bootstrap failed (${response.status}).`,
+      status: "failed",
+    });
     throw new Error(`Bootstrap failed (${response.status}).`);
   }
 
@@ -126,6 +141,11 @@ async function bootstrapDevice(existingDeviceId?: string) {
     writeStoredValue(STORAGE_KEYS.expiresAt, parsed.expiresAt),
     writeStoredValue(STORAGE_KEYS.sessionToken, parsed.sessionToken),
   ]);
+  recordSessionBootstrapState({
+    deviceId: parsed.deviceId,
+    expiresAt: parsed.expiresAt,
+    status: "ready",
+  });
 
   return {
     deviceId: parsed.deviceId,
@@ -140,6 +160,11 @@ export async function ensureDeviceSession() {
   const expiresSoon = expiresAtMs <= Date.now() + 5 * 60 * 1000;
 
   if (existing && !expiresSoon) {
+    recordSessionBootstrapState({
+      deviceId: existing.deviceId,
+      expiresAt: existing.expiresAt,
+      status: "ready",
+    });
     return existing;
   }
 

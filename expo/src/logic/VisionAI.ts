@@ -2,6 +2,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import { Platform } from "react-native";
 
 import { analyzeVision, type VisionAnalyzeResponse } from "@/src/lib/api";
+import { recordAnalyzeEvent } from "@/src/lib/diagnostics";
 import { captureAppError } from "@/src/lib/sentry";
 
 const MAX_UPLOAD_WIDTH = 768;
@@ -63,9 +64,8 @@ export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIRe
   const timestamp = Date.now();
 
   try {
-    console.log("[VisionAI] Starting backend-guided frame analysis...");
-
     const prepared = await preprocessFrame(frame);
+
     const analysis = await analyzeVision({
       detail: Platform.OS === "web" ? "high" : "low",
       imageBase64: prepared.base64,
@@ -74,8 +74,6 @@ export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIRe
       sourceWidth: prepared.width,
     });
 
-    console.log("[VisionAI] Analysis complete:", JSON.stringify(analysis, null, 2));
-
     return {
       success: true,
       analysis,
@@ -83,12 +81,21 @@ export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIRe
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("[VisionAI] Analysis failed:", errorMessage);
+    recordAnalyzeEvent({
+      detail: Platform.OS === "web" ? "high" : "low",
+      error: errorMessage,
+      latencyMs: Date.now() - timestamp,
+      outcome: "preprocess-failure",
+      safeReason: "image-preprocessing",
+      sourceHeight: frame.height,
+      sourceWidth: frame.width,
+      timestamp,
+    });
     void captureAppError(error, {
       module: "VisionAI",
       route: "analyzeFrame",
     });
-    
+
     return {
       success: false,
       analysis: null,
