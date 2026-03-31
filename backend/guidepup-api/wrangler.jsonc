@@ -1,0 +1,91 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "guidepup-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-31",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "AI_GATEWAY_API_KEY": "",
+    "AI_GATEWAY_BASE_URL": "",
+    "BOOTSTRAP_SIGNING_SECRET": "",
+    "ENVIRONMENT": "development",
+    "VISION_PROVIDER": "openai-compatible",
+    "HUGGINGFACE_MINICPM_O_API_KEY": "",
+    "HUGGINGFACE_MINICPM_O_BASE_URL": "",
+    "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
+    "OPENAI_API_KEY": "",
+    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+    "OPENAI_MODEL": "gpt-4.1-mini",
+    "PROMPT_VERSION": "2026-03-31.v1",
+    "SESSION_TTL_SECONDS": "86400",
+    "RATE_LIMIT_PER_MINUTE": "20",
+    "CORS_ORIGIN": "*",
+    "SENTRY_DSN": ""
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "DeviceRateLimiter"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "DeviceRateLimiter"
+      ]
+    }
+  ],
+  "env": {
+    "staging": {
+      "name": "guidepup-api-staging",
+      "vars": {
+        "AI_GATEWAY_API_KEY": "",
+        "AI_GATEWAY_BASE_URL": "",
+        "BOOTSTRAP_SIGNING_SECRET": "",
+        "ENVIRONMENT": "staging",
+        "VISION_PROVIDER": "openai-compatible",
+        "HUGGINGFACE_MINICPM_O_API_KEY": "",
+        "HUGGINGFACE_MINICPM_O_BASE_URL": "",
+        "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
+        "OPENAI_API_KEY": "",
+        "OPENAI_BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_MODEL": "gpt-4.1-mini",
+        "PROMPT_VERSION": "2026-03-31.v1",
+        "SESSION_TTL_SECONDS": "86400",
+        "RATE_LIMIT_PER_MINUTE": "20",
+        "CORS_ORIGIN": "*",
+        "SENTRY_DSN": ""
+      }
+    },
+    "production": {
+      "name": "guidepup-api-production",
+      "vars": {
+        "AI_GATEWAY_API_KEY": "",
+        "AI_GATEWAY_BASE_URL": "",
+        "BOOTSTRAP_SIGNING_SECRET": "",
+        "ENVIRONMENT": "production",
+        "VISION_PROVIDER": "openai-compatible",
+        "HUGGINGFACE_MINICPM_O_API_KEY": "",
+        "HUGGINGFACE_MINICPM_O_BASE_URL": "",
+        "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
+        "OPENAI_API_KEY": "",
+        "OPENAI_BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_MODEL": "gpt-4.1-mini",
+        "PROMPT_VERSION": "2026-03-31.v1",
+        "SESSION_TTL_SECONDS": "86400",
+        "RATE_LIMIT_PER_MINUTE": "20",
+        "CORS_ORIGIN": "*",
+        "SENTRY_DSN": ""
+      }
+    }
+  }
+}

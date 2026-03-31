@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Colors from "@/constants/colors";
 import { SettingsProvider } from "@/src/providers/SettingsProvider";
 import { VoiceProvider } from "@/src/components/VoiceAnnouncer";
+import { appConfig } from "@/src/lib/config";
+import { initializeSentry } from "@/src/lib/sentry";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -22,7 +24,9 @@ function RootLayoutNav() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      {appConfig.enableExperimentalTabs ? (
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      ) : null}
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="navigation" options={{ headerShown: false }} />
@@ -32,6 +36,7 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
+    initializeSentry();
     setTimeout(() => {
       SplashScreen.hideAsync();
     }, 100);

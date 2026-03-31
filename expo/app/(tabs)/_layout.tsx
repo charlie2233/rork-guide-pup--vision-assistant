@@ -1,11 +1,16 @@
-import { Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Camera, Sparkles } from "lucide-react-native";
 import React from "react";
 import { StyleSheet } from "react-native";
 
 import Colors from "@/constants/colors";
+import { appConfig } from "@/src/lib/config";
 
 export default function TabLayout() {
+  if (!appConfig.enableExperimentalTabs) {
+    return <Redirect href="/" />;
+  }
+
   return (
     <Tabs
       screenOptions={{
@@ -19,14 +24,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="capture"
         options={{
-          title: "Capture",
+          title: "Capture (Exp)",
           tabBarIcon: ({ color }) => <Camera color={color} size={20} />,
         }}
       />
       <Tabs.Screen
         name="inspiration"
         options={{
-          title: "Inspire",
+          title: "Inspire (Exp)",
           tabBarIcon: ({ color }) => <Sparkles color={color} size={20} />,
         }}
       />

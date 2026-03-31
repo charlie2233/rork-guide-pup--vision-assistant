@@ -1,116 +1,131 @@
 # Guide Pup
 
-Cross-platform mobile app built with Expo Router and React Native. The project runs on iOS, Android, and web via Expo, and uses Bun for tooling.
+Guide Pup is an Expo / React Native navigation prototype for blind and low-vision users. The production path for v1 is now:
 
-## Project info
+1. Onboarding
+2. Home
+3. Navigation
+4. Settings
 
-- **Platform:** iOS, Android, Web
-- **Framework:** Expo Router + React Native
-- **Language:** TypeScript
-- **Tooling:** Bun
+The creative capture / inspiration tabs remain in the repo as experimental surfaces and are hidden by default.
 
-## Editing and running locally
+## Architecture
 
-Use any editor you like (Cursor, VS Code, etc.). Clone the repo, install dependencies, and start the dev server:
+- `expo/` is the shipping client.
+- `backend/guidepup-api/` is the Cloudflare Worker API for device bootstrap and vision analysis.
+- The Expo client sends compressed camera frames to the backend instead of calling model providers directly.
+- The backend applies provider normalization and safety overrides before returning guidance.
+
+## Expo setup
 
 ```bash
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
+cd expo
 bun install
+cp .env.example .env
+```
 
-# Web preview (hot reload)
+Required Expo env vars:
+
+- `EXPO_PUBLIC_API_BASE_URL`
+- `EXPO_PUBLIC_APP_ENV`
+- `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`
+
+Optional Expo env vars:
+
+- `EXPO_PUBLIC_API_TIMEOUT_MS`
+- `EXPO_PUBLIC_SENTRY_DSN`
+- `EXPO_PUBLIC_PRIVACY_POLICY_URL`
+- `EXPO_PUBLIC_SUPPORT_URL`
+- `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
+
+Run locally:
+
+```bash
+# Rork tunnel flow already used by this repo
+bun run start
+
+# Web
 bun run start-web
 
-# Native preview (open Expo in iOS/Android simulator or device)
-bun run start
+# Standard Expo helpers
+bun run start:ios
+bun run start:android
+bun run start:web
 ```
 
-## AI Vision Setup
-
-Guide Pup uses OpenAI's multimodal models to describe camera input. Set your key before launching:
-
-1. Create or update `.env` in the project root:
-   ```bash
-   EXPO_PUBLIC_OPENAI_API_KEY=sk-your-key
-   # Optional: override the default model
-   EXPO_PUBLIC_OPENAI_MODEL=gpt-4o-mini
-   ```
-2. Restart the Expo dev server so the variables load.
-3. Without a key, scanning will fail with a service unavailable error.
-
-### Real-time object scanning
-
-Continuous scanning runs roughly every 1.5 seconds to mimic video-style narration. This boosts awareness but increases API usage; toggle it off if you want to limit calls during testing.
-
-## Accessibility-first interface
-
-- Large, tactile controls and high-contrast styling.
-- Inline guidance for posture, distance, and scan mode.
-- All actionable elements include accessibility labels and hints; primary actions speak feedback automatically.
-
-## How to test
-
-### On device (recommended)
-
-- Install Expo Go from the App Store or Google Play.
-- Run `bun run start` and scan the QR code from your terminal.
-
-### In the browser
-
-- Run `bun run start-web` for a quick preview. Some native features may be unavailable.
-
-### Simulators and emulators
+## Backend setup
 
 ```bash
-# iOS Simulator
-bun run start -- --ios
-
-# Android Emulator
-bun run start -- --android
+cd backend/guidepup-api
+npm install
+cp .env.example .dev.vars
+npm run types
+npm run dev
 ```
 
-## Deployment
+Required backend secrets / vars:
 
-Use EAS for store builds:
+- `OPENAI_API_KEY`
+- `BOOTSTRAP_SIGNING_SECRET`
+
+Recommended backend vars:
+
+- `OPENAI_BASE_URL`
+- `OPENAI_MODEL`
+- `VISION_PROVIDER`
+- `RATE_LIMIT_PER_MINUTE`
+- `SESSION_TTL_SECONDS`
+- `CORS_ORIGIN`
+- `SENTRY_DSN`
+
+Optional provider / gateway vars:
+
+- `AI_GATEWAY_BASE_URL`
+- `AI_GATEWAY_API_KEY`
+- `HUGGINGFACE_MINICPM_O_BASE_URL`
+- `HUGGINGFACE_MINICPM_O_API_KEY`
+- `HUGGINGFACE_MINICPM_O_MODEL`
+
+## Build and deploy
+
+### Backend
 
 ```bash
-bun i -g @expo/eas-cli
-eas build:configure
-eas build --platform ios
-eas build --platform android
+cd backend/guidepup-api
+npm run check
+npm run deploy:staging
+npm run deploy
 ```
 
-For web:
+### Expo app
 
 ```bash
-eas build --platform web
-eas hosting:configure
-eas hosting:deploy
+cd expo
+bunx eas-cli build --profile preview --platform ios
+bunx eas-cli build --profile production --platform ios
 ```
 
-## Tech stack
+`expo/eas.json` includes `development`, `preview`, and `production` profiles.
 
-- React Native
-- Expo / Expo Router
-- TypeScript
-- React Query
-- Lucide React Native
+## iOS submission checklist
 
-## Project structure (simplified)
+1. Set production `EXPO_PUBLIC_API_BASE_URL`.
+2. Build and test on physical iPhone hardware.
+3. Verify camera permission copy and third-party AI disclosure copy.
+4. Confirm backend rate limiting, logging, and provider credentials in production.
+5. Configure App Store Connect submit metadata in `eas.json`.
 
-```
-app/                 # App screens (Expo Router)
-  (tabs)/            # Tab navigation screens
-  _layout.tsx        # Root layout
-  modal.tsx          # Modal screen example
-  +not-found.tsx     # 404 screen
-assets/              # Static assets
-constants/           # App constants and configuration
-app.json             # Expo configuration
-package.json         # Dependencies and scripts
-tsconfig.json        # TypeScript configuration
-```
+## Safety and release TODOs
 
-## Credits
+- TODO: privacy policy URL
+- TODO: support URL
+- TODO: emergency / safety disclaimer copy
+- TODO: App Store metadata copy for camera usage
+- TODO: App Store metadata copy describing third-party AI image processing
+- TODO: replace placeholder SOS behavior with a real emergency flow and legal review
 
-Worked with: Codex, Cursor, Rork.
+## Notes
+
+- The client no longer requires provider secrets in public Expo env vars.
+- The backend is conservative by design: invalid, low-confidence, or high-hazard outputs degrade to `STOP`.
+- Microphone and unnecessary storage permissions were removed from the shipping app config for launch readiness.

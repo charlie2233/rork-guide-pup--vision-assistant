@@ -1,9 +1,15 @@
-import { VisionAI, VisionAnalysis } from "./VisionAI";
+import { type AnalyzeFrameInput, VisionAI, VisionAnalysis } from "./VisionAI";
 
 export interface GuideAIDirection {
+  confidence?: number;
   direction: "turn-left" | "turn-right" | "forward" | "stop";
+  hazardLevel?: "none" | "low" | "medium" | "high";
+  latencyMs?: number;
   obstacle: boolean;
   message: string;
+  model?: string;
+  promptVersion?: string;
+  provider?: string;
   sceneDescription?: string;
   surfaceType?: string;
   lighting?: string;
@@ -310,46 +316,6 @@ const buildMessage = (
     : "Continue forward.";
 };
 
-const buildAIMessage = (
-  direction: Direction,
-  analysis: VisionAnalysis
-): string => {
-  const hazardPhrases: Record<string, string> = {
-    none: "",
-    low: "Minor caution advised. ",
-    medium: "Be careful. ",
-    high: "Warning! ",
-  };
-
-  const prefix = hazardPhrases[analysis.hazardLevel] || "";
-  
-  if (direction === "stop") {
-    const obstacleTypes = analysis.obstacles
-      .filter((o) => o.distance === "very-close" || o.distance === "close")
-      .map((o) => o.type)
-      .slice(0, 2);
-    
-    if (obstacleTypes.length > 0) {
-      return `${prefix}Stop. ${obstacleTypes.join(" and ")} detected ahead.`;
-    }
-    return `${prefix}Stop. Path is not clear.`;
-  }
-
-  if (direction === "turn-left") {
-    return `${prefix}Turn left. ${analysis.pathClear ? "Path opening on your left." : "Obstacle on right side."}`;
-  }
-
-  if (direction === "turn-right") {
-    return `${prefix}Turn right. ${analysis.pathClear ? "Path opening on your right." : "Obstacle on left side."}`;
-  }
-
-  if (analysis.surfaceType && analysis.surfaceType !== "unknown") {
-    return `${prefix}Continue forward on ${analysis.surfaceType}.`;
-  }
-
-  return `${prefix}Continue forward. Path is clear.`;
-};
-
 export const GuideAI = {
   startCameraStream() {
     return "mock-stream";
@@ -359,11 +325,11 @@ export const GuideAI = {
   },
 
   async analyzeWithVision(
-    base64Image: string
+    frame: AnalyzeFrameInput
   ): Promise<GuideAIDirection | null> {
     console.log("[GuideAI] Starting Vision AI analysis...");
     
-    const result = await VisionAI.analyzeFrame(base64Image);
+    const result = await VisionAI.analyzeFrame(frame);
 
     if (!result.success || !result.analysis) {
       console.log("[GuideAI] Vision AI failed, using fallback");
@@ -372,41 +338,40 @@ export const GuideAI = {
       return {
         direction: "stop",
         obstacle: true,
-        message: "Stopping: vision analysis unavailable.",
+        message: "Stopping: guidance connection unavailable.",
       };
     }
 
     const analysis = result.analysis;
 
-    const hazardToConfidence: Record<string, number> = {
-      none: 0.95,
-      low: 0.75,
-      medium: 0.5,
-      high: 0.2,
-    };
-
-    const confidence = hazardToConfidence[analysis.hazardLevel] || 0.5;
-    const obstacle = analysis.hazardLevel !== "none" || analysis.obstacles.length > 0;
-
     const smoothed = smoothDirection(
-      analysis.recommendedDirection,
-      confidence,
-      obstacle
+      analysis.direction,
+      analysis.confidence,
+      analysis.obstacle
     );
 
-    const message = buildAIMessage(smoothed.direction, analysis);
+    const message =
+      smoothed.direction === analysis.direction
+        ? analysis.message
+        : buildMessage(smoothed.direction, analysis.obstacle, false);
 
     console.log("[GuideAI] Vision AI result:", {
       direction: smoothed.direction,
-      obstacle,
+      obstacle: analysis.obstacle,
       hazardLevel: analysis.hazardLevel,
-      obstacleCount: analysis.obstacles.length,
+      provider: analysis.provider,
     });
 
     return {
+      confidence: analysis.confidence,
       direction: smoothed.direction,
-      obstacle,
+      hazardLevel: analysis.hazardLevel,
+      latencyMs: analysis.latencyMs,
+      model: analysis.model,
+      obstacle: analysis.obstacle,
       message,
+      promptVersion: analysis.promptVersion,
+      provider: analysis.provider,
       sceneDescription: analysis.sceneDescription,
       surfaceType: analysis.surfaceType,
       lighting: analysis.lighting,

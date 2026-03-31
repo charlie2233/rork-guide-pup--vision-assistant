@@ -6,12 +6,14 @@ export type SpeechRate = "slow" | "normal" | "fast";
 export type DescriptionMode = "short" | "detailed";
 
 export interface Settings {
+  hasCompletedOnboarding: boolean;
   speechRate: SpeechRate;
   descriptionMode: DescriptionMode;
   showBoundingBoxes: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
+  hasCompletedOnboarding: false,
   speechRate: "normal",
   descriptionMode: "short",
   showBoundingBoxes: false,
@@ -21,9 +23,10 @@ const SETTINGS_KEY = "@guidepup:settings";
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -31,10 +34,15 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
       const stored = await AsyncStorage.getItem(SETTINGS_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as Settings;
-        setSettings(parsed);
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+        });
       }
     } catch (error) {
       console.error("[SettingsProvider] Failed to load settings", error);
+    } finally {
+      setIsReady(true);
     }
   };
 
@@ -59,6 +67,10 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     saveSettings({ ...settings, showBoundingBoxes: !settings.showBoundingBoxes });
   }, [settings]);
 
+  const markOnboardingComplete = useCallback(() => {
+    saveSettings({ ...settings, hasCompletedOnboarding: true });
+  }, [settings]);
+
   const getSpeechRateValue = useCallback((): number => {
     switch (settings.speechRate) {
       case "slow":
@@ -71,10 +83,12 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
   }, [settings.speechRate]);
 
   return useMemo(() => ({
+    isReady,
+    markOnboardingComplete,
     settings,
     updateSpeechRate,
     updateDescriptionMode,
     toggleBoundingBoxes,
     getSpeechRateValue,
-  }), [settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes, getSpeechRateValue]);
+  }), [getSpeechRateValue, isReady, markOnboardingComplete, settings, toggleBoundingBoxes, updateDescriptionMode, updateSpeechRate]);
 });

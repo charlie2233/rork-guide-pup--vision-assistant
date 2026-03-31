@@ -17,6 +17,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { useVoice } from "@/src/components/VoiceAnnouncer";
+import { captureAppError } from "@/src/lib/sentry";
 
 const filterOptions = ["Solstice", "Neon Drift", "Midnight Bloom"] as const;
 const captureModes = ["Photo", "Video", "Story"] as const;
@@ -118,19 +119,23 @@ export default function CaptureScreen() {
       console.log("[CaptureScreen] Taking photo for Vision AI analysis...");
 
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
         quality: 0.5,
         skipProcessing: true,
       });
 
-      if (!photo?.base64) {
+      if (!photo?.uri && !photo?.base64) {
         throw new Error("Failed to capture image");
       }
 
       console.log("[CaptureScreen] Photo captured, analyzing with Vision AI...");
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      const result = await GuideAI.analyzeWithVision(photo.base64);
+      const result = await GuideAI.analyzeWithVision({
+        base64: photo.base64,
+        height: photo.height,
+        uri: photo.uri,
+        width: photo.width,
+      });
 
       if (result) {
         setVisionResult(result);
@@ -152,6 +157,10 @@ export default function CaptureScreen() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Analysis failed";
       console.error("[CaptureScreen] Vision analysis error:", errorMessage);
+      void captureAppError(error, {
+        screen: "CaptureScreen",
+        stage: "handleVisionAnalysis",
+      });
       setAnalysisError(errorMessage);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {

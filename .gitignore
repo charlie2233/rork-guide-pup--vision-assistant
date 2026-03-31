@@ -3,3 +3,4 @@ node_modules
 .expo
 .venv-pdf
 tmp/
+.DS_Store

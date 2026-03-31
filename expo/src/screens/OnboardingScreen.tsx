@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ONBOARDING_STEPS_NOTE } from "@/src/lib/onboarding";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 const onboardingSteps = [
   {
@@ -11,20 +13,20 @@ const onboardingSteps = [
   },
   {
     title: "Permissions",
-    description: "Guide Pup needs camera and microphone access to describe scenes aloud.",
-    buttonLabel: "Allow camera and microphone",
+    description: "Guide Pup needs camera access to analyze what is ahead and speak guidance aloud.",
+    buttonLabel: "Continue",
   },
   {
     title: "How to use",
-    description: "Tap the big button for a scene description. Turn on continuous mode for regular updates.",
+    description: "Start guidance from the home screen, keep the phone pointed ahead, and use Settings to tune the voice.",
     buttonLabel: "Start using Guide Pup",
   },
 ] as const;
 
 const howToBullets = [
-  "Tap the large button at the bottom to hear what is ahead.",
-  "Toggle continuous mode if you want steady updates.",
-  "Switch between object and text modes for different tasks.",
+  "Tap Start Guidance to hear spoken movement cues.",
+  "Hold the phone forward and steady for a clear camera frame.",
+  "Open Settings anytime to adjust speech rate and description detail.",
 ] as const;
 
 export default function OnboardingScreen() {
@@ -32,6 +34,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [stepIndex, setStepIndex] = useState<number>(0);
+  const { markOnboardingComplete } = useSettings();
 
   const currentStep = useMemo(() => onboardingSteps[stepIndex], [stepIndex]);
   const isLastStep = stepIndex === onboardingSteps.length - 1;
@@ -39,11 +42,12 @@ export default function OnboardingScreen() {
   const handleContinue = useCallback(() => {
     console.log("[OnboardingScreen] Continue pressed", { stepIndex });
     if (isLastStep) {
+      markOnboardingComplete();
       router.replace("/");
       return;
     }
     setStepIndex((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
-  }, [isLastStep, router, stepIndex]);
+  }, [isLastStep, markOnboardingComplete, router, stepIndex]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 48) }]} testID="onboarding-screen">
@@ -58,6 +62,7 @@ export default function OnboardingScreen() {
               <Text style={styles.bulletText}>{bullet}</Text>
             </View>
           ))}
+          <Text style={styles.backendNote}>{ONBOARDING_STEPS_NOTE}</Text>
         </View>
       ) : (
         <View style={styles.permissionCard} testID="onboarding-info-card">
@@ -142,6 +147,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 26,
     flex: 1,
+  },
+  backendNote: {
+    color: "#CDD0DC",
+    fontSize: 14,
+    lineHeight: 20,
   },
   primaryButton: {
     backgroundColor: "#F5C63C",

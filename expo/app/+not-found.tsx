@@ -15,11 +15,11 @@ export default function NotFoundScreen() {
         </View>
         <Text style={styles.title}>We lost this path</Text>
         <Text style={styles.message}>
-          The scene you were tracking drifted away. Jump back to the vault and keep exploring.
+          The route you asked for is not available in the production navigation flow.
         </Text>
-        <Link href={"/(tabs)/capture" as never} asChild>
+        <Link href={"/" as never} asChild>
           <Pressable style={styles.cta} testID="return-home">
-            <Text style={styles.ctaText}>Return to capture</Text>
+            <Text style={styles.ctaText}>Return home</Text>
           </Pressable>
         </Link>
       </View>

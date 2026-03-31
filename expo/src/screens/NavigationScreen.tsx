@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter, useNavigation } from 'expo-router';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
 import { GuideAI, GuideAIDirection } from '@/src/logic/GuideAI';
+import { captureAppError } from '@/src/lib/sentry';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const ANALYSIS_INTERVAL_MS = 4500;
@@ -72,18 +73,22 @@ export default function NavigationScreen() {
       console.log('[NavigationScreen] Capturing frame for analysis...');
 
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
         quality: 0.4,
         skipProcessing: true,
       });
 
-      if (!photo?.base64) {
-        console.log('[NavigationScreen] No base64 in photo, skipping');
+      if (!photo?.uri && !photo?.base64) {
+        console.log('[NavigationScreen] No usable image payload, skipping');
         return;
       }
 
       console.log('[NavigationScreen] Frame captured, sending to Vision AI...');
-      const result = await GuideAI.analyzeWithVision(photo.base64);
+      const result = await GuideAI.analyzeWithVision({
+        base64: photo.base64,
+        height: photo.height,
+        uri: photo.uri,
+        width: photo.width,
+      });
 
       if (!guidingRef.current) return;
 
@@ -107,6 +112,10 @@ export default function NavigationScreen() {
       }
     } catch (error) {
       console.error('[NavigationScreen] Analysis error:', error);
+      void captureAppError(error, {
+        screen: 'NavigationScreen',
+        stage: 'analyzeCurrentFrame',
+      });
     } finally {
       analyzingRef.current = false;
     }
