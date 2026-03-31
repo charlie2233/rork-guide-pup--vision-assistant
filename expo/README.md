@@ -9,6 +9,10 @@ Guide Pup is an Expo / React Native navigation prototype for blind and low-visio
 
 The creative capture / inspiration tabs remain in the repo as experimental surfaces and are hidden by default.
 
+## Launch Inputs
+
+The unresolved launch values are centralized in [Launch Inputs](./docs/launch-inputs.md). Update that file first when finalizing the app identity, public URLs, and submission metadata.
+
 ## Architecture
 
 - `expo/` is the shipping client.
@@ -20,7 +24,7 @@ The creative capture / inspiration tabs remain in the repo as experimental surfa
 
 ```bash
 cd expo
-bun install
+npm install
 cp .env.example .env
 ```
 
@@ -44,21 +48,16 @@ Sentry release env vars:
 - `SENTRY_ORG`
 - `SENTRY_PROJECT`
 
-The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `bun run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
+The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `npm run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
 
 Run locally:
 
 ```bash
-# Rork tunnel flow already used by this repo
-bun run start
-
-# Web
-bun run start-web
-
-# Standard Expo helpers
-bun run start:ios
-bun run start:android
-bun run start:web
+npm run start
+npm run start:ios
+npm run start:android
+npm run start:web
+npm run start:tunnel
 ```
 
 ## Backend setup
@@ -101,6 +100,7 @@ Optional provider / gateway vars:
 ```bash
 cd backend/guidepup-api
 npm run check
+npm run check:staging
 npm run deploy:staging
 npm run deploy
 ```
@@ -109,9 +109,9 @@ npm run deploy
 
 ```bash
 cd expo
-bunx eas-cli build --profile preview --platform ios
-bunx eas-cli build --profile production --platform ios
-bunx eas-cli submit --profile production --platform ios
+npx eas-cli build --profile preview --platform ios
+npx eas-cli build --profile production --platform ios
+npx eas-cli submit --profile production --platform ios
 ```
 
 `expo/eas.json` includes `development`, `preview`, and `production` profiles. The build profiles keep the production path focused on onboarding, home, navigation, and settings, and keep the experimental tabs disabled unless you explicitly override `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`.
@@ -123,12 +123,11 @@ Use [this release checklist](./docs/testflight-release-checklist.md) before ship
 
 Minimum launch steps:
 
-1. Set production `EXPO_PUBLIC_API_BASE_URL`.
+1. Fill [Launch Inputs](./docs/launch-inputs.md).
 2. Build a production binary with EAS and install it on a physical iPhone.
 3. Verify the camera permission text and App Store disclosure text.
 4. Confirm backend rate limiting, logging, and provider credentials in production.
-5. Fill the `eas.json` submit placeholders for Apple Team ID and App Store Connect App ID.
-6. Complete the TestFlight smoke plan from the checklist.
+5. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 
