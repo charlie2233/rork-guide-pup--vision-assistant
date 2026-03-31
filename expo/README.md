@@ -20,6 +20,13 @@ The unresolved launch values are centralized in [Launch Inputs](./docs/launch-in
 - The Expo client sends compressed camera frames to the backend instead of calling model providers directly.
 - The backend applies provider normalization and safety overrides before returning guidance.
 
+## Observability
+
+- `@sentry/react-native` `8.6.0` is the pinned SDK.
+- This SDK supports official React Navigation route tracking through `reactNavigationIntegration()` plus the Expo Router navigation container ref.
+- `wrapExpoRouter()` in this SDK only instruments `prefetch()` spans; it does not replace route tracking.
+- The app keeps privacy scrubbing enabled and disables Sentry cleanly when `EXPO_PUBLIC_SENTRY_DSN` is not set.
+
 ## Expo setup
 
 ```bash
