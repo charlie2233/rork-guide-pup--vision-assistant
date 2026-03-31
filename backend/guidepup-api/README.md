@@ -114,3 +114,17 @@ curl -X POST http://127.0.0.1:8787/__debug/provider-benchmark \
 
 MiniCPM-o stays experimental and only participates when the benchmark flag is enabled outside production.
 In staging, set `DEBUG_BENCHMARK_TOKEN` before using the route.
+
+## Eval harness
+
+Use the dev/staging harness in `eval/` to compare `/v1/vision/analyze` and the benchmark route on a manifest of labeled fixtures.
+
+Run it from `backend/guidepup-api/`:
+
+```bash
+npm run eval -- --manifest eval/sample-manifest.json
+npm run eval:json -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.json
+npm run eval:markdown -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.md
+```
+
+The sample manifest intentionally points to local fixture paths only. Add your own captured images outside the repo and keep them uncommitted. The harness rejects production environments and only enables MiniCPM-o through the benchmark path outside production.
