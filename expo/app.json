@@ -53,8 +53,7 @@
         {
           "cameraPermission": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers."
         }
-      ],
-      "expo-av"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
