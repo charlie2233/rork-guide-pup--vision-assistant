@@ -32,16 +32,22 @@ const parseTimeout = (value?: string) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 10000;
 };
 
+export const isConfiguredUrl = (value?: string) => {
+  const trimmed = trimToUndefined(value);
+  return Boolean(trimmed && !trimmed.startsWith("TODO_"));
+};
+
 export const appConfig = {
   apiBaseUrl: trimToUndefined(rawConfig.apiBaseUrl)?.replace(/\/+$/g, "") || "",
   apiTimeoutMs: parseTimeout(rawConfig.apiTimeoutMs),
   appEnv: trimToUndefined(rawConfig.appEnv) || (__DEV__ ? "development" : "production"),
   emergencyDisclaimer:
-    trimToUndefined(rawConfig.emergencyDisclaimer) || "TODO_EMERGENCY_SAFETY_DISCLAIMER",
+    trimToUndefined(rawConfig.emergencyDisclaimer) ||
+    "Guide Pup provides assistive guidance and safe fallback behavior, but it does not guarantee hazard detection. If you are in immediate danger, stop and contact local emergency services or nearby people directly.",
   enableExperimentalTabs: rawConfig.enableExperimentalTabs === "true",
-  privacyPolicyUrl: trimToUndefined(rawConfig.privacyPolicyUrl) || "TODO_PRIVACY_POLICY_URL",
+  privacyPolicyUrl: trimToUndefined(rawConfig.privacyPolicyUrl),
   sentryDsn: trimToUndefined(rawConfig.sentryDsn),
-  supportUrl: trimToUndefined(rawConfig.supportUrl) || "TODO_SUPPORT_URL",
+  supportUrl: trimToUndefined(rawConfig.supportUrl),
 };
 
 export function requireApiBaseUrl() {

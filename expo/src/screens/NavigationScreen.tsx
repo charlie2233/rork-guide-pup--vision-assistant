@@ -196,6 +196,10 @@ export default function NavigationScreen() {
             {direction?.sceneDescription && (
               <Text style={styles.sceneText}>{direction.sceneDescription}</Text>
             )}
+
+            <Text style={styles.safetyNote}>
+              Guide Pup provides assistive guidance and can stop with STOP when the scene is unclear.
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -270,6 +274,13 @@ const styles = StyleSheet.create({
     textAlign: 'center' as const,
     marginTop: 16,
     fontStyle: 'italic' as const,
+  },
+  safetyNote: {
+    color: '#555555',
+    fontSize: 15,
+    textAlign: 'center' as const,
+    marginTop: 18,
+    lineHeight: 22,
   },
   bottomHint: {
     paddingBottom: 24,
