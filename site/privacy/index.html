@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Privacy details for Guide Pup." />
+    <meta name="theme-color" content="#0b0c10" />
+    <title>Privacy Policy - Guide Pup</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="shell">
+        <header class="topbar">
+          <div class="brand">
+            <strong>Guide Pup</strong>
+            <span>Privacy</span>
+          </div>
+          <nav class="nav" aria-label="Public pages">
+            <a href="/">Home</a>
+            <a href="/support">Support</a>
+            <a href="/safety">Safety</a>
+          </nav>
+        </header>
+
+        <div class="content">
+          <section class="hero">
+            <p class="eyebrow">Data handling</p>
+            <h1>How Guide Pup handles camera frames and anonymous device data.</h1>
+            <p class="lead">
+              This page reflects the current shipping behavior: frames are sent to the Guide Pup backend, may be
+              processed by third-party AI providers, and are tied to anonymous session bootstrap state. Provider secrets
+              stay server-side.
+            </p>
+          </section>
+
+          <section class="cards">
+            <article class="card">
+              <h2>What is sent</h2>
+              <p>Compressed camera frames, anonymous device/session bootstrap identifiers, and minimal request metadata.</p>
+            </article>
+            <article class="card">
+              <h2>What is not requested</h2>
+              <p>The shipping navigation path does not request microphone access.</p>
+            </article>
+            <article class="card">
+              <h2>How outputs are used</h2>
+              <p>Assistant responses are normalized and may safely degrade to STOP when confidence is low or hazards are unclear.</p>
+            </article>
+            <article class="card">
+              <h2>Crash reporting</h2>
+              <p>Optional crash reporting may be enabled for release debugging, with privacy-conscious scrubbing in place.</p>
+            </article>
+          </section>
+
+          <article class="card">
+            <h2>Current release note</h2>
+            <p>
+              If the final public privacy policy URL differs from this page, wire the release configuration to the new URL
+              and keep the content aligned with the shipping app behavior.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
