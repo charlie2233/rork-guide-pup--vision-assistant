@@ -29,5 +29,5 @@ export async function handleBootstrap(request: Request, env: Env, requestId: str
     requestId,
   });
 
-  return jsonResponse(env, response);
+  return jsonResponse(request, env, response);
 }

@@ -10,7 +10,7 @@ export class HuggingFaceMiniCPMOProvider implements VisionProvider {
 
   async analyze(_input: ProviderInput, _env: Env): Promise<ProviderResult> {
     throw new Error(
-      "The HuggingFace MiniCPM-o adapter is scaffolded but not wired to a production inference endpoint yet.",
+      "The HuggingFace MiniCPM-o adapter is experimental and disabled for production guidance.",
     );
   }
 }

@@ -3,10 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "wrangler deploy --dry-run",
+    "check": "wrangler deploy --dry-run --env production",
+    "check:staging": "wrangler deploy --dry-run --env staging",
     "deploy": "wrangler deploy --env production",
     "deploy:staging": "wrangler deploy --env staging",
+    "deploy:dry-run": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
+    "dev:production": "wrangler dev --env production",
+    "dev:staging": "wrangler dev --env staging",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types src/env.d.ts"
   },

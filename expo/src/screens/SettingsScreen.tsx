@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
+import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
@@ -162,6 +163,39 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Privacy & safety</Text>
+          <Text style={styles.sectionDescription}>
+            Review how Guide Pup handles camera frames, support requests, and emergency fallback.
+          </Text>
+          <View style={styles.linkGroup}>
+            <InfoLinkButton
+              accessibilityHint="Double tap to open the privacy policy page"
+              accessibilityLabel="Privacy Policy"
+              description="Read how camera frames and anonymous device data are handled."
+              onPress={() => router.push("/privacy" as never)}
+              testID="settings-privacy-link"
+              title="Privacy Policy"
+            />
+            <InfoLinkButton
+              accessibilityHint="Double tap to open the support page"
+              accessibilityLabel="Support"
+              description="Get help with setup, audio, or unexpected behavior."
+              onPress={() => router.push("/support" as never)}
+              testID="settings-support-link"
+              title="Support"
+            />
+            <InfoLinkButton
+              accessibilityHint="Double tap to open the safety disclaimer page"
+              accessibilityLabel="Safety / emergency"
+              description="Read the assistive guidance and emergency disclaimer."
+              onPress={() => router.push("/safety" as never)}
+              testID="settings-safety-link"
+              title="Safety / emergency"
+            />
+          </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -247,6 +281,9 @@ const styles = StyleSheet.create({
     color: Colors.palette.textMuted,
     fontSize: 17,
     lineHeight: 24,
+  },
+  linkGroup: {
+    gap: 12,
   },
   optionsGroup: {
     flexDirection: "row",

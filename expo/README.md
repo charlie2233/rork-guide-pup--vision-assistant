@@ -38,6 +38,14 @@ Optional Expo env vars:
 - `EXPO_PUBLIC_SUPPORT_URL`
 - `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
 
+Sentry release env vars:
+
+- `SENTRY_AUTH_TOKEN`
+- `SENTRY_ORG`
+- `SENTRY_PROJECT`
+
+The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `bun run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
+
 Run locally:
 
 ```bash
@@ -103,29 +111,37 @@ npm run deploy
 cd expo
 bunx eas-cli build --profile preview --platform ios
 bunx eas-cli build --profile production --platform ios
+bunx eas-cli submit --profile production --platform ios
 ```
 
-`expo/eas.json` includes `development`, `preview`, and `production` profiles.
+`expo/eas.json` includes `development`, `preview`, and `production` profiles. The build profiles keep the production path focused on onboarding, home, navigation, and settings, and keep the experimental tabs disabled unless you explicitly override `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`.
+`expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
 
 ## iOS submission checklist
 
+Use [this release checklist](./docs/testflight-release-checklist.md) before shipping.
+
+Minimum launch steps:
+
 1. Set production `EXPO_PUBLIC_API_BASE_URL`.
-2. Build and test on physical iPhone hardware.
-3. Verify camera permission copy and third-party AI disclosure copy.
+2. Build a production binary with EAS and install it on a physical iPhone.
+3. Verify the camera permission text and App Store disclosure text.
 4. Confirm backend rate limiting, logging, and provider credentials in production.
-5. Configure App Store Connect submit metadata in `eas.json`.
+5. Fill the `eas.json` submit placeholders for Apple Team ID and App Store Connect App ID.
+6. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 
-- TODO: privacy policy URL
-- TODO: support URL
-- TODO: emergency / safety disclaimer copy
-- TODO: App Store metadata copy for camera usage
-- TODO: App Store metadata copy describing third-party AI image processing
-- TODO: replace placeholder SOS behavior with a real emergency flow and legal review
+- TODO: publish a privacy policy URL and wire it into the app release materials.
+- TODO: publish a support URL and wire it into the app release materials.
+- TODO: finalize the emergency / safety disclaimer copy with legal review.
+- TODO: add App Store metadata copy for camera usage and third-party AI image processing.
+- TODO: replace placeholder SOS behavior with a real emergency flow and legal review.
+- TODO: if microphone capture is ever added, add the matching permission string and privacy disclosures before shipping.
 
 ## Notes
 
 - The client no longer requires provider secrets in public Expo env vars.
 - The backend is conservative by design: invalid, low-confidence, or high-hazard outputs degrade to `STOP`.
 - Microphone and unnecessary storage permissions were removed from the shipping app config for launch readiness.
+- Audio playback remains in the experimental inspiration surface only; the shipping navigation path does not request microphone access.

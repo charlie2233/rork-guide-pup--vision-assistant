@@ -2,12 +2,13 @@ import { handleOptions, jsonResponse } from "./lib/http";
 import { logError } from "./lib/logging";
 import { reportBackendError } from "./lib/sentry";
 import { handleBootstrap } from "./routes/bootstrap";
+import { handleBenchmark } from "./routes/benchmark";
 import { handleHealth } from "./routes/health";
 import { handleAnalyze } from "./routes/analyze";
 import { DeviceRateLimiter } from "./lib/rate-limit";
 
-function notFound(env: Env) {
-  return jsonResponse(env, {
+function notFound(request: Request, env: Env) {
+  return jsonResponse(request, env, {
     error: {
       code: "not_found",
       message: "Route not found.",
@@ -27,7 +28,7 @@ const worker: ExportedHandler<Env> = {
 
     try {
       if (request.method === "GET" && url.pathname === "/health") {
-        return handleHealth(env, requestId);
+        return handleHealth(request, env, requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/device/bootstrap") {
@@ -38,7 +39,11 @@ const worker: ExportedHandler<Env> = {
         return await handleAnalyze(request, env, ctx, requestId);
       }
 
-      return notFound(env);
+      if (request.method === "POST" && url.pathname === "/__debug/provider-benchmark") {
+        return await handleBenchmark(request, env, requestId);
+      }
+
+      return notFound(request, env);
     } catch (error) {
       logError("request.unhandled_error", {
         message: error instanceof Error ? error.message : String(error),
@@ -50,7 +55,7 @@ const worker: ExportedHandler<Env> = {
         route: url.pathname,
       }, env, ctx);
 
-      return jsonResponse(env, {
+      return jsonResponse(request, env, {
         error: {
           code: "internal_error",
           message: "Internal server error.",

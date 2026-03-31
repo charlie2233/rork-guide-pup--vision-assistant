@@ -1,9 +1,11 @@
 import { jsonResponse } from "../lib/http";
 import { getPromptVersion } from "../lib/prompts";
-import { getProviderSummary } from "../providers";
+import { getBenchmarkProviderNamesForEnv, getProviderSummary } from "../providers";
 
-export function handleHealth(env: Env, requestId: string) {
-  return jsonResponse(env, {
+export function handleHealth(request: Request, env: Env, requestId: string) {
+  return jsonResponse(request, env, {
+    benchmarkProviders:
+      env.ENVIRONMENT === "production" ? undefined : getBenchmarkProviderNamesForEnv(env),
     defaultProvider: getProviderSummary(env),
     environment: env.ENVIRONMENT || "development",
     ok: true,

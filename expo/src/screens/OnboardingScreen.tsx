@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { ONBOARDING_STEPS_NOTE } from "@/src/lib/onboarding";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
@@ -13,12 +14,14 @@ const onboardingSteps = [
   },
   {
     title: "Permissions",
-    description: "Guide Pup needs camera access to analyze what is ahead and speak guidance aloud.",
+    description:
+      "Guide Pup needs camera access to analyze what is ahead. If the scene is unclear, it safely says STOP so you can pause and reorient.",
     buttonLabel: "Continue",
   },
   {
     title: "How to use",
-    description: "Start guidance from the home screen, keep the phone pointed ahead, and use Settings to tune the voice.",
+    description:
+      "Start guidance from the home screen, keep the phone pointed ahead, and use Settings to review privacy, support, and safety details.",
     buttonLabel: "Start using Guide Pup",
   },
 ] as const;
@@ -26,6 +29,7 @@ const onboardingSteps = [
 const howToBullets = [
   "Tap Start Guidance to hear spoken movement cues.",
   "Hold the phone forward and steady for a clear camera frame.",
+  "If you hear STOP, pause and reorient before moving again.",
   "Open Settings anytime to adjust speech rate and description detail.",
 ] as const;
 
@@ -50,7 +54,15 @@ export default function OnboardingScreen() {
   }, [isLastStep, markOnboardingComplete, router, stepIndex]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 48) }]} testID="onboarding-screen">
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 20, paddingBottom: Math.max(insets.bottom, 48) },
+      ]}
+      showsVerticalScrollIndicator={false}
+      testID="onboarding-screen"
+    >
       <Text style={styles.kicker}>Guide Pup</Text>
       <Text style={styles.headline}>{currentStep.title}</Text>
       <Text style={styles.subtitle}>{currentStep.description}</Text>
@@ -81,7 +93,40 @@ export default function OnboardingScreen() {
       >
         <Text style={styles.primaryButtonText}>{currentStep.buttonLabel}</Text>
       </Pressable>
-    </View>
+
+      <View style={styles.learnMoreSection}>
+        <Text style={styles.learnMoreTitle}>Before you continue</Text>
+        <Text style={styles.learnMoreText}>
+          Review how Guide Pup handles camera frames, what STOP means, and where to get help.
+        </Text>
+        <View style={styles.learnMoreLinks}>
+          <InfoLinkButton
+            accessibilityHint="Double tap to open the privacy policy page"
+            accessibilityLabel="Privacy Policy"
+            description="Read how camera frames and anonymous data are handled."
+            onPress={() => router.push("/privacy" as never)}
+            testID="onboarding-privacy-link"
+            title="Privacy Policy"
+          />
+          <InfoLinkButton
+            accessibilityHint="Double tap to open the support page"
+            accessibilityLabel="Support"
+            description="Find help if guidance fails or the app behaves unexpectedly."
+            onPress={() => router.push("/support" as never)}
+            testID="onboarding-support-link"
+            title="Support"
+          />
+          <InfoLinkButton
+            accessibilityHint="Double tap to open the safety disclaimer page"
+            accessibilityLabel="Safety / emergency"
+            description="Read the assistive guidance and emergency disclaimer."
+            onPress={() => router.push("/safety" as never)}
+            testID="onboarding-safety-link"
+            title="Safety / emergency"
+          />
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -89,6 +134,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#05060B",
+  },
+  content: {
     paddingHorizontal: 28,
     justifyContent: "center",
     gap: 24,
@@ -167,5 +214,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     letterSpacing: 0.8,
+  },
+  learnMoreSection: {
+    gap: 12,
+  },
+  learnMoreTitle: {
+    color: "#FDFDFD",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  learnMoreText: {
+    color: "#CDD0DC",
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  learnMoreLinks: {
+    gap: 12,
   },
 });

@@ -20,7 +20,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.guide-pup-vision-assist",
       "infoPlist": {
-        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze surroundings and speak navigation guidance."
+        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers."
       }
     },
     "android": {
@@ -45,15 +45,17 @@
           "origin": "https://rork.com/"
         }
       ],
+      "@sentry/react-native/expo",
       "expo-font",
       "expo-web-browser",
       [
         "expo-camera",
         {
-          "cameraPermission": "Guide Pup uses your camera to analyze surroundings and speak navigation guidance."
+          "cameraPermission": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
-      ],
-      "expo-av"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
