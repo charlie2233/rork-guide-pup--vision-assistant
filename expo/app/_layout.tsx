@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
+import { usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
@@ -9,7 +10,11 @@ import Colors from "@/constants/colors";
 import { SettingsProvider } from "@/src/providers/SettingsProvider";
 import { VoiceProvider } from "@/src/components/VoiceAnnouncer";
 import { appConfig } from "@/src/lib/config";
-import { initializeSentry } from "@/src/lib/sentry";
+import {
+  addBreadcrumb,
+  initializeSentry,
+  setSentryTag,
+} from "@/src/lib/sentry";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -34,6 +39,28 @@ function RootLayoutNav() {
   );
 }
 
+function SentryNavigationBridge() {
+  const pathname = usePathname();
+
+  useEffect(() => {
+    initializeSentry();
+
+    const currentRoute = pathname || "/";
+    setSentryTag("route", currentRoute);
+    addBreadcrumb({
+      category: "navigation",
+      data: {
+        route: currentRoute,
+      },
+      level: "info",
+      message: `Route changed to ${currentRoute}`,
+      type: "navigation",
+    });
+  }, [pathname]);
+
+  return null;
+}
+
 export default function RootLayout() {
   useEffect(() => {
     initializeSentry();
@@ -47,6 +74,7 @@ export default function RootLayout() {
       <SettingsProvider>
         <VoiceProvider>
           <GestureHandlerRootView style={styles.root}>
+            <SentryNavigationBridge />
             <RootLayoutNav />
           </GestureHandlerRootView>
         </VoiceProvider>

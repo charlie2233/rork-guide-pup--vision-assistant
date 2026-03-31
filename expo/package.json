@@ -10,10 +10,12 @@
     "start-web-dev": "DEBUG=expo* bunx rork start -p o92l1fv7jc2abl7qruyjj --web --tunnel",
     "start:web": "expo start --web",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sentry:upload-sourcemaps:update": "npx sentry-expo-upload-sourcemaps dist"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@sentry/react-native": "^8.6.0",
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@rork-ai/toolkit-sdk": "*",
