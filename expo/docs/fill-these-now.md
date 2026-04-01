@@ -3,7 +3,6 @@
 Charlie still needs to set these values before launch execution can finish:
 
 - Final iOS bundle identifier
-- Final Android package name for cross-platform release validation
 - Apple Team ID
 - App Store Connect App ID (`ascAppId`)
 - Optional website custom domain override
@@ -15,15 +14,17 @@ Charlie still needs to set these values before launch execution can finish:
 - Optional production Sentry DSN
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
 - Expo/EAS login or `EXPO_TOKEN`
+- Final Android package name for future cross-platform release validation
 
 ## Backend by environment
 
 - Staging Worker
+  - Live URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
   - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
   - `OPENAI_API_KEY`: still missing, so live analyze remains safe fallback only
 - Production Worker
   - Live URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
   - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
-  - `OPENAI_API_KEY`: still required
+  - `OPENAI_API_KEY`: still missing, so `testflight` and `store` hard-fail the release gate
 
 After updating them, rerun the matching iOS track gate from `expo/`, for example `npm run release:preflight:testflight`.

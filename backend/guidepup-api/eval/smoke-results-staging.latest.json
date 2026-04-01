@@ -1,0 +1,48 @@
+{
+  "analyze": {
+    "confidence": 0,
+    "direction": "stop",
+    "errorCode": "provider_error",
+    "errorMessage": "Vision guidance is temporarily unavailable.",
+    "executionPath": "safe-fallback",
+    "fallbackReason": "provider_error",
+    "hazardLevel": "high",
+    "latencyMs": 673,
+    "message": "Stop. Vision guidance is unavailable.",
+    "model": "gpt-4.1-mini",
+    "promptVersion": "2026-03-31.v1",
+    "provider": "openai-compatible",
+    "requestId": "b292ee81-844b-4eef-88ac-b98da4211e63",
+    "roundTripLatencyMs": 695,
+    "statusCode": 503,
+    "statusText": "Service Unavailable"
+  },
+  "apiUrl": "https://guidepup-api-staging.charliehan-lifepage.workers.dev",
+  "bootstrap": {
+    "deviceIdSuffix": "196fa383",
+    "expiresAt": "2026-04-02T21:18:57.000Z",
+    "promptVersion": "2026-03-31.v1",
+    "rateLimitPerMinute": 20,
+    "requestId": "ffed295a-aa77-417c-baca-90d2a6371d25",
+    "roundTripLatencyMs": 26,
+    "statusCode": 200,
+    "statusText": "OK"
+  },
+  "environment": "staging",
+  "generatedAt": "2026-04-01T21:18:58.418Z",
+  "health": {
+    "benchmarkProviders": [
+      "openai-compatible"
+    ],
+    "defaultModel": "gpt-4.1-mini",
+    "defaultProvider": "openai-compatible",
+    "environment": "staging",
+    "promptVersion": "2026-03-31.v1",
+    "requestId": "4a3a48c7-ba79-4b32-a1ef-fd768756a3b9",
+    "roundTripLatencyMs": 191,
+    "statusCode": 200,
+    "statusText": "OK"
+  },
+  "operator": "Codex",
+  "providerBacked": false
+}

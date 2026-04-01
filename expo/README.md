@@ -125,6 +125,8 @@ Optional provider / gateway vars:
 cd backend/guidepup-api
 npm run check
 npm run check:staging
+npm run smoke:staging
+npm run smoke:production
 npm run deploy:staging
 npm run deploy
 ```
@@ -161,6 +163,7 @@ npx eas-cli submit --profile store --platform ios
 
 Both store-upload profiles pin `macos-sequoia-15.6-xcode-26.2` to satisfy the current App Store upload requirement for Xcode 26 / iOS 26 SDK builds.
 `expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
+`testflight` and `store` now hard-fail release preflight unless `backend/guidepup-api/eval/smoke-results-production.latest.json` proves production analyze is provider-backed. `preview` keeps staging mapped, but only warns on fallback-only staging smoke unless you opt into stricter enforcement.
 
 If you need a quick release rehearsal sequence:
 

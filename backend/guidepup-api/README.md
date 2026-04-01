@@ -110,6 +110,15 @@ curl -X POST https://<staging-worker-url>/v1/device/bootstrap \
   -d '{"platform":"ios","appVersion":"1.0.0"}'
 ```
 
+Reusable live smoke commands:
+
+```bash
+npm run smoke:staging
+npm run smoke:production
+```
+
+Each command writes both a machine-readable JSON artifact and a markdown summary under `eval/`. The Expo release gate reads the latest production artifact and hard-fails `testflight` and `store` if analyze is still fallback-only.
+
 ## Benchmarking
 
 The benchmark route is for non-production environments only:

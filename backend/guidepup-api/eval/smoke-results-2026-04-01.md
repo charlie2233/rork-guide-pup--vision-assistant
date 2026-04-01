@@ -13,21 +13,28 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `cde512db-5b07-4ea0-bb4c-c56793928828`
-  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`
+  - request id: `4a3a48c7-ba79-4b32-a1ef-fd768756a3b9`
+  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`, round-trip latency `191ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `a725d9ee-c515-4dee-bac2-380667f827e6`
-  - device id suffix: `190145d7`
-  - notes: anonymous bootstrap succeeded with 24-hour session expiry after staging `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret
+  - request id: `ffed295a-aa77-417c-baca-90d2a6371d25`
+  - device id suffix: `196fa383`
+  - notes: anonymous bootstrap succeeded with 24-hour session expiry after staging `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret, round-trip latency `26ms`
 - `POST /v1/vision/analyze`
   - status: `503 provider_error`
-  - request id: `ee662440-203d-41e7-be2c-afe4d4f01e98`
+  - request id: `b292ee81-844b-4eef-88ac-b98da4211e63`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
   - result summary: explicit safe `STOP` fallback with message `Stop. Vision guidance is unavailable.`
-  - notes: request reached the provider path, but staging `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet
+  - execution path: `safe-fallback`
+  - fallback reason: `provider_error`
+  - notes: request reached the provider path, but staging `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet; round-trip latency `695ms`, provider latency `673ms`
+
+## Generated artifacts
+
+- JSON: `backend/guidepup-api/eval/smoke-results-staging.latest.json`
+- Markdown: `backend/guidepup-api/eval/smoke-results-staging.latest.md`
 
 ## Eval harness
 

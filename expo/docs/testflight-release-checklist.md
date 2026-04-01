@@ -21,12 +21,14 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 3. TestFlight and store use the production API URL from `eas.json`.
 4. `EXPO_PUBLIC_WEBSITE_URL` is already set to the live Pages site in `eas.json`.
 5. Confirm `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS=false` for every shipping profile.
-6. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/`.
-7. Run `npx eas-cli metadata:push --profile store`.
-8. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
-9. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
+6. Run `npm --prefix ../backend/guidepup-api run smoke:staging` and `npm --prefix ../backend/guidepup-api run smoke:production`.
+7. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/`.
+8. `testflight` and `store` must not proceed unless `backend/guidepup-api/eval/smoke-results-production.latest.json` shows `provider-backed` analyze.
+9. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
 10. Install the internal preview build on a physical device for smoke testing.
-11. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
+11. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
+12. If Expo metadata push is needed and the account/app are already ready, run `npx eas-cli metadata:push --profile store`. Do not let a metadata-only issue block the build or submit path if manual App Store Connect entry can continue.
+13. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
 
 ## TestFlight smoke plan
 
@@ -36,10 +38,11 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Grant camera permission and confirm the permission copy is correct.
 - Capture a frame and verify the app returns spoken guidance.
 - Force a network failure and verify the app degrades to a safe `STOP` response.
-- Verify staging preview still returns a safe `STOP` fallback until staging `OPENAI_API_KEY` is configured.
+- Verify preview still points at staging, and confirm whether staging is provider-backed or still in safe fallback mode.
 - Confirm the settings screen links resolve to the privacy and support destinations.
 - Confirm the experimental tabs are hidden in the production build.
 - Confirm diagnostics shows `internal-preview` on the ad hoc build and `testflight` on the TestFlight candidate.
+- Confirm diagnostics shows `provider-backed` or `safe fallback` execution path with the last request ID.
 - Capture the app name, version, and build number shown in diagnostics or device settings for reviewer notes.
 
 ## Release blockers
@@ -47,7 +50,7 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Missing launch inputs in [Launch Inputs](./launch-inputs.md).
 - Failed the matching `npm run release:preflight:<track>` command.
 - Missing Expo/EAS login or `EXPO_TOKEN`.
-- Missing staging `OPENAI_API_KEY` for provider-backed preview validation.
-- Missing backend production `OPENAI_API_KEY`.
+- Missing staging `OPENAI_API_KEY` if you want preview validation to be provider-backed instead of warning-only.
+- Missing backend production `OPENAI_API_KEY`, which hard-blocks `testflight` and `store`.
 - Missing App Store screenshots and metadata.
 - Missing or incorrect public website/privacy/support URLs in `store.config.js`.

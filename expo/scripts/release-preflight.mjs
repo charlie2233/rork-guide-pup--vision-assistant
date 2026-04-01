@@ -15,10 +15,16 @@ function fileExists(relativePath) {
   return fs.existsSync(path.join(projectDir, relativePath));
 }
 
+function fileExistsAbsolute(filePath) {
+  return fs.existsSync(filePath);
+}
+
 const appJson = readJson("app.json");
 const easJson = readJson("eas.json");
 const publicUrls = getPublicUrls();
 const validTracks = new Set(["preview", "testflight", "store", "all"]);
+const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
+const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 
 const errors = [];
 const warnings = [];
@@ -57,11 +63,64 @@ function parseTrack(argv) {
   return "testflight";
 }
 
-const selectedTrack = parseTrack(process.argv.slice(2));
+function hasFlag(argv, flag) {
+  return argv.includes(flag);
+}
+
+function readSmokeArtifact(filePath) {
+  if (!fileExistsAbsolute(filePath)) {
+    return undefined;
+  }
+
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function validateSmokeArtifact(artifact, options) {
+  const {
+    allowWarning,
+    description,
+    filePath,
+    requireProviderBacked,
+    targetUrl,
+  } = options;
+
+  if (!artifact) {
+    const message = `${description} smoke artifact is missing: ${path.relative(projectDir, filePath)}. Run the live smoke command first.`;
+    if (allowWarning && !requireProviderBacked) {
+      warn(false, message);
+      return;
+    }
+    expect(false, message);
+    return;
+  }
+
+  expect(artifact.apiUrl === targetUrl, `${description} smoke artifact must target "${targetUrl}", found "${artifact.apiUrl ?? "undefined"}".`);
+  expect(artifact.health?.statusCode === 200, `${description} smoke artifact must show /health 200.`);
+  expect(artifact.bootstrap?.statusCode === 200, `${description} smoke artifact must show /v1/device/bootstrap 200.`);
+
+  if (requireProviderBacked) {
+    expect(
+      artifact.providerBacked === true && artifact.analyze?.executionPath === "provider-backed",
+      `${description} smoke artifact must show provider-backed analyze. Current execution path is "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
+    );
+    return;
+  }
+
+  if (artifact.providerBacked !== true || artifact.analyze?.executionPath !== "provider-backed") {
+    warn(
+      false,
+      `${description} smoke artifact shows "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
+    );
+  }
+}
+
+const argv = process.argv.slice(2);
+const selectedTrack = parseTrack(argv);
 if (!validTracks.has(selectedTrack)) {
   console.error(`Unsupported --track value "${selectedTrack}". Use preview, testflight, store, or all.`);
   process.exit(1);
 }
+const strictPreviewProvider = hasFlag(argv, "--strict-preview-provider");
 
 const isAllTracks = selectedTrack === "all";
 const requiresPreview = selectedTrack === "preview" || isAllTracks;
@@ -69,6 +128,8 @@ const requiresTestflight = selectedTrack === "testflight" || isAllTracks;
 const requiresStore = selectedTrack === "store" || isAllTracks;
 const requiresStoreBackedDistribution = selectedTrack === "testflight" || selectedTrack === "store" || isAllTracks;
 const requiresIos = requiresPreview || requiresStoreBackedDistribution;
+const stagingSmokeArtifact = readSmokeArtifact(stagingSmokeArtifactPath);
+const productionSmokeArtifact = readSmokeArtifact(productionSmokeArtifactPath);
 
 if (requiresIos) {
   checkPlaceholder(launchInputs.iosBundleIdentifier, "iOS bundle identifier");
@@ -123,6 +184,16 @@ if (previewProfile && requiresPreview) {
   compare(previewProfile.env?.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, "preview website URL");
 }
 
+if (requiresPreview) {
+  validateSmokeArtifact(stagingSmokeArtifact, {
+    allowWarning: !strictPreviewProvider,
+    description: "Preview / staging",
+    filePath: stagingSmokeArtifactPath,
+    requireProviderBacked: strictPreviewProvider,
+    targetUrl: launchInputs.stagingApiBaseUrl,
+  });
+}
+
 for (const [profileName, profile] of Object.entries({ testflight: testflightProfile, store: storeProfile })) {
   const shouldCheckProfile = profileName === "testflight" ? requiresTestflight : requiresStore;
   if (!profile) {
@@ -148,6 +219,13 @@ if (requiresStoreBackedDistribution) {
   compare(storeProfile?.channel, "production", "store update channel");
   compare(testflightProfile?.env?.EXPO_PUBLIC_RELEASE_TRACK, "testflight", "testflight release track");
   compare(storeProfile?.env?.EXPO_PUBLIC_RELEASE_TRACK, "app-store", "store release track");
+  validateSmokeArtifact(productionSmokeArtifact, {
+    allowWarning: false,
+    description: "Production",
+    filePath: productionSmokeArtifactPath,
+    requireProviderBacked: true,
+    targetUrl: launchInputs.productionApiBaseUrl,
+  });
 }
 
 const submitTestflight = easJson.submit?.testflight;
