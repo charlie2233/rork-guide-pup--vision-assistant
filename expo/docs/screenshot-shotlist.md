@@ -19,6 +19,7 @@ Capture these screens for App Store Connect and TestFlight review.
 - Use a clean device frame and avoid debug overlays.
 - Do not include raw camera imagery if it reveals personal or sensitive data.
 - If a screenshot needs to demonstrate an error state, use a short safe fallback message rather than a crash screen.
+- Do not include the experimental tabs in the production screenshot set.
 
 ## Review Copy
 

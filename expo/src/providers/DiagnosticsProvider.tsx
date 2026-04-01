@@ -50,7 +50,9 @@ function initializeRuntimeMetadata() {
     privacyPolicyUrl: appConfig.privacyPolicyUrl,
     sentryEnabled: Boolean(appConfig.sentryDsn),
     slug: expoConfig?.slug,
+    supportEmail: appConfig.supportEmail,
     supportUrl: appConfig.supportUrl,
+    websiteUrl: appConfig.websiteUrl,
   });
 }
 

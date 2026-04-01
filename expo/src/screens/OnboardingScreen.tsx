@@ -1,9 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { ONBOARDING_STEPS_NOTE } from "@/src/lib/onboarding";
+import { useGuidePupRouter } from "@/src/lib/router";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
 const onboardingSteps = [
@@ -34,8 +34,7 @@ const howToBullets = [
 ] as const;
 
 export default function OnboardingScreen() {
-  console.log("[OnboardingScreen] render");
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const insets = useSafeAreaInsets();
   const [stepIndex, setStepIndex] = useState<number>(0);
   const { markOnboardingComplete } = useSettings();
@@ -44,7 +43,6 @@ export default function OnboardingScreen() {
   const isLastStep = stepIndex === onboardingSteps.length - 1;
 
   const handleContinue = useCallback(() => {
-    console.log("[OnboardingScreen] Continue pressed", { stepIndex });
     if (isLastStep) {
       markOnboardingComplete();
       router.replace("/");

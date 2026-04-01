@@ -2,6 +2,7 @@
   "expo": {
     "name": "Guide Pup: Vision Assistant",
     "slug": "guide-pup-vision-assist",
+    "description": "Assistive navigation guidance for blind and low-vision users using camera-based scene analysis and safe spoken cues.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -17,6 +18,7 @@
       "config": {
         "usesNonExemptEncryption": false
       },
+      "buildNumber": "1",
       "supportsTablet": false,
       "bundleIdentifier": "TODO_IOS_BUNDLE_IDENTIFIER",
       "infoPlist": {
@@ -29,8 +31,8 @@
         "backgroundColor": "#ffffff"
       },
       "package": "TODO_ANDROID_PACKAGE",
+      "versionCode": 1,
       "permissions": [
-        "CAMERA",
         "android.permission.VIBRATE",
         "INTERNET"
       ]

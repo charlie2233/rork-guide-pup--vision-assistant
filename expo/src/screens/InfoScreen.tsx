@@ -1,12 +1,14 @@
 import React, { useCallback } from "react";
 import { AccessibilityInfo, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useNavigation, useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { appConfig, isConfiguredUrl } from "@/src/lib/config";
+import { useGuidePupRouter } from "@/src/lib/router";
+import { captureAppError } from "@/src/lib/sentry";
 
 type InfoPageKey = "privacy" | "support" | "safety";
 
@@ -89,9 +91,9 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
       },
     ],
     actionLabel: "Open support",
-    actionHint: "Double tap to open the support page in your browser.",
+    actionHint: "Double tap to open the configured support destination.",
     actionUrl: appConfig.supportUrl,
-    actionUrlMissingMessage: "Support URL is not configured yet.",
+    actionUrlMissingMessage: "Support URL or support email is not configured yet.",
     relatedRoutes: [
       {
         label: "Privacy Policy",
@@ -124,6 +126,10 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
         body: "If there is immediate danger, stop using the app and contact local emergency services or nearby people directly.",
       },
     ],
+    actionHint: "Double tap to open the public safety page in your browser.",
+    actionLabel: "Open safety page",
+    actionUrl: appConfig.safetyUrl,
+    actionUrlMissingMessage: "Public safety page URL is not configured yet.",
     relatedRoutes: [
       {
         label: "Support",
@@ -141,7 +147,7 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
 };
 
 export default function InfoScreen({ pageKey }: { pageKey: InfoPageKey }) {
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const page = INFO_PAGES[pageKey];
@@ -171,7 +177,11 @@ export default function InfoScreen({ pageKey }: { pageKey: InfoPageKey }) {
     try {
       await Linking.openURL(page.actionUrl);
     } catch (error) {
-      console.warn(`[InfoScreen] Failed to open ${pageKey} url`, error);
+      void captureAppError(error, {
+        pageKey,
+        route: page.actionUrl,
+        screen: "InfoScreen",
+      });
       if (Platform.OS === "ios") {
         AccessibilityInfo.announceForAccessibility("Could not open the requested page.");
       }

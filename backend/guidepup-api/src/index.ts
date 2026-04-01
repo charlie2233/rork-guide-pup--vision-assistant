@@ -16,6 +16,11 @@ function notFound(request: Request, env: Env) {
   }, { status: 404 });
 }
 
+function attachRequestId(response: Response, requestId: string) {
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
 const worker: ExportedHandler<Env> = {
   async fetch(request, env, ctx) {
     const optionsResponse = handleOptions(request, env);
@@ -28,22 +33,22 @@ const worker: ExportedHandler<Env> = {
 
     try {
       if (request.method === "GET" && url.pathname === "/health") {
-        return handleHealth(request, env, requestId);
+        return attachRequestId(handleHealth(request, env, requestId), requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/device/bootstrap") {
-        return await handleBootstrap(request, env, requestId);
+        return attachRequestId(await handleBootstrap(request, env, requestId), requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/vision/analyze") {
-        return await handleAnalyze(request, env, ctx, requestId);
+        return attachRequestId(await handleAnalyze(request, env, ctx, requestId), requestId);
       }
 
       if (request.method === "POST" && url.pathname === "/__debug/provider-benchmark") {
-        return await handleBenchmark(request, env, requestId);
+        return attachRequestId(await handleBenchmark(request, env, requestId), requestId);
       }
 
-      return notFound(request, env);
+      return attachRequestId(notFound(request, env), requestId);
     } catch (error) {
       logError("request.unhandled_error", {
         message: error instanceof Error ? error.message : String(error),
@@ -55,12 +60,12 @@ const worker: ExportedHandler<Env> = {
         route: url.pathname,
       }, env, ctx);
 
-      return jsonResponse(request, env, {
+      return attachRequestId(jsonResponse(request, env, {
         error: {
           code: "internal_error",
           message: "Internal server error.",
         },
-      }, { status: 500 });
+      }, { status: 500 }), requestId);
     }
   },
 };

@@ -25,6 +25,7 @@ type AnalyzeSummary = {
   latencyMs?: number;
   message?: string;
   model?: string;
+  requestId?: string;
   outcome: AnalyzeEventKind;
   promptVersion?: string;
   provider?: string;
@@ -158,6 +159,7 @@ function extractAnalyzeResponseSummary(raw: unknown): AnalyzeSummary | undefined
   const direction = trimToUndefined(raw.direction);
   const hazardLevel = trimToUndefined(raw.hazardLevel);
   const message = trimToUndefined(raw.message);
+  const requestId = trimToUndefined(raw.requestId);
   const confidence = typeof raw.confidence === "number" && Number.isFinite(raw.confidence) ? raw.confidence : undefined;
   const latencyMs = typeof raw.latencyMs === "number" && Number.isFinite(raw.latencyMs) ? raw.latencyMs : undefined;
 
@@ -172,6 +174,7 @@ function extractAnalyzeResponseSummary(raw: unknown): AnalyzeSummary | undefined
     latencyMs,
     message,
     model,
+    requestId,
     outcome: "success",
     promptVersion,
     provider,
@@ -190,6 +193,7 @@ function recordAnalyzeTelemetry(summary: AnalyzeSummary) {
   setSafeTag("guidepup.analyze.provider", summary.provider);
   setSafeTag("guidepup.analyze.model", summary.model);
   setSafeTag("guidepup.analyze.promptVersion", summary.promptVersion);
+  setSafeTag("guidepup.analyze.requestId", summary.requestId);
   setSafeTag("guidepup.analyze.direction", summary.direction);
   setSafeTag("guidepup.analyze.hazardLevel", summary.hazardLevel);
   setSafeTag("guidepup.analyze.confidence", summary.confidence);
@@ -203,6 +207,8 @@ function recordAnalyzeTelemetry(summary: AnalyzeSummary) {
   if (summary.reason) {
     setSafeTag("guidepup.analyze.reason", summary.reason);
   }
+
+  Sentry.setContext("guidepup.analyze", sanitized);
 
   Sentry.addBreadcrumb({
     category: "guidepup.analyze",
@@ -354,6 +360,7 @@ export function installFetchTelemetry() {
 
       if (isAnalyzeRequest) {
         const observedLatencyMs = Date.now() - requestStartedAt;
+        const requestId = response.headers.get("x-request-id")?.trim() || undefined;
 
         try {
           const clonedResponse = response.clone();
@@ -361,6 +368,7 @@ export function installFetchTelemetry() {
             recordAnalyzeTelemetry({
               outcome: "unauthorized",
               reason: "unauthorized",
+              requestId,
               status: response.status,
             });
             return response;
@@ -378,6 +386,7 @@ export function installFetchTelemetry() {
                 ...parsedSafeResponse,
                 outcome: "failure",
                 reason: "safe fallback returned by backend",
+                requestId,
                 status: response.status,
               });
               return response;
@@ -386,6 +395,7 @@ export function installFetchTelemetry() {
             recordAnalyzeTelemetry({
               outcome: "failure",
               reason: `HTTP ${response.status}`,
+              requestId,
               status: response.status,
             });
             return response;
@@ -397,6 +407,7 @@ export function installFetchTelemetry() {
             recordAnalyzeTelemetry({
               outcome: "invalid-response",
               reason: "response did not match the expected Guide Pup schema",
+              requestId,
               status: response.status,
             });
             return response;
@@ -406,12 +417,14 @@ export function installFetchTelemetry() {
             ...parsedResponse,
             latencyMs: parsedResponse.latencyMs ?? observedLatencyMs,
             outcome: "success",
+            requestId: parsedResponse.requestId || requestId,
             status: response.status,
           });
         } catch (telemetryError) {
           recordAnalyzeTelemetry({
             outcome: "invalid-response",
             reason: telemetryError instanceof Error ? telemetryError.message : "Failed to parse analyze response",
+            requestId,
             status: response.status,
           });
         }
@@ -453,10 +466,12 @@ export function addBreadcrumb(breadcrumb: BreadcrumbInput) {
 export function captureAppError(error: unknown, context: ErrorContext = {}) {
   const message = error instanceof Error ? error.message : String(error);
 
-  console.error("[GuidePupError]", {
-    context: sanitizeValue(context),
-    message,
-  });
+  if (__DEV__) {
+    console.error("[GuidePupError]", {
+      context: sanitizeValue(context),
+      message,
+    });
+  }
 
   if (!sentryInitialized) {
     return;

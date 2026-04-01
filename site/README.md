@@ -28,6 +28,12 @@ Static Cloudflare Pages-ready policy site for Guide Pup.
 
 If you prefer the dashboard flow, the `site/` directory can be deployed directly as a static site with no build step.
 
+CLI deploy from the repo root:
+
+```bash
+npx wrangler pages deploy site
+```
+
 ## Local preview
 
 Any static server works:
@@ -41,7 +47,9 @@ python3 -m http.server 8080 --directory site
 - Final public privacy policy URL
 - Final public support URL or email
 - Final public safety disclaimer URL
+- Final public website URL
 - Expo env vars that should point to the public pages:
+  - `EXPO_PUBLIC_WEBSITE_URL`
   - `EXPO_PUBLIC_PRIVACY_POLICY_URL`
   - `EXPO_PUBLIC_SUPPORT_URL`
-  - `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
+  - `EXPO_PUBLIC_SUPPORT_EMAIL`

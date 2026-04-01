@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const EvalScenarioSchema = z.enum([
+  "clear-path",
+  "obstacle-ahead",
+  "stairs-curb-drop-off",
+  "doorway-hallway",
+  "low-light",
+]);
+
 export const EvalFixtureSchema = z.object({
   expectedDirection: z.enum(["turn-left", "turn-right", "forward", "stop"]).optional(),
   expectedHazard: z.boolean().default(false),
@@ -11,6 +19,7 @@ export const EvalFixtureSchema = z.object({
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
   notes: z.string().max(240).optional(),
   detail: z.enum(["low", "high"]).default("low"),
+  scenario: EvalScenarioSchema,
 });
 
 export const EvalBenchmarkSchema = z.object({

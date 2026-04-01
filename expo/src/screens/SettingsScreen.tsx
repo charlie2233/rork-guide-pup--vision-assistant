@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import { useRouter, useNavigation } from "expo-router";
+import { useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef } from "react";
 import {
@@ -16,10 +16,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
+import { useGuidePupRouter } from "@/src/lib/router";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes } = useSettings();

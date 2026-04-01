@@ -40,7 +40,9 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
         });
       }
     } catch (error) {
-      console.error("[SettingsProvider] Failed to load settings", error);
+      if (__DEV__) {
+        console.error("[SettingsProvider] Failed to load settings", error);
+      }
     } finally {
       setIsReady(true);
     }
@@ -51,7 +53,9 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
       setSettings(newSettings);
     } catch (error) {
-      console.error("[SettingsProvider] Failed to save settings", error);
+      if (__DEV__) {
+        console.error("[SettingsProvider] Failed to save settings", error);
+      }
     }
   };
 

@@ -11,7 +11,7 @@ The creative capture / inspiration tabs remain in the repo as experimental surfa
 
 ## Launch Inputs
 
-The unresolved launch values are centralized in [Launch Inputs](./docs/launch-inputs.md). Update that file first when finalizing the app identity, public URLs, and submission metadata.
+The unresolved launch values are centralized in [Launch Inputs](./docs/launch-inputs.md). Update that file first when finalizing the app identity, public URLs, and submission metadata. Keep `app.json`, `eas.json`, App Store metadata, and the public site aligned with that file.
 
 ## Architecture
 
@@ -23,8 +23,9 @@ The unresolved launch values are centralized in [Launch Inputs](./docs/launch-in
 ## Observability
 
 - `@sentry/react-native` `8.6.0` is the pinned SDK.
-- This SDK supports official React Navigation route tracking through `reactNavigationIntegration()` plus the Expo Router navigation container ref.
-- `wrapExpoRouter()` in this SDK only instruments `prefetch()` spans; it does not replace route tracking.
+- `reactNavigationIntegration()` handles route transactions from the Expo Router navigation container ref.
+- `wrapExpoRouter()` is applied to router instances for the SDK's official Expo Router prefetch instrumentation.
+- This SDK does not expose a separate Expo Router route-tracking integration that replaces React Navigation tracking.
 - The app keeps privacy scrubbing enabled and disables Sentry cleanly when `EXPO_PUBLIC_SENTRY_DSN` is not set.
 
 ## Expo setup
@@ -33,6 +34,15 @@ The unresolved launch values are centralized in [Launch Inputs](./docs/launch-in
 cd expo
 npm install
 cp .env.example .env
+```
+
+Standard Expo dev scripts:
+
+```bash
+npm run dev
+npm run android
+npm run ios
+npm run web
 ```
 
 Required Expo env vars:
@@ -45,9 +55,13 @@ Optional Expo env vars:
 
 - `EXPO_PUBLIC_API_TIMEOUT_MS`
 - `EXPO_PUBLIC_SENTRY_DSN`
+- `EXPO_PUBLIC_WEBSITE_URL`
 - `EXPO_PUBLIC_PRIVACY_POLICY_URL`
 - `EXPO_PUBLIC_SUPPORT_URL`
+- `EXPO_PUBLIC_SUPPORT_EMAIL`
 - `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
+
+If `EXPO_PUBLIC_WEBSITE_URL` is set, the app derives `/privacy`, `/support`, and `/safety` automatically unless a more specific URL override is provided.
 
 Sentry release env vars:
 
@@ -56,6 +70,7 @@ Sentry release env vars:
 - `SENTRY_PROJECT`
 
 The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `npm run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
+Keep `EXPO_PUBLIC_APP_ENV`, the EAS build profile, and the backend release metadata aligned so source maps and crash events group under the same release.
 
 Run locally:
 
@@ -112,6 +127,12 @@ npm run deploy:staging
 npm run deploy
 ```
 
+### Public site
+
+```bash
+npx wrangler pages deploy site
+```
+
 ### Expo app
 
 ```bash
@@ -124,6 +145,15 @@ npx eas-cli submit --profile production --platform ios
 `expo/eas.json` includes `development`, `preview`, and `production` profiles. The build profiles keep the production path focused on onboarding, home, navigation, and settings, and keep the experimental tabs disabled unless you explicitly override `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`.
 `expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
 
+If you need a quick release rehearsal sequence:
+
+```bash
+npm run dev
+npx eas-cli build --profile preview --platform ios
+npx eas-cli build --profile production --platform ios
+npx eas-cli submit --profile production --platform ios
+```
+
 ## iOS submission checklist
 
 Use [this release checklist](./docs/testflight-release-checklist.md) before shipping.
@@ -131,10 +161,11 @@ Use [this release checklist](./docs/testflight-release-checklist.md) before ship
 Minimum launch steps:
 
 1. Fill [Launch Inputs](./docs/launch-inputs.md).
-2. Build a production binary with EAS and install it on a physical iPhone.
-3. Verify the camera permission text and App Store disclosure text.
-4. Confirm backend rate limiting, logging, and provider credentials in production.
-5. Complete the TestFlight smoke plan from the checklist.
+2. Deploy the public `site/` pages and set the website/privacy/support URLs in Expo env.
+3. Build a production binary with EAS and install it on a physical iPhone.
+4. Verify the camera permission text and App Store disclosure text.
+5. Confirm backend rate limiting, logging, and provider credentials in production.
+6. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 

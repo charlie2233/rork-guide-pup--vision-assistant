@@ -21,6 +21,7 @@ export const VisionAnalyzeResponseSchema = z.object({
   model: z.string().min(1),
   obstacle: z.boolean(),
   promptVersion: z.string().min(1),
+  requestId: z.string().optional(),
   provider: z.string().min(1),
   sceneDescription: z.string().optional(),
   surfaceType: z.string().optional(),
@@ -117,6 +118,7 @@ function recordAnalyzeTelemetry(
     model?: string;
     obstacle?: boolean;
     promptVersion?: string;
+    requestId?: string;
     provider?: string;
     safeReason?: string;
     sceneDescription?: string;
@@ -132,6 +134,7 @@ function recordAnalyzeTelemetry(
     message: sanitizeMessage(input.message, 160),
     outcome,
     promptVersion: sanitizeMessage(input.promptVersion, 40),
+    requestId: sanitizeMessage(input.requestId, 80),
     provider: sanitizeMessage(input.provider, 64),
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
@@ -163,6 +166,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
     const rawText = await response.text();
     const rawJson = safeParseJson(rawText);
     const latencyMs = Date.now() - startedAt;
+    const requestId = response.headers.get("x-request-id")?.trim() || undefined;
 
     if (!response.ok) {
       const message = `Guide Pup API health check failed (${response.status}).`;
@@ -203,6 +207,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
     const result: HealthCheckResponse = {
       ...parsed.data,
       latencyMs,
+      requestId: parsed.data.requestId || requestId || "not-found",
     };
 
     recordHealthCheckSnapshot({
@@ -222,6 +227,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
         defaultProvider: result.defaultProvider,
         latencyMs: result.latencyMs,
         promptVersion: result.promptVersion,
+        requestId: result.requestId,
       },
       level: "info",
       message: "Health check succeeded",
@@ -255,6 +261,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
 export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = true): Promise<VisionAnalyzeResponse> {
   const startedAt = Date.now();
   let analyzeTelemetryRecorded = false;
+  let requestId: string | undefined;
 
   addBreadcrumb({
     category: "api.analyze",
@@ -316,12 +323,14 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
     const rawText = await response.text();
     const rawJson = safeParseJson(rawText);
     const latencyMs = Date.now() - startedAt;
+    requestId = response.headers.get("x-request-id")?.trim() || undefined;
 
     if (response.status === 401 && allowRetry) {
       recordAnalyzeTelemetry("unauthorized", {
         detail: payload.detail,
         error: "Guide Pup session expired.",
         latencyMs,
+        requestId,
         safeReason: "unauthorized",
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,
@@ -331,6 +340,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         category: "api.analyze",
         data: {
           status: response.status,
+          requestId,
         },
         level: "warning",
         message: "Vision analyze unauthorized",
@@ -355,6 +365,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
           model: safeResponse.model,
           obstacle: safeResponse.obstacle,
           promptVersion: safeResponse.promptVersion,
+          requestId,
           provider: safeResponse.provider,
           safeReason: parsedError.data.error.code,
           sceneDescription: safeResponse.sceneDescription,
@@ -366,11 +377,13 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         setSentryTag("vision.provider", safeResponse.provider);
         setSentryTag("vision.model", safeResponse.model);
         setSentryTag("vision.promptVersion", safeResponse.promptVersion);
+        setSentryTag("vision.requestId", requestId);
         addBreadcrumb({
           category: "api.analyze",
           data: {
             direction: safeResponse.direction,
             provider: safeResponse.provider,
+            requestId,
             status: response.status,
           },
           level: "info",
@@ -386,6 +399,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         detail: payload.detail,
         error: message,
         latencyMs,
+        requestId,
         safeReason: parsedError.success ? parsedError.data.error.code : `http-${response.status}`,
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,
@@ -395,6 +409,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         category: "api.analyze",
         data: {
           error: message,
+          requestId,
           status: response.status,
         },
         level: response.status === 408 || response.status === 504 ? "warning" : "error",
@@ -411,6 +426,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         detail: payload.detail,
         error: message,
         latencyMs,
+        requestId,
         safeReason: "invalid-json",
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,
@@ -418,6 +434,9 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       analyzeTelemetryRecorded = true;
       addBreadcrumb({
         category: "api.analyze",
+        data: {
+          requestId,
+        },
         level: "warning",
         message: "Vision analyze returned invalid JSON",
         type: "http",
@@ -436,6 +455,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       model: result.model,
       obstacle: result.obstacle,
       promptVersion: result.promptVersion,
+      requestId,
       provider: result.provider,
       safeReason: result.direction === "stop" ? "direction-stop" : result.obstacle ? "obstacle-detected" : undefined,
       sceneDescription: result.sceneDescription,
@@ -447,11 +467,13 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
     setSentryTag("vision.provider", result.provider);
     setSentryTag("vision.model", result.model);
     setSentryTag("vision.promptVersion", result.promptVersion);
+    setSentryTag("vision.requestId", requestId);
     addBreadcrumb({
       category: "api.analyze",
       data: {
         direction: result.direction,
         latencyMs,
+        requestId,
         provider: result.provider,
       },
       level: "info",
@@ -468,6 +490,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         detail: payload.detail,
         error: message,
         latencyMs: Date.now() - startedAt,
+        requestId,
         safeReason: outcome === "timeout" ? "timeout" : undefined,
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,
@@ -477,6 +500,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       category: "api.analyze",
       data: {
         error: message,
+        requestId,
       },
       level: outcome === "timeout" ? "warning" : "error",
       message: "Vision analyze threw",

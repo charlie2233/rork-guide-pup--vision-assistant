@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { loadEvalManifest } from "./manifest.schema.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, "..", "..");
+const projectRoot = path.resolve(scriptDir, "..");
 
 function parseArgs(argv) {
   const args = {
@@ -244,6 +244,25 @@ function finalizeProviderSummary(map, hazardFixtureCount) {
     .sort((left, right) => left.provider.localeCompare(right.provider));
 }
 
+function summarizeScenarios(fixtures) {
+  return fixtures.reduce((accumulator, fixture) => {
+    const key = fixture.scenario || "unknown";
+    const current = accumulator[key] || {
+      count: 0,
+      falseForwardCount: 0,
+      stopCount: 0,
+      validCount: 0,
+    };
+
+    current.count += 1;
+    current.validCount += fixture.valid ? 1 : 0;
+    current.stopCount += fixture.direction === "stop" ? 1 : 0;
+    current.falseForwardCount += fixture.falseForward || 0;
+    accumulator[key] = current;
+    return accumulator;
+  }, {});
+}
+
 function renderMarkdown(report) {
   const lines = [];
   lines.push(`# Guide Pup Eval Report`);
@@ -272,7 +291,12 @@ function renderMarkdown(report) {
   lines.push(``);
   lines.push(`## Fixtures`);
   for (const fixture of report.fixtures) {
-    lines.push(`- \`${fixture.fixtureId}\`: ${fixture.valid ? `direction \`${fixture.direction}\`` : `error: ${fixture.error}`}, latency \`${fixture.latencyMs} ms\``);
+    lines.push(`- \`${fixture.fixtureId}\` [${fixture.scenario}]: ${fixture.valid ? `direction \`${fixture.direction}\`` : `error: ${fixture.error}`}, latency \`${fixture.latencyMs} ms\``);
+  }
+  lines.push(``);
+  lines.push(`## Scenario Summary`);
+  for (const [scenario, summary] of Object.entries(report.scenarios)) {
+    lines.push(`- \`${scenario}\`: fixtures \`${summary.count}\`, valid \`${summary.validCount}\`, STOP \`${summary.stopCount}\`, false-forward \`${summary.falseForwardCount}\``);
   }
   if (report.benchmarkSkipped) {
     lines.push(``);
@@ -287,7 +311,7 @@ async function main() {
     throw new Error("Pass --manifest <path>.");
   }
 
-  const manifestPath = path.resolve(repoRoot, args.manifest);
+  const manifestPath = path.resolve(projectRoot, args.manifest);
   const manifestJson = JSON.parse(await readFile(manifestPath, "utf8"));
   const manifest = loadEvalManifest(manifestJson);
   const apiBaseUrl = (args.apiBaseUrl || manifest.apiBaseUrl || process.env.GUIDEPUP_API_BASE_URL || "").replace(/\/+$/, "");
@@ -319,6 +343,7 @@ async function main() {
       ...summary,
       direction: analyzeResult.ok ? analyzeResult.response.direction : undefined,
       error: analyzeResult.ok ? undefined : analyzeResult.error,
+      scenario: fixture.scenario,
     });
 
     if (analyzeResult.ok) {
@@ -385,6 +410,7 @@ async function main() {
     },
     analyzeProviders: analyzeProviderSummary,
     benchmarkProviders: benchmarkProviderSummary,
+    scenarios: summarizeScenarios(fixtureSummaries),
     session: {
       deviceId: session.deviceId,
       expiresAt: session.expiresAt,
@@ -400,7 +426,7 @@ async function main() {
 
   const output = args.format === "json" ? JSON.stringify(report, null, 2) : renderMarkdown(report);
   if (args.output) {
-    const outputPath = path.resolve(repoRoot, args.output);
+    const outputPath = path.resolve(projectRoot, args.output);
     await import("node:fs/promises").then(({ writeFile }) => writeFile(outputPath, `${output}\n`, "utf8"));
   } else {
     process.stdout.write(`${output}\n`);

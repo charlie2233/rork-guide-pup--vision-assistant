@@ -11,13 +11,14 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { useNavigation, useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useVoice } from "@/src/components/VoiceAnnouncer";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { captureAppError } from "@/src/lib/sentry";
+import { useGuidePupRouter } from "@/src/lib/router";
 import { classifyAnalyzeError, recordCameraPermissionSnapshot } from "@/src/lib/diagnostics";
 
 const ANALYSIS_INTERVAL_MS = 4500;
@@ -57,7 +58,7 @@ function getStatusColors(tone: StatusTone) {
 }
 
 export default function NavigationScreen() {
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const navigation = useNavigation();
   const { speak, isSpeaking } = useVoice();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -211,9 +212,17 @@ export default function NavigationScreen() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       const failureClass = classifyAnalyzeError(errorMessage);
+      const fallbackMessage =
+        failureClass === "timeout"
+          ? "Guide Pup timed out and switched to a safe stop. Hold still and retry in a moment."
+          : failureClass === "unauthorized"
+            ? "Guide Pup refreshed your session and switched to a safe stop."
+            : failureClass === "invalid-response"
+              ? "Guide Pup received an invalid result and switched to a safe stop."
+              : "Guide Pup lost the backend connection and switched to a safe stop.";
 
       setGuidanceStatus({
-        detail: "Guide Pup stopped guidance and will retry when the backend is available again.",
+        detail: fallbackMessage,
         tone: "critical",
         title:
           failureClass === "timeout"
@@ -225,6 +234,9 @@ export default function NavigationScreen() {
               : "Backend unavailable",
       });
       setDirection(null);
+      if (!isSpeakingRef.current) {
+        speak(fallbackMessage);
+      }
 
       void captureAppError(error, {
         screen: "NavigationScreen",

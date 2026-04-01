@@ -1,4 +1,4 @@
-import { useNavigation, useRouter } from "expo-router";
+import { useNavigation } from "expo-router";
 import { ChevronLeft, FileText, RefreshCw, Share2 } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -21,6 +21,7 @@ import {
   formatDiagnosticsEventSummary,
   useDiagnostics,
 } from "@/src/lib/diagnostics";
+import { useGuidePupRouter } from "@/src/lib/router";
 
 type StateTone = "neutral" | "warning" | "critical";
 
@@ -44,7 +45,7 @@ function formatMs(value?: number) {
 }
 
 export default function DiagnosticsScreen() {
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const diagnostics = useDiagnostics();
@@ -142,6 +143,8 @@ export default function DiagnosticsScreen() {
             label="Privacy URL"
             value={diagnostics.runtime.privacyPolicyUrl || "Not found in repo"}
           />
+          <KeyValue label="Website" value={diagnostics.runtime.websiteUrl || "Not found in repo"} />
+          <KeyValue label="Support email" value={diagnostics.runtime.supportEmail || "Not found in repo"} />
           <KeyValue label="Support URL" value={diagnostics.runtime.supportUrl || "Not found in repo"} />
         </InfoCard>
 
@@ -265,6 +268,7 @@ export default function DiagnosticsScreen() {
           />
           <KeyValue label="Provider" value={diagnostics.lastAnalyze?.provider || "Not found in repo"} />
           <KeyValue label="Model" value={diagnostics.lastAnalyze?.model || "Not found in repo"} />
+          <KeyValue label="Request ID" value={diagnostics.lastAnalyze?.requestId || "Not found in repo"} />
           <KeyValue
             label="Prompt version"
             value={diagnostics.lastAnalyze?.promptVersion || "Not found in repo"}

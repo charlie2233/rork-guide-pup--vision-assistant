@@ -39,6 +39,7 @@ Recommended fields:
 
 - `id`
 - `label`
+- `scenario`
 - `imagePath`
 - `expectedDirection`
 - `expectedHazard`
@@ -60,11 +61,19 @@ The runner emits:
 - `summary.analyzeAverageLatencyMs`
 - `summary.stopRecallPct`
 - `summary.falseForwardCount`
-- `providers[]` with provider/model and latency summaries
+- `analyzeProviders[]` with provider/model and latency summaries
+- `benchmarkProviders[]` when the benchmark route is enabled
+- `scenarios{}` with per-scenario valid/STOP/false-forward counts
 - `fixtures[]` with per-fixture results
 
 ## Fixture guidance
 
+- Start with scenario buckets:
+  - `clear-path`
+  - `obstacle-ahead`
+  - `stairs-curb-drop-off`
+  - `doorway-hallway`
+  - `low-light`
 - Use real local captures for hallway, doorway, stairs, curb, drop-off, and low-light scenes.
 - Do not commit third-party images.
 - If a fixture is not labeled, the harness still runs, but STOP recall and false-forward metrics will be less meaningful.

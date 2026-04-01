@@ -19,10 +19,11 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 1. Set `EXPO_PUBLIC_API_BASE_URL` for staging or production.
 2. Confirm `EXPO_PUBLIC_APP_ENV=production` for the production build.
 3. Confirm `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS=false` for the shipping build.
-4. Run `npx eas-cli build --profile preview --platform ios` for a rehearsal build.
-5. Run `npx eas-cli build --profile production --platform ios` for the release candidate.
-6. Install the build on a physical device.
-7. Submit to TestFlight only after smoke testing passes.
+4. Set `EXPO_PUBLIC_WEBSITE_URL` or the explicit privacy/support URLs after the public site is deployed.
+5. Run `npx eas-cli build --profile preview --platform ios` for a rehearsal build.
+6. Run `npx eas-cli build --profile production --platform ios` for the release candidate.
+7. Install the build on a physical device.
+8. Submit to TestFlight only after smoke testing passes.
 
 ## TestFlight smoke plan
 

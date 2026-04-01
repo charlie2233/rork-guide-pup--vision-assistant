@@ -28,7 +28,9 @@ export interface DiagnosticsRuntimeSnapshot {
   privacyPolicyUrl?: string;
   sentryEnabled: boolean;
   slug?: string;
+  supportEmail?: string;
   supportUrl?: string;
+  websiteUrl?: string;
 }
 
 export interface DiagnosticsCameraPermissionSnapshot {
@@ -70,6 +72,7 @@ export interface DiagnosticsAnalyzeEvent {
   message?: string;
   model?: string;
   obstacle?: boolean;
+  requestId?: string;
   outcome: DiagnosticsAnalyzeOutcome;
   promptVersion?: string;
   provider?: string;
@@ -104,7 +107,9 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
   privacyPolicyUrl: appConfig.privacyPolicyUrl,
   sentryEnabled: Boolean(appConfig.sentryDsn),
   slug: undefined,
+  supportEmail: appConfig.supportEmail,
   supportUrl: appConfig.supportUrl,
+  websiteUrl: appConfig.websiteUrl,
 });
 
 const createInitialSnapshot = (): DiagnosticsSnapshot => ({
@@ -142,6 +147,9 @@ export function sanitizeUrlForDisplay(value?: string) {
 
   try {
     const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return value.trim();
+    }
     const pathname = parsed.pathname.replace(/\/+$/, "");
     return `${parsed.origin}${pathname}`;
   } catch {
@@ -209,7 +217,9 @@ export function setDiagnosticsRuntime(partial: Partial<DiagnosticsRuntimeSnapsho
         partial.privacyPolicyUrl !== undefined
           ? sanitizeUrlForDisplay(partial.privacyPolicyUrl)
           : current.runtime.privacyPolicyUrl,
+      supportEmail: partial.supportEmail !== undefined ? partial.supportEmail : current.runtime.supportEmail,
       supportUrl: partial.supportUrl !== undefined ? sanitizeUrlForDisplay(partial.supportUrl) : current.runtime.supportUrl,
+      websiteUrl: partial.websiteUrl !== undefined ? sanitizeUrlForDisplay(partial.websiteUrl) : current.runtime.websiteUrl,
     },
   }));
 }
@@ -312,6 +322,7 @@ export function recordAnalyzeEvent(
     message: sanitizeMessage(input.message, 160),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     provider: sanitizeMessage(input.provider, 64),
+    requestId: sanitizeMessage(input.requestId, 80),
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
@@ -357,6 +368,10 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- API base URL: ${runtime.apiBaseUrl || "Not configured"}`);
   lines.push(`- Sentry: ${runtime.sentryEnabled ? "enabled" : "disabled"}`);
   lines.push(`- Experimental tabs: ${runtime.experimentalTabsEnabled ? "enabled" : "disabled"}`);
+  lines.push(`- Website: ${runtime.websiteUrl || "Not found in repo"}`);
+  lines.push(`- Privacy URL: ${runtime.privacyPolicyUrl || "Not found in repo"}`);
+  lines.push(`- Support URL: ${runtime.supportUrl || "Not found in repo"}`);
+  lines.push(`- Support email: ${runtime.supportEmail || "Not found in repo"}`);
   lines.push("");
   lines.push("## Camera");
   lines.push(
@@ -390,6 +405,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Latency: ${typeof lastAnalyze.latencyMs === "number" ? `${Math.round(lastAnalyze.latencyMs)}ms` : "Not found in repo"}`);
     lines.push(`- Provider: ${lastAnalyze.provider || "Not found in repo"}`);
     lines.push(`- Model: ${lastAnalyze.model || "Not found in repo"}`);
+    lines.push(`- Request ID: ${lastAnalyze.requestId || "Not found in repo"}`);
     lines.push(`- Prompt version: ${lastAnalyze.promptVersion || "Not found in repo"}`);
     lines.push(`- Direction: ${lastAnalyze.direction || "Not found in repo"}`);
     lines.push(`- Hazard level: ${lastAnalyze.hazardLevel || "Not found in repo"}`);

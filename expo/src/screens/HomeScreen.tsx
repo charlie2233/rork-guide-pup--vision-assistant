@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
 import { useSettings } from '@/src/providers/SettingsProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useGuidePupRouter } from '@/src/lib/router';
 
 export default function HomeScreen() {
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const { speak } = useVoice();
   const { isReady, settings } = useSettings();
 

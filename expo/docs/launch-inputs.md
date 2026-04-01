@@ -1,12 +1,14 @@
 # Guide Pup Launch Inputs
 
 This file is the single place to resolve launch identity and release inputs before Charlie finalizes TestFlight and App Store submission.
+Do not spread unresolved values into other docs unless they are duplicated here for review notes.
 
 ## Resolved Today
 
 - App name: `Guide Pup: Vision Assistant`
 - Expo slug: `guide-pup-vision-assist`
 - Expo scheme: `guidepup`
+- Package name: `guidepup-app`
 - Production path: onboarding, home, navigation, settings
 - Experimental tabs: disabled in shipping builds
 
@@ -24,6 +26,35 @@ This file is the single place to resolve launch identity and release inputs befo
 - Production API base URL: `EXPO_PUBLIC_API_BASE_URL`
 - Production Sentry DSN: `EXPO_PUBLIC_SENTRY_DSN`
 - Sentry release upload credentials: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
+
+## Final Values To Mirror
+
+When Charlie fills these in, mirror the same value in the matching release docs and build config:
+
+- App name
+- Expo slug
+- Expo scheme
+- iOS bundle identifier
+- Android package name
+- Privacy policy URL
+- Support URL
+- Website URL
+- Support email
+- Emergency / safety disclaimer copy
+- Apple Team ID
+- App Store Connect App ID
+- Production API base URL
+- Production Sentry DSN
+
+## Public URL Mapping
+
+If the public site is deployed at one base URL, the app can derive:
+
+- Privacy policy: `${WEBSITE_URL}/privacy`
+- Support page: `${WEBSITE_URL}/support`
+- Safety page: `${WEBSITE_URL}/safety`
+
+Override the individual URLs only if they live somewhere else.
 
 ## Release Notes
 
