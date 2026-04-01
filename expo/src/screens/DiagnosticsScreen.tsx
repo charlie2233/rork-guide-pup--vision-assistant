@@ -133,6 +133,7 @@ export default function DiagnosticsScreen() {
           <KeyValue label="Version" value={diagnostics.runtime.appVersion || "Not found in repo"} />
           <KeyValue label="Build" value={diagnostics.runtime.buildVersion || "Not found in repo"} />
           <KeyValue label="Environment" value={diagnostics.runtime.appEnv} />
+          <KeyValue label="Release track" value={diagnostics.runtime.releaseTrack} />
           <KeyValue label="API base URL" value={diagnostics.runtime.apiBaseUrl || "Not configured"} />
           <KeyValue label="Sentry" value={diagnostics.runtime.sentryEnabled ? "enabled" : "disabled"} />
           <KeyValue
@@ -207,6 +208,10 @@ export default function DiagnosticsScreen() {
           <KeyValue
             label="Last provider"
             value={diagnostics.lastHealthCheck?.defaultProvider || "Not found in repo"}
+          />
+          <KeyValue
+            label="Last model"
+            value={diagnostics.lastHealthCheck?.defaultModel || "Not found in repo"}
           />
           <KeyValue
             label="Latency"

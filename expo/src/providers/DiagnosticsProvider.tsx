@@ -48,6 +48,7 @@ function initializeRuntimeMetadata() {
     emergencyDisclaimer: appConfig.emergencyDisclaimer,
     experimentalTabsEnabled: appConfig.enableExperimentalTabs,
     privacyPolicyUrl: appConfig.privacyPolicyUrl,
+    releaseTrack: appConfig.releaseTrack,
     sentryEnabled: Boolean(appConfig.sentryDsn),
     slug: expoConfig?.slug,
     supportEmail: appConfig.supportEmail,

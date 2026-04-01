@@ -14,6 +14,8 @@ This folder contains a small dev/staging-only eval harness for the vision API.
 - `manifest.schema.mjs` - zod schema for fixture manifests.
 - `sample-manifest.json` - example manifest with placeholder fixture paths.
 - `run-eval.mjs` - command-line runner that emits markdown or JSON.
+- `fixture-capture-protocol.md` - safe process for capturing 15-30 representative local fixtures.
+- `smoke-results-template.md` - template for recording live staging smoke results.
 
 ## Commands
 

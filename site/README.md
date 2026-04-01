@@ -2,6 +2,10 @@
 
 Static Cloudflare Pages-ready policy site for Guide Pup.
 
+Current live Pages URL:
+
+- `https://guidepup-site.pages.dev`
+
 ## Routes
 
 - `/`
@@ -31,7 +35,15 @@ If you prefer the dashboard flow, the `site/` directory can be deployed directly
 CLI deploy from the repo root:
 
 ```bash
-npx wrangler pages deploy site
+cd site
+npx wrangler pages deploy .
+```
+
+Create the Pages project once if it does not exist:
+
+```bash
+cd site
+npx wrangler pages project create guidepup-site --production-branch main
 ```
 
 ## Local preview
