@@ -1,6 +1,7 @@
-import { useRouter, useNavigation } from "expo-router";
+import Constants from "expo-constants";
+import { useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   AccessibilityInfo,
   Platform,
@@ -15,18 +16,32 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
+import { useGuidePupRouter } from "@/src/lib/router";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
-  console.log("[SettingsScreen] render");
-
-  const router = useRouter();
+  const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes } = useSettings();
+  const diagnosticsTapCountRef = useRef(0);
+  const diagnosticsTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const appVersion = Constants.expoConfig?.version || "Not found in repo";
+  const buildVersion =
+    Constants.expoConfig?.ios?.buildNumber ||
+    String(Constants.expoConfig?.android?.versionCode || "Not found in repo");
+  const versionLabel = `${appVersion} (${buildVersion})`;
+
+  useEffect(() => {
+    return () => {
+      if (diagnosticsTapTimerRef.current) {
+        clearTimeout(diagnosticsTapTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleBack = useCallback(() => {
-    console.log("[SettingsScreen] navigating back");
     if (Platform.OS === "ios") {
       AccessibilityInfo.announceForAccessibility("Navigating back");
     }
@@ -39,7 +54,6 @@ export default function SettingsScreen() {
 
   const handleSpeechRateChange = useCallback(
     (rate: SpeechRate) => {
-      console.log("[SettingsScreen] speech rate changed", { rate });
       updateSpeechRate(rate);
       const rateLabel = rate === "slow" ? "Slow" : rate === "fast" ? "Fast" : "Normal";
       if (Platform.OS === "ios") {
@@ -51,7 +65,6 @@ export default function SettingsScreen() {
 
   const handleDescriptionModeChange = useCallback(
     (mode: DescriptionMode) => {
-      console.log("[SettingsScreen] description mode changed", { mode });
       updateDescriptionMode(mode);
       const modeLabel = mode === "short" ? "Short" : "Detailed";
       if (Platform.OS === "ios") {
@@ -62,7 +75,6 @@ export default function SettingsScreen() {
   );
 
   const handleBoundingBoxesToggle = useCallback(() => {
-    console.log("[SettingsScreen] bounding boxes toggled");
     const newValue = !settings.showBoundingBoxes;
     toggleBoundingBoxes();
     if (Platform.OS === "ios") {
@@ -71,6 +83,34 @@ export default function SettingsScreen() {
       );
     }
   }, [settings.showBoundingBoxes, toggleBoundingBoxes]);
+
+  const openDiagnostics = useCallback(() => {
+    router.push("/diagnostics" as never);
+  }, [router]);
+
+  const handleVersionPress = useCallback(() => {
+    diagnosticsTapCountRef.current += 1;
+
+    if (!diagnosticsTapTimerRef.current) {
+      diagnosticsTapTimerRef.current = setTimeout(() => {
+        diagnosticsTapCountRef.current = 0;
+        diagnosticsTapTimerRef.current = null;
+      }, 1200);
+    }
+
+    if (diagnosticsTapCountRef.current >= 5) {
+      diagnosticsTapCountRef.current = 0;
+      if (diagnosticsTapTimerRef.current) {
+        clearTimeout(diagnosticsTapTimerRef.current);
+        diagnosticsTapTimerRef.current = null;
+      }
+
+      openDiagnostics();
+      if (Platform.OS === "ios") {
+        AccessibilityInfo.announceForAccessibility("Diagnostics opened");
+      }
+    }
+  }, [openDiagnostics]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]} testID="settings-screen">
@@ -196,6 +236,21 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
+
+        <Pressable
+          onPress={handleVersionPress}
+          accessibilityRole="button"
+          accessibilityLabel="App version"
+          accessibilityHint="Double tap to view app version information"
+          style={({ pressed }) => [styles.versionCard, pressed && styles.versionCardPressed]}
+          testID="settings-version-row"
+        >
+          <View style={styles.versionTextGroup}>
+            <Text style={styles.versionLabel}>Version</Text>
+            <Text style={styles.versionValue}>{versionLabel}</Text>
+          </View>
+          <Text style={styles.versionBadge}>App info</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -284,6 +339,39 @@ const styles = StyleSheet.create({
   },
   linkGroup: {
     gap: 12,
+  },
+  versionCard: {
+    alignItems: "center",
+    backgroundColor: Colors.palette.surface,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+    padding: 20,
+  },
+  versionCardPressed: {
+    opacity: 0.85,
+  },
+  versionTextGroup: {
+    gap: 6,
+  },
+  versionLabel: {
+    color: Colors.palette.textMuted,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  versionValue: {
+    color: Colors.palette.textPrimary,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  versionBadge: {
+    color: Colors.palette.accent,
+    fontSize: 14,
+    fontWeight: "700",
   },
   optionsGroup: {
     flexDirection: "row",

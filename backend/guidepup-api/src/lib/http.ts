@@ -25,7 +25,7 @@ function corsHeaders(request: Request, env: Env) {
     "access-control-allow-headers": "authorization, content-type, x-guidepup-device-id, x-guidepup-debug-token",
     "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-origin": allowedOrigin || "",
-    "access-control-expose-headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset-at",
+    "access-control-expose-headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset-at, x-request-id",
     "access-control-max-age": "86400",
     "vary": "origin",
   };

@@ -11,6 +11,9 @@
     "dev": "wrangler dev",
     "dev:production": "wrangler dev --env production",
     "dev:staging": "wrangler dev --env staging",
+    "eval": "node eval/run-eval.mjs",
+    "eval:json": "node eval/run-eval.mjs --format json",
+    "eval:markdown": "node eval/run-eval.mjs --format markdown",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types src/env.d.ts"
   },

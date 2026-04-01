@@ -2,18 +2,9 @@
 
 Use this checklist for the next production cycle. Leave placeholders in place until the real values exist.
 
-## Required identifiers
+## Source Of Truth
 
-- Apple Team ID: `TODO_APPLE_TEAM_ID`
-- App Store Connect App ID: `TODO_APP_STORE_CONNECT_APP_ID`
-- App Store Connect app name: `Guide Pup: Vision Assistant`
-- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
-
-## Required links
-
-- Privacy Policy URL: `TODO_PRIVACY_POLICY_URL`
-- Support URL: `TODO_SUPPORT_URL`
-- Emergency / safety disclaimer URL or in-app copy: `TODO_EMERGENCY_SAFETY_DISCLAIMER`
+All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./launch-inputs.md). Update that file first when preparing the build.
 
 ## App Store answers to confirm
 
@@ -28,9 +19,11 @@ Use this checklist for the next production cycle. Leave placeholders in place un
 1. Set `EXPO_PUBLIC_API_BASE_URL` for staging or production.
 2. Confirm `EXPO_PUBLIC_APP_ENV=production` for the production build.
 3. Confirm `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS=false` for the shipping build.
-4. Run a production EAS build for iOS.
-5. Install the build on a physical device.
-6. Submit to TestFlight only after smoke testing passes.
+4. Set `EXPO_PUBLIC_WEBSITE_URL` or the explicit privacy/support URLs after the public site is deployed.
+5. Run `npx eas-cli build --profile preview --platform ios` for a rehearsal build.
+6. Run `npx eas-cli build --profile production --platform ios` for the release candidate.
+7. Install the build on a physical device.
+8. Submit to TestFlight only after smoke testing passes.
 
 ## TestFlight smoke plan
 
@@ -42,14 +35,10 @@ Use this checklist for the next production cycle. Leave placeholders in place un
 - Force a network failure and verify the app degrades to a safe `STOP` response.
 - Confirm the settings screen links resolve to the privacy and support destinations.
 - Confirm the experimental tabs are hidden in the production build.
+- Capture the app name, version, and build number shown in diagnostics or device settings for reviewer notes.
 
 ## Release blockers
 
-- Missing Apple Team ID.
-- Missing App Store Connect App ID.
-- Missing privacy policy URL.
-- Missing support URL.
-- Missing final emergency / safety disclaimer copy.
+- Missing launch inputs in [Launch Inputs](./launch-inputs.md).
 - Missing backend production credentials.
 - Missing App Store screenshots and metadata.
-

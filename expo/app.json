@@ -2,10 +2,11 @@
   "expo": {
     "name": "Guide Pup: Vision Assistant",
     "slug": "guide-pup-vision-assist",
+    "description": "Assistive navigation guidance for blind and low-vision users using camera-based scene analysis and safe spoken cues.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "scheme": "guidepup",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -17,8 +18,9 @@
       "config": {
         "usesNonExemptEncryption": false
       },
+      "buildNumber": "1",
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.guide-pup-vision-assist",
+      "bundleIdentifier": "TODO_IOS_BUNDLE_IDENTIFIER",
       "infoPlist": {
         "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers."
       }
@@ -28,9 +30,9 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.guide_pup_vision_assist",
+      "package": "TODO_ANDROID_PACKAGE",
+      "versionCode": 1,
       "permissions": [
-        "CAMERA",
         "android.permission.VIBRATE",
         "INTERNET"
       ]
@@ -39,12 +41,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://rork.com/"
-        }
-      ],
+      "expo-router",
       "@sentry/react-native/expo",
       "expo-font",
       "expo-web-browser",

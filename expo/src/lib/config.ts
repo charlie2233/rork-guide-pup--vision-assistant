@@ -8,7 +8,9 @@ const RawConfigSchema = z.object({
   enableExperimentalTabs: z.string().optional(),
   privacyPolicyUrl: z.string().optional(),
   sentryDsn: z.string().optional(),
+  supportEmail: z.string().optional(),
   supportUrl: z.string().optional(),
+  websiteUrl: z.string().optional(),
 });
 
 const rawConfig = RawConfigSchema.parse({
@@ -19,12 +21,23 @@ const rawConfig = RawConfigSchema.parse({
   enableExperimentalTabs: process.env.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS,
   privacyPolicyUrl: process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
   sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL,
   supportUrl: process.env.EXPO_PUBLIC_SUPPORT_URL,
+  websiteUrl: process.env.EXPO_PUBLIC_WEBSITE_URL,
 });
 
 const trimToUndefined = (value?: string) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+};
+
+const trimConfiguredValue = (value?: string) => {
+  const trimmed = trimToUndefined(value);
+  if (!trimmed || trimmed.startsWith("TODO_")) {
+    return undefined;
+  }
+
+  return trimmed;
 };
 
 const parseTimeout = (value?: string) => {
@@ -33,21 +46,30 @@ const parseTimeout = (value?: string) => {
 };
 
 export const isConfiguredUrl = (value?: string) => {
-  const trimmed = trimToUndefined(value);
-  return Boolean(trimmed && !trimmed.startsWith("TODO_"));
+  return Boolean(trimConfiguredValue(value));
 };
 
+const websiteUrl = trimConfiguredValue(rawConfig.websiteUrl)?.replace(/\/+$/g, "");
+const derivedPublicPageUrl = (pathname: string) => (websiteUrl ? `${websiteUrl}${pathname}` : undefined);
+const supportEmail = trimConfiguredValue(rawConfig.supportEmail);
+
 export const appConfig = {
-  apiBaseUrl: trimToUndefined(rawConfig.apiBaseUrl)?.replace(/\/+$/g, "") || "",
+  apiBaseUrl: trimConfiguredValue(rawConfig.apiBaseUrl)?.replace(/\/+$/g, "") || "",
   apiTimeoutMs: parseTimeout(rawConfig.apiTimeoutMs),
   appEnv: trimToUndefined(rawConfig.appEnv) || (__DEV__ ? "development" : "production"),
   emergencyDisclaimer:
-    trimToUndefined(rawConfig.emergencyDisclaimer) ||
+    trimConfiguredValue(rawConfig.emergencyDisclaimer) ||
     "Guide Pup provides assistive guidance and safe fallback behavior, but it does not guarantee hazard detection. If you are in immediate danger, stop and contact local emergency services or nearby people directly.",
   enableExperimentalTabs: rawConfig.enableExperimentalTabs === "true",
-  privacyPolicyUrl: trimToUndefined(rawConfig.privacyPolicyUrl),
+  privacyPolicyUrl: trimConfiguredValue(rawConfig.privacyPolicyUrl) || derivedPublicPageUrl("/privacy"),
+  safetyUrl: derivedPublicPageUrl("/safety"),
   sentryDsn: trimToUndefined(rawConfig.sentryDsn),
-  supportUrl: trimToUndefined(rawConfig.supportUrl),
+  supportEmail,
+  supportUrl:
+    trimConfiguredValue(rawConfig.supportUrl) ||
+    derivedPublicPageUrl("/support") ||
+    (supportEmail ? `mailto:${supportEmail}` : undefined),
+  websiteUrl,
 };
 
 export function requireApiBaseUrl() {

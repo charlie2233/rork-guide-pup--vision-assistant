@@ -327,12 +327,9 @@ export const GuideAI = {
   async analyzeWithVision(
     frame: AnalyzeFrameInput
   ): Promise<GuideAIDirection | null> {
-    console.log("[GuideAI] Starting Vision AI analysis...");
-    
     const result = await VisionAI.analyzeFrame(frame);
 
     if (!result.success || !result.analysis) {
-      console.log("[GuideAI] Vision AI failed, using fallback");
       lastDirection = "stop";
       lastConfidence = 0;
       return {
@@ -354,13 +351,6 @@ export const GuideAI = {
       smoothed.direction === analysis.direction
         ? analysis.message
         : buildMessage(smoothed.direction, analysis.obstacle, false);
-
-    console.log("[GuideAI] Vision AI result:", {
-      direction: smoothed.direction,
-      obstacle: analysis.obstacle,
-      hazardLevel: analysis.hazardLevel,
-      provider: analysis.provider,
-    });
 
     return {
       confidence: analysis.confidence,

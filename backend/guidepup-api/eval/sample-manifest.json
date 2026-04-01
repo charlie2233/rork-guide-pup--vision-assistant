@@ -1,0 +1,77 @@
+{
+  "name": "guidepup-dev-eval",
+  "apiBaseUrl": "http://127.0.0.1:8787",
+  "benchmark": {
+    "enabled": true,
+    "providers": ["openai-compatible", "huggingface-minicpm-o"],
+    "samples": 1
+  },
+  "fixtures": [
+    {
+      "id": "clear-path",
+      "label": "Clear path",
+      "imagePath": "./fixtures/clear-path.jpg",
+      "expectedDirection": "forward",
+      "expectedHazard": false,
+      "expectedHazardLevel": "none",
+      "detail": "low",
+      "scenario": "clear-path",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    },
+    {
+      "id": "obstacle-ahead",
+      "label": "Obstacle ahead",
+      "imagePath": "./fixtures/obstacle-ahead.jpg",
+      "expectedDirection": "stop",
+      "expectedHazard": true,
+      "expectedHazardLevel": "medium",
+      "detail": "low",
+      "scenario": "obstacle-ahead",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    },
+    {
+      "id": "stairs-ahead",
+      "label": "Stairs ahead",
+      "imagePath": "./fixtures/stairs-ahead.jpg",
+      "expectedDirection": "stop",
+      "expectedHazard": true,
+      "expectedHazardLevel": "high",
+      "detail": "high",
+      "scenario": "stairs-curb-drop-off",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    },
+    {
+      "id": "doorway-hallway",
+      "label": "Doorway or hallway",
+      "imagePath": "./fixtures/doorway-hallway.jpg",
+      "expectedDirection": "forward",
+      "expectedHazard": false,
+      "expectedHazardLevel": "low",
+      "detail": "low",
+      "scenario": "doorway-hallway",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    },
+    {
+      "id": "low-light-scene",
+      "label": "Low-light scene",
+      "imagePath": "./fixtures/low-light-scene.jpg",
+      "expectedDirection": "stop",
+      "expectedHazard": true,
+      "expectedHazardLevel": "medium",
+      "detail": "high",
+      "scenario": "low-light",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    },
+    {
+      "id": "curb-dropoff",
+      "label": "Curb or drop-off",
+      "imagePath": "./fixtures/curb-dropoff.jpg",
+      "expectedDirection": "stop",
+      "expectedHazard": true,
+      "expectedHazardLevel": "high",
+      "detail": "high",
+      "scenario": "stairs-curb-drop-off",
+      "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
+    }
+  ]
+}

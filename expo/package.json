@@ -1,14 +1,17 @@
 {
-  "name": "expo-app",
+  "name": "guidepup-app",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "bunx rork start -p o92l1fv7jc2abl7qruyjj --tunnel",
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
     "start:android": "expo start --android",
     "start:ios": "expo start --ios",
-    "start-web": "bunx rork start -p o92l1fv7jc2abl7qruyjj --web --tunnel",
-    "start-web-dev": "DEBUG=expo* bunx rork start -p o92l1fv7jc2abl7qruyjj --web --tunnel",
     "start:web": "expo start --web",
+    "start:tunnel": "expo start --tunnel",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "sentry:upload-sourcemaps:update": "npx sentry-expo-upload-sourcemaps dist"

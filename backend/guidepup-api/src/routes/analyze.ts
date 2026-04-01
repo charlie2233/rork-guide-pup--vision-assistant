@@ -30,6 +30,7 @@ export async function handleAnalyze(
   ctx: ExecutionContext,
   requestId: string,
 ) {
+  const startedAt = Date.now();
   const deviceId = getDeviceId(request);
   const sessionToken = getBearerToken(request);
 
@@ -39,7 +40,12 @@ export async function handleAnalyze(
         code: "unauthorized",
         message: "Missing device bootstrap credentials.",
       },
-    }, { status: 401 });
+    }, {
+      headers: {
+        "x-request-id": requestId,
+      },
+      status: 401,
+    });
   }
 
   const sessionIsValid = await verifySessionToken(sessionToken, deviceId, env);
@@ -49,7 +55,12 @@ export async function handleAnalyze(
         code: "unauthorized",
         message: "Invalid or expired device bootstrap token.",
       },
-    }, { status: 401 });
+    }, {
+      headers: {
+        "x-request-id": requestId,
+      },
+      status: 401,
+    });
   }
 
   const body = AnalyzeVisionRequestSchema.parse(await request.json());
@@ -67,8 +78,10 @@ export async function handleAnalyze(
 
     logWarn("vision.rate_limited", {
       deviceId,
+      latencyMs: Date.now() - startedAt,
       requestId,
       resetAt: rateLimit.resetAt,
+      promptVersion,
     });
 
     return jsonResponse(request, env, AnalyzeVisionErrorSchema.parse({
@@ -83,6 +96,7 @@ export async function handleAnalyze(
         "x-rate-limit-limit": String(rateLimit.limit),
         "x-rate-limit-remaining": String(rateLimit.remaining),
         "x-rate-limit-reset-at": rateLimit.resetAt,
+        "x-request-id": requestId,
       },
     });
   }
@@ -111,7 +125,9 @@ export async function handleAnalyze(
       deviceId,
       direction: normalized.direction,
       hazardLevel: normalized.hazardLevel,
-      latencyMs: normalized.latencyMs,
+      latencyMs: Date.now() - startedAt,
+      model: normalized.model,
+      promptVersion: normalized.promptVersion,
       provider: normalized.provider,
       transport: providerResult.transport,
       requestId,
@@ -122,11 +138,12 @@ export async function handleAnalyze(
         "x-rate-limit-limit": String(rateLimit.limit),
         "x-rate-limit-remaining": String(rateLimit.remaining),
         "x-rate-limit-reset-at": rateLimit.resetAt,
+        "x-request-id": requestId,
       },
     });
   } catch (error) {
     const providerSummary = getProviderSummary(env);
-    const latencyMs = 0;
+    const latencyMs = Date.now() - startedAt;
     const safeResponse = createSafeFallbackResponse({
       latencyMs,
       model: providerSummary.model,
@@ -136,8 +153,11 @@ export async function handleAnalyze(
 
     logError("vision.analyze_failed", {
       deviceId,
+      latencyMs,
       message: error instanceof Error ? error.message : String(error),
       provider: providerSummary.provider,
+      promptVersion,
+      safeReason: "provider-error",
       requestId,
     });
     reportBackendError(error, {
@@ -146,6 +166,10 @@ export async function handleAnalyze(
       route: "/v1/vision/analyze",
     }, env, ctx);
 
-    return jsonResponse(request, env, safeResponse);
+    return jsonResponse(request, env, safeResponse, {
+      headers: {
+        "x-request-id": requestId,
+      },
+    });
   }
 }

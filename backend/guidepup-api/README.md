@@ -114,3 +114,24 @@ curl -X POST http://127.0.0.1:8787/__debug/provider-benchmark \
 
 MiniCPM-o stays experimental and only participates when the benchmark flag is enabled outside production.
 In staging, set `DEBUG_BENCHMARK_TOKEN` before using the route.
+
+## Logging and telemetry
+
+- Logs are structured JSON and sanitized so raw image payloads, tokens, and secrets are not emitted.
+- Analyze responses include `x-request-id`, which the Expo client records in its diagnostics store.
+- Success and failure logs should stay short and focus on `requestId`, `latencyMs`, `promptVersion`, `provider`, and `model`.
+- Backend Sentry envelopes inherit the route, environment, release, and prompt version tags when configured.
+
+## Eval harness
+
+Use the dev/staging harness in `eval/` to compare `/v1/vision/analyze` and the benchmark route on a manifest of labeled fixtures.
+
+Run it from `backend/guidepup-api/`:
+
+```bash
+npm run eval -- --manifest eval/sample-manifest.json
+npm run eval:json -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.json
+npm run eval:markdown -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.md
+```
+
+The sample manifest intentionally points to local fixture paths only. Add your own captured images outside the repo and keep them uncommitted. The harness rejects production environments and only enables MiniCPM-o through the benchmark path outside production.
