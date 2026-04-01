@@ -3,10 +3,13 @@ import { getPromptVersion } from "../lib/prompts";
 import { getBenchmarkProviderNamesForEnv, getProviderSummary } from "../providers";
 
 export function handleHealth(request: Request, env: Env, requestId: string) {
+  const providerSummary = getProviderSummary(env);
+
   return jsonResponse(request, env, {
     benchmarkProviders:
       env.ENVIRONMENT === "production" ? undefined : getBenchmarkProviderNamesForEnv(env),
-    defaultProvider: getProviderSummary(env),
+    defaultModel: providerSummary.model,
+    defaultProvider: providerSummary.provider,
     environment: env.ENVIRONMENT || "development",
     ok: true,
     promptVersion: getPromptVersion(env),

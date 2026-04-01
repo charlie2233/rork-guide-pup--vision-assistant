@@ -11,7 +11,8 @@ The creative capture / inspiration tabs remain in the repo as experimental surfa
 
 ## Launch Inputs
 
-The unresolved launch values are centralized in [Launch Inputs](./docs/launch-inputs.md). Update that file first when finalizing the app identity, public URLs, and submission metadata. Keep `app.json`, `eas.json`, App Store metadata, and the public site aligned with that file.
+The machine-readable release inputs live in [release/launch-inputs.js](./release/launch-inputs.js), with reviewer-facing notes mirrored in [Launch Inputs](./docs/launch-inputs.md).
+Update the release file first when finalizing the app identity, public URLs, and submission metadata.
 
 ## Architecture
 
@@ -49,6 +50,7 @@ Required Expo env vars:
 
 - `EXPO_PUBLIC_API_BASE_URL`
 - `EXPO_PUBLIC_APP_ENV`
+- `EXPO_PUBLIC_RELEASE_TRACK`
 - `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`
 
 Optional Expo env vars:
@@ -130,28 +132,42 @@ npm run deploy
 ### Public site
 
 ```bash
-npx wrangler pages deploy site
+cd ../site
+npx wrangler pages deploy .
 ```
 
 ### Expo app
 
 ```bash
 cd expo
+npm run release:preflight
+npx eas-cli metadata:push --profile store --platform ios
 npx eas-cli build --profile preview --platform ios
-npx eas-cli build --profile production --platform ios
-npx eas-cli submit --profile production --platform ios
+npx eas-cli build --profile testflight --platform ios
+npx eas-cli submit --profile testflight --platform ios
+npx eas-cli build --profile store --platform ios
+npx eas-cli submit --profile store --platform ios
 ```
 
-`expo/eas.json` includes `development`, `preview`, and `production` profiles. The build profiles keep the production path focused on onboarding, home, navigation, and settings, and keep the experimental tabs disabled unless you explicitly override `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS`.
+`expo/eas.json` now separates:
+
+- `development` for dev clients
+- `preview` for internal / ad hoc installs
+- `testflight` for real App Store distribution builds intended for TestFlight
+- `store` for final App Store submission builds
+
+Both store-upload profiles pin `macos-sequoia-15.6-xcode-26.2` to satisfy the current App Store upload requirement for Xcode 26 / iOS 26 SDK builds.
 `expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
 
 If you need a quick release rehearsal sequence:
 
 ```bash
 npm run dev
+npm run release:preflight
+npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
-npx eas-cli build --profile production --platform ios
-npx eas-cli submit --profile production --platform ios
+npx eas-cli build --profile testflight --platform ios
+npx eas-cli submit --profile testflight --platform ios
 ```
 
 ## iOS submission checklist
@@ -162,10 +178,14 @@ Minimum launch steps:
 
 1. Fill [Launch Inputs](./docs/launch-inputs.md).
 2. Deploy the public `site/` pages and set the website/privacy/support URLs in Expo env.
-3. Build a production binary with EAS and install it on a physical iPhone.
-4. Verify the camera permission text and App Store disclosure text.
-5. Confirm backend rate limiting, logging, and provider credentials in production.
-6. Complete the TestFlight smoke plan from the checklist.
+3. Run `npm run release:preflight`.
+4. Push App Store metadata with `npx eas-cli metadata:push --profile store --platform ios`.
+5. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
+6. Submit the TestFlight build only after smoke testing passes.
+7. Build the `store` profile only when you are ready for App Store submission.
+8. Verify the camera permission text and App Store disclosure text.
+9. Confirm backend rate limiting, logging, and provider credentials in production.
+10. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 

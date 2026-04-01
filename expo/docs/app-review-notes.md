@@ -28,7 +28,8 @@ Guide Pup is assistive guidance, not guaranteed hazard detection or emergency re
 
 ## Support For Reviewers
 
-- Privacy policy URL: see [Launch Inputs](./launch-inputs.md)
-- Support URL: see [Launch Inputs](./launch-inputs.md)
+- Privacy policy URL: see [Launch Inputs](./launch-inputs.md) or `expo/store.config.js`
+- Support URL: see [Launch Inputs](./launch-inputs.md) or `expo/store.config.js`
+- Marketing URL: see [Launch Inputs](./launch-inputs.md) or `expo/store.config.js`
 - Safety disclaimer: see [Launch Inputs](./launch-inputs.md)
 - If a reviewer asks for email support, use the support email in [Launch Inputs](./launch-inputs.md).

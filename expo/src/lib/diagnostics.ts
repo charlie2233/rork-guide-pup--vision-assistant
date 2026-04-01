@@ -26,6 +26,7 @@ export interface DiagnosticsRuntimeSnapshot {
   emergencyDisclaimer: string;
   experimentalTabsEnabled: boolean;
   privacyPolicyUrl?: string;
+  releaseTrack: string;
   sentryEnabled: boolean;
   slug?: string;
   supportEmail?: string;
@@ -52,6 +53,7 @@ export interface DiagnosticsSessionSnapshot {
 export interface DiagnosticsHealthSnapshot {
   benchmarkProviders?: string[];
   checkedAt: number;
+  defaultModel?: string;
   defaultProvider?: string;
   environment?: string;
   error?: string;
@@ -105,6 +107,7 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
   emergencyDisclaimer: appConfig.emergencyDisclaimer,
   experimentalTabsEnabled: appConfig.enableExperimentalTabs,
   privacyPolicyUrl: appConfig.privacyPolicyUrl,
+  releaseTrack: appConfig.releaseTrack,
   sentryEnabled: Boolean(appConfig.sentryDsn),
   slug: undefined,
   supportEmail: appConfig.supportEmail,
@@ -282,6 +285,7 @@ export function recordSessionCleared() {
 
 export function recordHealthCheckSnapshot(input: {
   benchmarkProviders?: string[];
+  defaultModel?: string;
   defaultProvider?: string;
   environment?: string;
   error?: string;
@@ -295,6 +299,7 @@ export function recordHealthCheckSnapshot(input: {
     lastHealthCheck: {
       benchmarkProviders: input.benchmarkProviders,
       checkedAt: Date.now(),
+      defaultModel: input.defaultModel,
       defaultProvider: input.defaultProvider,
       environment: input.environment,
       error: sanitizeMessage(input.error, 120),
@@ -362,6 +367,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push("## Runtime");
   lines.push(`- App: ${runtime.appName}`);
   lines.push(`- Environment: ${runtime.appEnv}`);
+  lines.push(`- Release track: ${runtime.releaseTrack}`);
   lines.push(`- Version: ${runtime.appVersion || "Not found in repo"}`);
   lines.push(`- Build: ${runtime.buildVersion || "Not found in repo"}`);
   lines.push(`- Bundle ID: ${runtime.bundleIdentifier || "Not found in repo"}`);
@@ -392,6 +398,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Request ID: ${lastHealthCheck.requestId || "Not found in repo"}`);
     lines.push(`- Prompt version: ${lastHealthCheck.promptVersion || "Not found in repo"}`);
     lines.push(`- Default provider: ${lastHealthCheck.defaultProvider || "Not found in repo"}`);
+    lines.push(`- Default model: ${lastHealthCheck.defaultModel || "Not found in repo"}`);
     lines.push(`- Benchmark providers: ${lastHealthCheck.benchmarkProviders?.join(", ") || "Not found in repo"}`);
     lines.push(`- Latency: ${typeof lastHealthCheck.latencyMs === "number" ? `${Math.round(lastHealthCheck.latencyMs)}ms` : "Not found in repo"}`);
     lines.push(`- Error: ${lastHealthCheck.error || "None"}`);

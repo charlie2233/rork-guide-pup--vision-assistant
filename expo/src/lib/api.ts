@@ -37,6 +37,7 @@ const AnalyzeVisionErrorSchema = z.object({
 
 const HealthCheckResponseSchema = z.object({
   benchmarkProviders: z.array(z.string().min(1)).optional(),
+  defaultModel: z.string().min(1),
   defaultProvider: z.string().min(1),
   environment: z.string().min(1),
   ok: z.boolean(),
@@ -212,6 +213,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
 
     recordHealthCheckSnapshot({
       benchmarkProviders: result.benchmarkProviders,
+      defaultModel: result.defaultModel,
       defaultProvider: result.defaultProvider,
       environment: result.environment,
       ok: result.ok,
@@ -225,6 +227,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
       category: "api.health",
       data: {
         defaultProvider: result.defaultProvider,
+        defaultModel: result.defaultModel,
         latencyMs: result.latencyMs,
         promptVersion: result.promptVersion,
         requestId: result.requestId,

@@ -101,6 +101,15 @@ npm run deploy
 
 Use `npm run deploy:dry-run` or `npm run check` before release.
 
+Recommended staging smoke sequence after deploy:
+
+```bash
+curl https://<staging-worker-url>/health
+curl -X POST https://<staging-worker-url>/v1/device/bootstrap \
+  -H 'content-type: application/json' \
+  -d '{"platform":"ios","appVersion":"1.0.0"}'
+```
+
 ## Benchmarking
 
 The benchmark route is for non-production environments only:
@@ -135,3 +144,8 @@ npm run eval:markdown -- --manifest eval/sample-manifest.json --output /tmp/guid
 ```
 
 The sample manifest intentionally points to local fixture paths only. Add your own captured images outside the repo and keep them uncommitted. The harness rejects production environments and only enables MiniCPM-o through the benchmark path outside production.
+
+See also:
+
+- `eval/fixture-capture-protocol.md`
+- `eval/smoke-results-template.md`

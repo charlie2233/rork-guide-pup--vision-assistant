@@ -8,6 +8,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_RELEASE_TRACK": "development-client",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
       }
     },
@@ -16,20 +17,47 @@
       "channel": "preview",
       "env": {
         "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_RELEASE_TRACK": "internal-preview",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
       }
     },
-    "production": {
+    "testflight": {
+      "distribution": "store",
+      "channel": "testflight",
       "autoIncrement": true,
-      "channel": "production",
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_RELEASE_TRACK": "testflight",
+        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
+      }
+    },
+    "store": {
+      "distribution": "store",
+      "channel": "production",
+      "autoIncrement": true,
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_RELEASE_TRACK": "app-store",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
       }
     }
   },
   "submit": {
-    "production": {
+    "testflight": {
+      "metadataPath": "store.config.js",
+      "ios": {
+        "appleTeamId": "TODO_APPLE_TEAM_ID",
+        "ascAppId": "TODO_APP_STORE_CONNECT_APP_ID"
+      }
+    },
+    "store": {
+      "metadataPath": "store.config.js",
       "ios": {
         "appleTeamId": "TODO_APPLE_TEAM_ID",
         "ascAppId": "TODO_APP_STORE_CONNECT_APP_ID"
