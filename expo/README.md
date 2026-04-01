@@ -140,8 +140,9 @@ npx wrangler pages deploy .
 
 ```bash
 cd expo
+npx eas-cli whoami
 npm run release:preflight
-npx eas-cli metadata:push --profile store --platform ios
+npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
 npx eas-cli build --profile testflight --platform ios
 npx eas-cli submit --profile testflight --platform ios
@@ -178,14 +179,15 @@ Minimum launch steps:
 
 1. Fill [Launch Inputs](./docs/launch-inputs.md).
 2. Deploy the public `site/` pages and set the website/privacy/support URLs in Expo env.
-3. Run `npm run release:preflight`.
-4. Push App Store metadata with `npx eas-cli metadata:push --profile store --platform ios`.
-5. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
-6. Submit the TestFlight build only after smoke testing passes.
-7. Build the `store` profile only when you are ready for App Store submission.
-8. Verify the camera permission text and App Store disclosure text.
-9. Confirm backend rate limiting, logging, and provider credentials in production.
-10. Complete the TestFlight smoke plan from the checklist.
+3. Run `npx eas-cli whoami` and log in, or export `EXPO_TOKEN`.
+4. Run `npm run release:preflight`.
+5. Push App Store metadata with `npx eas-cli metadata:push --profile store`.
+6. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
+7. Submit the TestFlight build only after smoke testing passes.
+8. Build the `store` profile only when you are ready for App Store submission.
+9. Verify the camera permission text and App Store disclosure text.
+10. Confirm backend rate limiting, logging, and provider credentials in production.
+11. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 

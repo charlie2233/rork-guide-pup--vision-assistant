@@ -11,24 +11,19 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "AI_GATEWAY_API_KEY": "",
     "AI_GATEWAY_BASE_URL": "",
     "AI_GATEWAY_AUTH_HEADER": "authorization",
     "AI_GATEWAY_AUTH_PREFIX": "Bearer ",
     "AI_GATEWAY_PATH": "/chat/completions",
     "AI_GATEWAY_FALLBACK_BASE_URL": "",
-    "AI_GATEWAY_FALLBACK_API_KEY": "",
     "AI_GATEWAY_FALLBACK_AUTH_HEADER": "authorization",
     "AI_GATEWAY_FALLBACK_AUTH_PREFIX": "Bearer ",
     "AI_GATEWAY_FALLBACK_PATH": "/chat/completions",
-    "BOOTSTRAP_SIGNING_SECRET": "",
     "ENVIRONMENT": "development",
     "VISION_PROVIDER": "openai-compatible",
     "EXPERIMENTAL_MINICPM_O_BENCHMARK": "false",
-    "HUGGINGFACE_MINICPM_O_API_KEY": "",
     "HUGGINGFACE_MINICPM_O_BASE_URL": "",
     "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
-    "OPENAI_API_KEY": "",
     "OPENAI_BASE_URL": "https://api.openai.com/v1",
     "OPENAI_MODEL": "gpt-4.1-mini",
     "PROMPT_VERSION": "2026-03-31.v1",
@@ -36,8 +31,7 @@
     "RATE_LIMIT_PER_MINUTE": "20",
     "CORS_ORIGIN": "*",
     "CORS_ALLOWED_ORIGINS": "",
-    "DEBUG_BENCHMARK_TOKEN": "",
-    "SENTRY_DSN": ""
+    "DEBUG_BENCHMARK_TOKEN": ""
   },
   "durable_objects": {
     "bindings": [
@@ -75,24 +69,19 @@
         }
       ],
       "vars": {
-        "AI_GATEWAY_API_KEY": "",
         "AI_GATEWAY_BASE_URL": "",
         "AI_GATEWAY_AUTH_HEADER": "authorization",
         "AI_GATEWAY_AUTH_PREFIX": "Bearer ",
         "AI_GATEWAY_PATH": "/chat/completions",
         "AI_GATEWAY_FALLBACK_BASE_URL": "",
-        "AI_GATEWAY_FALLBACK_API_KEY": "",
         "AI_GATEWAY_FALLBACK_AUTH_HEADER": "authorization",
         "AI_GATEWAY_FALLBACK_AUTH_PREFIX": "Bearer ",
         "AI_GATEWAY_FALLBACK_PATH": "/chat/completions",
-        "BOOTSTRAP_SIGNING_SECRET": "",
         "ENVIRONMENT": "staging",
         "VISION_PROVIDER": "openai-compatible",
         "EXPERIMENTAL_MINICPM_O_BENCHMARK": "false",
-        "HUGGINGFACE_MINICPM_O_API_KEY": "",
         "HUGGINGFACE_MINICPM_O_BASE_URL": "",
         "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
-        "OPENAI_API_KEY": "",
         "OPENAI_BASE_URL": "https://api.openai.com/v1",
         "OPENAI_MODEL": "gpt-4.1-mini",
         "PROMPT_VERSION": "2026-03-31.v1",
@@ -100,8 +89,7 @@
         "RATE_LIMIT_PER_MINUTE": "20",
         "CORS_ORIGIN": "",
         "CORS_ALLOWED_ORIGINS": "",
-        "DEBUG_BENCHMARK_TOKEN": "",
-        "SENTRY_DSN": ""
+        "DEBUG_BENCHMARK_TOKEN": ""
       }
     },
     "production": {
@@ -123,24 +111,19 @@
         }
       ],
       "vars": {
-        "AI_GATEWAY_API_KEY": "",
         "AI_GATEWAY_BASE_URL": "",
         "AI_GATEWAY_AUTH_HEADER": "authorization",
         "AI_GATEWAY_AUTH_PREFIX": "Bearer ",
         "AI_GATEWAY_PATH": "/chat/completions",
         "AI_GATEWAY_FALLBACK_BASE_URL": "",
-        "AI_GATEWAY_FALLBACK_API_KEY": "",
         "AI_GATEWAY_FALLBACK_AUTH_HEADER": "authorization",
         "AI_GATEWAY_FALLBACK_AUTH_PREFIX": "Bearer ",
         "AI_GATEWAY_FALLBACK_PATH": "/chat/completions",
-        "BOOTSTRAP_SIGNING_SECRET": "",
         "ENVIRONMENT": "production",
         "VISION_PROVIDER": "openai-compatible",
         "EXPERIMENTAL_MINICPM_O_BENCHMARK": "false",
-        "HUGGINGFACE_MINICPM_O_API_KEY": "",
         "HUGGINGFACE_MINICPM_O_BASE_URL": "",
         "HUGGINGFACE_MINICPM_O_MODEL": "openbmb/MiniCPM-o-2_6",
-        "OPENAI_API_KEY": "",
         "OPENAI_BASE_URL": "https://api.openai.com/v1",
         "OPENAI_MODEL": "gpt-4.1-mini",
         "PROMPT_VERSION": "2026-03-31.v1",
@@ -148,8 +131,7 @@
         "RATE_LIMIT_PER_MINUTE": "20",
         "CORS_ORIGIN": "",
         "CORS_ALLOWED_ORIGINS": "",
-        "DEBUG_BENCHMARK_TOKEN": "",
-        "SENTRY_DSN": ""
+        "DEBUG_BENCHMARK_TOKEN": ""
       }
     }
   }

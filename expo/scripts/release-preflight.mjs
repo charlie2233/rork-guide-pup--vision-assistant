@@ -48,6 +48,7 @@ checkPlaceholder(launchInputs.appleTeamId, "Apple Team ID");
 checkPlaceholder(launchInputs.ascAppId, "App Store Connect app ID");
 checkPlaceholder(launchInputs.copyright, "Store copyright");
 checkPlaceholder(launchInputs.productionApiBaseUrl, "Production API base URL");
+checkPlaceholder(launchInputs.stagingApiBaseUrl, "Preview / staging API base URL");
 
 expect(Boolean(publicUrls.websiteUrl), "Website URL is unresolved.");
 expect(Boolean(publicUrls.privacyPolicyUrl), "Privacy policy URL is unresolved.");
@@ -69,8 +70,10 @@ expect(Boolean(storeProfile), "Missing build.store profile.");
 
 if (previewProfile) {
   compare(previewProfile.distribution, "internal", "preview distribution");
+  compare(previewProfile.env?.EXPO_PUBLIC_API_BASE_URL, launchInputs.stagingApiBaseUrl, "preview API base URL");
   compare(previewProfile.env?.EXPO_PUBLIC_RELEASE_TRACK, "internal-preview", "preview release track");
   compare(previewProfile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", "preview experimental tabs flag");
+  compare(previewProfile.env?.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, "preview website URL");
 }
 
 for (const [profileName, profile] of Object.entries({ testflight: testflightProfile, store: storeProfile })) {
@@ -81,6 +84,7 @@ for (const [profileName, profile] of Object.entries({ testflight: testflightProf
   compare(profile.distribution, "store", `${profileName} distribution`);
   compare(profile.env?.EXPO_PUBLIC_APP_ENV, "production", `${profileName} app env`);
   compare(profile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", `${profileName} experimental tabs flag`);
+  compare(profile.env?.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, `${profileName} website URL`);
   expect(
     profile.ios?.image === launchInputs.storeBuildImage,
     `${profileName} iOS image must be "${launchInputs.storeBuildImage}" for App Store uploads.`,

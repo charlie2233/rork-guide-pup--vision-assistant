@@ -16,9 +16,11 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://guidepup-api-staging.charliehan-lifepage.workers.dev",
         "EXPO_PUBLIC_APP_ENV": "preview",
         "EXPO_PUBLIC_RELEASE_TRACK": "internal-preview",
-        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
+        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
       }
     },
     "testflight": {
@@ -31,7 +33,8 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "testflight",
-        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
+        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
       }
     },
     "store": {
@@ -44,7 +47,8 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "app-store",
-        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false"
+        "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
       }
     }
   },

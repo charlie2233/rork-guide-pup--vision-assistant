@@ -166,7 +166,14 @@ export async function handleAnalyze(
       route: "/v1/vision/analyze",
     }, env, ctx);
 
-    return jsonResponse(request, env, safeResponse, {
+    return jsonResponse(request, env, AnalyzeVisionErrorSchema.parse({
+      error: {
+        code: "provider_error",
+        message: "Vision guidance is temporarily unavailable.",
+      },
+      safeResponse,
+    }), {
+      status: 503,
       headers: {
         "x-request-id": requestId,
       },

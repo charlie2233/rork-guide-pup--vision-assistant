@@ -15,6 +15,16 @@ Charlie still needs to set these values before launch execution can finish:
 - Production API base URL
 - Optional production Sentry DSN
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
-- Backend secrets: `BOOTSTRAP_SIGNING_SECRET`, `OPENAI_API_KEY`
+- Expo/EAS login or `EXPO_TOKEN`
+
+## Backend by environment
+
+- Staging Worker
+  - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
+  - `OPENAI_API_KEY`: still missing, so live analyze remains safe fallback only
+- Production Worker
+  - Worker not created or deployed yet
+  - `BOOTSTRAP_SIGNING_SECRET`: still required
+  - `OPENAI_API_KEY`: still required
 
 After updating them, rerun `npm run release:preflight` from `expo/`.
