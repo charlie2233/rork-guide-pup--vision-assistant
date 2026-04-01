@@ -141,7 +141,9 @@ npx wrangler pages deploy .
 ```bash
 cd expo
 npx eas-cli whoami
-npm run release:preflight
+npm run release:preflight:preview
+npm run release:preflight:testflight
+npm run release:preflight:store
 npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
 npx eas-cli build --profile testflight --platform ios
@@ -164,7 +166,7 @@ If you need a quick release rehearsal sequence:
 
 ```bash
 npm run dev
-npm run release:preflight
+npm run release:preflight:testflight
 npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
 npx eas-cli build --profile testflight --platform ios
@@ -180,7 +182,7 @@ Minimum launch steps:
 1. Fill [Launch Inputs](./docs/launch-inputs.md).
 2. Deploy the public `site/` pages and set the website/privacy/support URLs in Expo env.
 3. Run `npx eas-cli whoami` and log in, or export `EXPO_TOKEN`.
-4. Run `npm run release:preflight`.
+4. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store`.
 5. Push App Store metadata with `npx eas-cli metadata:push --profile store`.
 6. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
 7. Submit the TestFlight build only after smoke testing passes.
@@ -191,8 +193,6 @@ Minimum launch steps:
 
 ## Safety and release TODOs
 
-- TODO: publish a privacy policy URL and wire it into the app release materials.
-- TODO: publish a support URL and wire it into the app release materials.
 - TODO: finalize the emergency / safety disclaimer copy with legal review.
 - TODO: add App Store metadata copy for camera usage and third-party AI image processing.
 - TODO: replace placeholder SOS behavior with a real emergency flow and legal review.

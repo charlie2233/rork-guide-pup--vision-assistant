@@ -19,6 +19,7 @@ import { fetchHealthCheck } from "@/src/lib/api";
 import {
   buildDiagnosticsReport,
   formatDiagnosticsEventSummary,
+  getAnalyzeExecutionPath,
   useDiagnostics,
 } from "@/src/lib/diagnostics";
 import { useGuidePupRouter } from "@/src/lib/router";
@@ -252,6 +253,10 @@ export default function DiagnosticsScreen() {
           <KeyValue
             label="Outcome"
             value={diagnostics.lastAnalyze?.outcome || "Not found in repo"}
+          />
+          <KeyValue
+            label="Execution path"
+            value={getAnalyzeExecutionPath(diagnostics.lastAnalyze)}
           />
           <KeyValue
             label="Latency"

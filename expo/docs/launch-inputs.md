@@ -18,6 +18,8 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Metadata config path: `expo/store.config.js`
 - Public site base URL: `https://guidepup-site.pages.dev`
 - Staging API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
+- Production API base URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
+- Production Worker name: `guidepup-api-production`
 
 ## Unresolved Inputs
 
@@ -32,13 +34,12 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Support email: `TODO_SUPPORT_EMAIL`
 - Copyright holder: `TODO_COPYRIGHT_HOLDER`
 - Emergency / safety disclaimer final copy: `TODO_EMERGENCY_SAFETY_DISCLAIMER`
-- Production API base URL: `TODO_PRODUCTION_API_BASE_URL`
 - Preview API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
 - Staging bootstrap secret: configured as a Wrangler secret on `2026-04-01`
 - Staging provider key: `OPENAI_API_KEY` still missing
 - Production Sentry DSN: optional, currently blank
 - Sentry release upload credentials: `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
-- Production backend bootstrap secret: `BOOTSTRAP_SIGNING_SECRET`
+- Production backend bootstrap secret: configured as a Wrangler secret on `2026-04-01`
 - Production backend provider key: `OPENAI_API_KEY`
 
 ## Final Values To Mirror
@@ -82,9 +83,9 @@ Override the individual URLs only if they live somewhere else.
 ## Finalize Order
 
 1. Fill the unresolved inputs above.
-2. Run `npm run release:preflight` from `expo/` and clear every failure.
+2. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/` and clear every failure for the target track.
 3. Verify the public URLs in App Review notes, `store.config.js`, and the app info screens.
-4. Confirm preview stays on staging while TestFlight/store remain blocked on the production API URL.
+4. Confirm preview stays on staging while TestFlight/store target the production API URL.
 5. Push App Store metadata with `npx eas-cli metadata:push --profile store`.
 6. Run the internal preview build, then the true TestFlight build, then submit the TestFlight build.
 7. Run the final `store` build only when you are ready for App Store submission.

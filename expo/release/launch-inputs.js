@@ -14,12 +14,13 @@ const launchInputs = {
   supportEmail: "TODO_SUPPORT_EMAIL",
   copyright: "TODO_COPYRIGHT_HOLDER",
   emergencyDisclaimer: "TODO_EMERGENCY_SAFETY_DISCLAIMER",
-  productionApiBaseUrl: "TODO_PRODUCTION_API_BASE_URL",
+  productionApiBaseUrl: "https://guidepup-api-production.charliehan-lifepage.workers.dev",
   productionSentryDsn: "",
   storeBuildImage: "macos-sequoia-15.6-xcode-26.2",
   metadataPath: "store.config.js",
   pagesProjectName: "guidepup-site",
   workerName: "guidepup-api",
+  productionWorkerName: "guidepup-api-production",
   stagingWorkerName: "guidepup-api-staging",
 };
 

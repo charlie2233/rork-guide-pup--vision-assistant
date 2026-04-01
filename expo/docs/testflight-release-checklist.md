@@ -18,10 +18,10 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 
 1. Run `npx eas-cli whoami` and confirm the correct Expo account is logged in, or export `EXPO_TOKEN`.
 2. Preview uses the staging API URL from `eas.json`.
-3. Set `EXPO_PUBLIC_API_BASE_URL` for the true TestFlight/store build only after the production API URL exists.
+3. TestFlight and store use the production API URL from `eas.json`.
 4. `EXPO_PUBLIC_WEBSITE_URL` is already set to the live Pages site in `eas.json`.
 5. Confirm `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS=false` for every shipping profile.
-6. Run `npm run release:preflight` from `expo/`.
+6. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/`.
 7. Run `npx eas-cli metadata:push --profile store`.
 8. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
 9. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
@@ -45,9 +45,9 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 ## Release blockers
 
 - Missing launch inputs in [Launch Inputs](./launch-inputs.md).
-- Failed `npm run release:preflight`.
+- Failed the matching `npm run release:preflight:<track>` command.
 - Missing Expo/EAS login or `EXPO_TOKEN`.
 - Missing staging `OPENAI_API_KEY` for provider-backed preview validation.
-- Missing backend production credentials and production API URL.
+- Missing backend production `OPENAI_API_KEY`.
 - Missing App Store screenshots and metadata.
 - Missing or incorrect public website/privacy/support URLs in `store.config.js`.

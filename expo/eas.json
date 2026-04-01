@@ -31,6 +31,7 @@
         "image": "macos-sequoia-15.6-xcode-26.2"
       },
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://guidepup-api-production.charliehan-lifepage.workers.dev",
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "testflight",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
@@ -45,6 +46,7 @@
         "image": "macos-sequoia-15.6-xcode-26.2"
       },
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://guidepup-api-production.charliehan-lifepage.workers.dev",
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "app-store",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",

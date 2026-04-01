@@ -358,6 +358,22 @@ export function formatDiagnosticsEventSummary(event: DiagnosticsAnalyzeEvent) {
   return pieces.join(" • ");
 }
 
+export function getAnalyzeExecutionPath(event: DiagnosticsAnalyzeEvent | null) {
+  if (!event) {
+    return "Not found in repo";
+  }
+
+  if (event.outcome === "success") {
+    return "provider-backed";
+  }
+
+  if (event.outcome === "safe-response") {
+    return "safe fallback";
+  }
+
+  return "request failed";
+}
+
 export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   const lines: string[] = [];
   const { runtime, cameraPermission, session, lastHealthCheck, lastAnalyze, recentAnalyzeEvents } = input;
@@ -409,6 +425,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push("## Last analyze");
   if (lastAnalyze) {
     lines.push(`- Outcome: ${lastAnalyze.outcome}`);
+    lines.push(`- Execution path: ${getAnalyzeExecutionPath(lastAnalyze)}`);
     lines.push(`- Latency: ${typeof lastAnalyze.latencyMs === "number" ? `${Math.round(lastAnalyze.latencyMs)}ms` : "Not found in repo"}`);
     lines.push(`- Provider: ${lastAnalyze.provider || "Not found in repo"}`);
     lines.push(`- Model: ${lastAnalyze.model || "Not found in repo"}`);
