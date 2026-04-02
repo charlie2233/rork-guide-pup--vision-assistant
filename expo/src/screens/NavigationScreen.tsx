@@ -20,6 +20,7 @@ import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { captureAppError } from "@/src/lib/sentry";
 import { useGuidePupRouter } from "@/src/lib/router";
 import { classifyAnalyzeError, recordCameraPermissionSnapshot } from "@/src/lib/diagnostics";
+import { GuidePupNavigationCore } from "@/src/native/GuidePupNavigationCore";
 
 const ANALYSIS_INTERVAL_MS = 4500;
 
@@ -74,6 +75,7 @@ export default function NavigationScreen() {
 
   useEffect(() => {
     guidingRef.current = isGuiding;
+    void GuidePupNavigationCore.setCameraSessionState(isGuiding ? "running" : "paused");
   }, [isGuiding]);
 
   useEffect(() => {
@@ -154,27 +156,8 @@ export default function NavigationScreen() {
     try {
       analyzingRef.current = true;
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.4,
-        skipProcessing: true,
-      });
-
-      if (!photo?.uri && !photo?.base64) {
-        setDirection(null);
-        setGuidanceStatus({
-          detail: "Guide Pup could not read a camera frame.",
-          tone: "warning",
-          title: "No usable frame",
-        });
-        return;
-      }
-
-      const result = await GuideAI.analyzeWithVision({
-        base64: photo.base64,
-        height: photo.height,
-        uri: photo.uri,
-        width: photo.width,
-      });
+      const frame = await GuidePupNavigationCore.captureFrame(cameraRef.current);
+      const result = await GuideAI.analyzeWithVision(frame);
 
       if (!guidingRef.current || !result) {
         return;
@@ -200,15 +183,10 @@ export default function NavigationScreen() {
         speak(result.message);
       }
 
-      if (result.obstacle || result.direction === "stop") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      } else if (result.direction === "turn-left") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } else if (result.direction === "turn-right") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      } else {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
+      void GuidePupNavigationCore.emitGuidanceCue({
+        direction: result.direction,
+        obstacle: result.obstacle,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       const failureClass = classifyAnalyzeError(errorMessage);
