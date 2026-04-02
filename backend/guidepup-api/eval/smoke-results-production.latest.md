@@ -1,6 +1,6 @@
 # Guide Pup Smoke Results
 
-Date: 2026-04-01
+Date: 2026-04-02
 Environment: production
 Operator: Codex
 
@@ -12,24 +12,24 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `821eac8b-b4a1-427d-9565-27e542f5baf8`
+  - request id: `f98c9729-5e28-42b2-abcb-80305fc358f6`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
-  - latency: `191ms`
+  - latency: `161ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `3323b1c9-ddc7-41b4-89f4-902887aba5e7`
-  - device id suffix: `1bcf00dc`
-  - latency: `23ms`
+  - request id: `431ef41d-a856-44ac-81f8-74654bbe1443`
+  - device id suffix: `76919543`
+  - latency: `31ms`
 - `POST /v1/vision/analyze`
   - status: `503 Service Unavailable`
-  - request id: `1fbf4ff8-1286-4d9a-9c09-736f705967c8`
+  - request id: `51e5fcd8-e1ea-4eff-b180-fa5c033757a1`
   - execution path: `safe-fallback`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
-  - request latency: `733ms`
-  - service latency: `705ms`
+  - request latency: `732ms`
+  - service latency: `661ms`
   - fallback reason: `provider_error`
   - message: `Stop. Vision guidance is unavailable.`

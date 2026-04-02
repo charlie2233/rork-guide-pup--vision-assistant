@@ -18,10 +18,13 @@ Last updated: 2026-04-01
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: still missing
+- Required-secret gate:
+  - `npm run verify:secrets:staging`: fails with `Missing required Cloudflare secrets for staging: OPENAI_API_KEY.`
+  - `npm run check:staging`: now fails before deploy on the same missing secret
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `4a3a48c7-ba79-4b32-a1ef-fd768756a3b9`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `ffed295a-aa77-417c-baca-90d2a6371d25`
-  - `/v1/vision/analyze`: `503 provider_error`, request ID `b292ee81-844b-4eef-88ac-b98da4211e63`
+  - `/health`: `200 OK`, request ID `6d046c0b-9ada-42cf-bf66-46ee82e689c8`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `cc9fd5e7-84ee-417c-bcb5-72d27eb0776c`
+  - `/v1/vision/analyze`: `503 provider_error`, request ID `279e25d7-a56c-4af5-bd74-ecc87f33526b`
 - Analyze result: explicit safe `STOP` fallback from `openai-compatible` / `gpt-4.1-mini`, prompt version `2026-03-31.v1`, not provider-backed, because staging `OPENAI_API_KEY` is still unset
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.md`
@@ -34,10 +37,13 @@ Last updated: 2026-04-01
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: still missing
+- Required-secret gate:
+  - `npm run verify:secrets:production`: fails with `Missing required Cloudflare secrets for production: OPENAI_API_KEY.`
+  - `npm run check`: now fails before deploy on the same missing secret
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `821eac8b-b4a1-427d-9565-27e542f5baf8`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `3323b1c9-ddc7-41b4-89f4-902887aba5e7`
-  - `/v1/vision/analyze`: `503 provider_error`, request ID `1fbf4ff8-1286-4d9a-9c09-736f705967c8`
+  - `/health`: `200 OK`, request ID `f98c9729-5e28-42b2-abcb-80305fc358f6`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `431ef41d-a856-44ac-81f8-74654bbe1443`
+  - `/v1/vision/analyze`: `503 provider_error`, request ID `51e5fcd8-e1ea-4eff-b180-fa5c033757a1`
 - Analyze result: explicit safe `STOP` fallback from `openai-compatible` / `gpt-4.1-mini`, prompt version `2026-03-31.v1`, not provider-backed, because production `OPENAI_API_KEY` is still unset
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-production.latest.md`
@@ -52,14 +58,16 @@ Last updated: 2026-04-01
 - Store API target: production
 - EAS Metadata config: `expo/store.config.js`
 - Release preflight: track-aware, with preview warning on fallback-only staging smoke and a hard provider-backed gate for `testflight` and `store`
-- Expo auth status: `npx --yes eas-cli whoami` returned `Not logged in` on `2026-04-01`
+- Expo auth status:
+  - `printenv EXPO_TOKEN`: empty
+  - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
   - `preview`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, with a warning that staging smoke is still `safe-fallback` because `OPENAI_API_KEY` is missing
   - `testflight`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and production smoke still showing `safe-fallback`
   - `store`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and production smoke still showing `safe-fallback`
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
-  - Preview/TestFlight build, metadata push, and submit were not attempted again after the auth check because the first real Expo blocker was already hit
+  - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 
 ## Actions taken on 2026-04-01
 
@@ -73,14 +81,17 @@ Last updated: 2026-04-01
 - Added reusable live smoke commands that emit both JSON and markdown artifacts for staging and production.
 - Re-ran staging and production smoke against the live Workers, confirming both envs are still `safe-fallback` because `OPENAI_API_KEY` is missing.
 - Re-ran the track-specific preflights with the provider-backed ship gate enabled for `testflight` and `store`.
-- Confirmed with Wrangler that both envs only have `BOOTSTRAP_SIGNING_SECRET` configured today.
-- Confirmed with `eas whoami` that Expo auth is still the first build blocker, so no remote build or submit IDs were created this pass.
+- Added `secrets.required` to `wrangler.jsonc` for top-level, `staging`, and `production`.
+- Added a required-secret verification script and wrapped `check`, `check:staging`, `deploy`, and `deploy:staging` around it.
+- Verified that staging and production now fail before deploy with the exact missing secret: `OPENAI_API_KEY`.
+- Re-ran staging and production smoke after the new deploy gate landed, recording fresh request IDs and confirming both envs still return `safe-fallback`.
+- Confirmed with `printenv EXPO_TOKEN` and `eas whoami` that Expo auth is still the first iOS release blocker, so no remote build or submit IDs were created this pass.
 
 ## Blockers
 
 - iOS bundle identifier is still unresolved.
 - Apple Team ID and App Store Connect App ID are still unresolved.
 - Store copyright holder is still unresolved.
-- Staging `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet.
-- Production `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet. Without a real provider key or a fully configured AI Gateway path, the production backend only returns the safe `STOP` fallback instead of real scene guidance.
+- Staging `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and staging deploy verification now fails before deploy.
+- Production `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and production deploy verification now fails before deploy. Without a real provider key or a fully configured AI Gateway path, the production backend only returns the safe `STOP` fallback instead of real scene guidance.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.

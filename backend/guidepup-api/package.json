@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "wrangler deploy --dry-run --env production",
-    "check:staging": "wrangler deploy --dry-run --env staging",
-    "deploy": "wrangler deploy --env production",
-    "deploy:staging": "wrangler deploy --env staging",
+    "check": "node scripts/verify-required-secrets.mjs --env production && wrangler deploy --dry-run --env production",
+    "check:staging": "node scripts/verify-required-secrets.mjs --env staging && wrangler deploy --dry-run --env staging",
+    "deploy": "node scripts/verify-required-secrets.mjs --env production && wrangler deploy --env production",
+    "deploy:staging": "node scripts/verify-required-secrets.mjs --env staging && wrangler deploy --env staging",
     "deploy:dry-run": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
     "dev:production": "wrangler dev --env production",
@@ -16,6 +16,8 @@
     "eval:markdown": "node eval/run-eval.mjs --format markdown",
     "smoke:production": "node eval/run-live-smoke.mjs --env production --output-json eval/smoke-results-production.latest.json --output-md eval/smoke-results-production.latest.md",
     "smoke:staging": "node eval/run-live-smoke.mjs --env staging --output-json eval/smoke-results-staging.latest.json --output-md eval/smoke-results-staging.latest.md",
+    "verify:secrets:production": "node scripts/verify-required-secrets.mjs --env production",
+    "verify:secrets:staging": "node scripts/verify-required-secrets.mjs --env staging",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types src/env.d.ts"
   },

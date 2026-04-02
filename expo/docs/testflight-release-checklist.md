@@ -21,14 +21,15 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 3. TestFlight and store use the production API URL from `eas.json`.
 4. `EXPO_PUBLIC_WEBSITE_URL` is already set to the live Pages site in `eas.json`.
 5. Confirm `EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS=false` for every shipping profile.
-6. Run `npm --prefix ../backend/guidepup-api run smoke:staging` and `npm --prefix ../backend/guidepup-api run smoke:production`.
-7. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/`.
-8. `testflight` and `store` must not proceed unless `backend/guidepup-api/eval/smoke-results-production.latest.json` shows `provider-backed` analyze.
-9. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
-10. Install the internal preview build on a physical device for smoke testing.
-11. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
-12. If Expo metadata push is needed and the account/app are already ready, run `npx eas-cli metadata:push --profile store`. Do not let a metadata-only issue block the build or submit path if manual App Store Connect entry can continue.
-13. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
+6. Run `npm --prefix ../backend/guidepup-api run verify:secrets:staging` and `npm --prefix ../backend/guidepup-api run verify:secrets:production`.
+7. Run `npm --prefix ../backend/guidepup-api run smoke:staging` and `npm --prefix ../backend/guidepup-api run smoke:production`.
+8. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store` from `expo/`.
+9. `testflight` and `store` must not proceed unless `backend/guidepup-api/eval/smoke-results-production.latest.json` shows `provider-backed` analyze.
+10. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
+11. Install the internal preview build on a physical device for smoke testing.
+12. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
+13. If Expo metadata push is needed and the account/app are already ready, run `npx eas-cli metadata:push --profile store`. Do not let a metadata-only issue block the build or submit path if manual App Store Connect entry can continue.
+14. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
 
 ## TestFlight smoke plan
 
@@ -50,6 +51,7 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Missing launch inputs in [Launch Inputs](./launch-inputs.md).
 - Failed the matching `npm run release:preflight:<track>` command.
 - Missing Expo/EAS login or `EXPO_TOKEN`.
+- Failed `npm --prefix ../backend/guidepup-api run verify:secrets:production`.
 - Missing staging `OPENAI_API_KEY` if you want preview validation to be provider-backed instead of warning-only.
 - Missing backend production `OPENAI_API_KEY`, which hard-blocks `testflight` and `store`.
 - Missing App Store screenshots and metadata.

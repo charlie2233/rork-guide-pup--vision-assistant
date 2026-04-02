@@ -13,23 +13,32 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `821eac8b-b4a1-427d-9565-27e542f5baf8`
-  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`, round-trip latency `191ms`
+  - request id: `f98c9729-5e28-42b2-abcb-80305fc358f6`
+  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`, round-trip latency `161ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `3323b1c9-ddc7-41b4-89f4-902887aba5e7`
-  - device id suffix: `1bcf00dc`
-  - notes: anonymous bootstrap succeeded after the production Worker was created and `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret, round-trip latency `23ms`
+  - request id: `431ef41d-a856-44ac-81f8-74654bbe1443`
+  - device id suffix: `76919543`
+  - notes: anonymous bootstrap succeeded after the production Worker was created and `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret, round-trip latency `31ms`
 - `POST /v1/vision/analyze`
   - status: `503 provider_error`
-  - request id: `1fbf4ff8-1286-4d9a-9c09-736f705967c8`
+  - request id: `51e5fcd8-e1ea-4eff-b180-fa5c033757a1`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
   - result summary: explicit safe `STOP` fallback with message `Stop. Vision guidance is unavailable.`
   - execution path: `safe-fallback`
   - fallback reason: `provider_error`
-  - notes: request reached the provider path, but production `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet; round-trip latency `733ms`, provider latency `705ms`
+  - notes: request reached the provider path, but production `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet; round-trip latency `732ms`, provider latency `661ms`
+
+## Secret verification
+
+- `npm run verify:secrets:production`
+  - result: failed before deploy
+  - blocker: `Missing required Cloudflare secrets for production: OPENAI_API_KEY.`
+- `npm run check`
+  - result: failed before deploy
+  - blocker: `Missing required Cloudflare secrets for production: OPENAI_API_KEY.`
 
 ## Generated artifacts
 

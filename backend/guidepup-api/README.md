@@ -48,6 +48,7 @@ Cloudflare Worker backend for Guide Pup's production vision-analysis path.
 - `dev` uses permissive CORS defaults if `CORS_ORIGIN` is unset or `*`.
 - `staging` and `production` require explicit origins via `CORS_ORIGIN` or `CORS_ALLOWED_ORIGINS`.
 - `RATE_LIMITER` Durable Object bindings are defined explicitly in every env block.
+- `secrets.required` is defined at the top level and again inside `staging` and `production`, so `wrangler deploy` and `wrangler deploy --dry-run` fail loudly when `BOOTSTRAP_SIGNING_SECRET` or `OPENAI_API_KEY` is missing.
 
 ## Secrets and config
 
@@ -92,6 +93,13 @@ wrangler secret put OPENAI_API_KEY --env staging
 wrangler secret put OPENAI_API_KEY --env production
 ```
 
+Verify them before deploy:
+
+```bash
+npm run verify:secrets:staging
+npm run verify:secrets:production
+```
+
 ## Deploy
 
 ```bash
@@ -99,7 +107,7 @@ npm run deploy:staging
 npm run deploy
 ```
 
-Use `npm run deploy:dry-run` or `npm run check` before release.
+Use `npm run deploy:dry-run`, `npm run check:staging`, or `npm run check` before release. `check`, `check:staging`, `deploy`, and `deploy:staging` now verify the target environment's required secrets first, then exit non-zero before deploy if `BOOTSTRAP_SIGNING_SECRET` or `OPENAI_API_KEY` is missing.
 
 Recommended staging smoke sequence after deploy:
 

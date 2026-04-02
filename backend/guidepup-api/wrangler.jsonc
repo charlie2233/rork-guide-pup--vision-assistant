@@ -33,6 +33,12 @@
     "CORS_ALLOWED_ORIGINS": "",
     "DEBUG_BENCHMARK_TOKEN": ""
   },
+  "secrets": {
+    "required": [
+      "BOOTSTRAP_SIGNING_SECRET",
+      "OPENAI_API_KEY"
+    ]
+  },
   "durable_objects": {
     "bindings": [
       {
@@ -52,6 +58,12 @@
   "env": {
     "staging": {
       "name": "guidepup-api-staging",
+      "secrets": {
+        "required": [
+          "BOOTSTRAP_SIGNING_SECRET",
+          "OPENAI_API_KEY"
+        ]
+      },
       "durable_objects": {
         "bindings": [
           {
@@ -94,6 +106,12 @@
     },
     "production": {
       "name": "guidepup-api-production",
+      "secrets": {
+        "required": [
+          "BOOTSTRAP_SIGNING_SECRET",
+          "OPENAI_API_KEY"
+        ]
+      },
       "durable_objects": {
         "bindings": [
           {

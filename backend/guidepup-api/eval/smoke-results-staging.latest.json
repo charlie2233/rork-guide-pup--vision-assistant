@@ -7,29 +7,29 @@
     "executionPath": "safe-fallback",
     "fallbackReason": "provider_error",
     "hazardLevel": "high",
-    "latencyMs": 673,
+    "latencyMs": 664,
     "message": "Stop. Vision guidance is unavailable.",
     "model": "gpt-4.1-mini",
     "promptVersion": "2026-03-31.v1",
     "provider": "openai-compatible",
-    "requestId": "b292ee81-844b-4eef-88ac-b98da4211e63",
-    "roundTripLatencyMs": 695,
+    "requestId": "279e25d7-a56c-4af5-bd74-ecc87f33526b",
+    "roundTripLatencyMs": 745,
     "statusCode": 503,
     "statusText": "Service Unavailable"
   },
   "apiUrl": "https://guidepup-api-staging.charliehan-lifepage.workers.dev",
   "bootstrap": {
-    "deviceIdSuffix": "196fa383",
-    "expiresAt": "2026-04-02T21:18:57.000Z",
+    "deviceIdSuffix": "aa825c2b",
+    "expiresAt": "2026-04-03T00:05:43.000Z",
     "promptVersion": "2026-03-31.v1",
     "rateLimitPerMinute": 20,
-    "requestId": "ffed295a-aa77-417c-baca-90d2a6371d25",
-    "roundTripLatencyMs": 26,
+    "requestId": "cc9fd5e7-84ee-417c-bcb5-72d27eb0776c",
+    "roundTripLatencyMs": 32,
     "statusCode": 200,
     "statusText": "OK"
   },
   "environment": "staging",
-  "generatedAt": "2026-04-01T21:18:58.418Z",
+  "generatedAt": "2026-04-02T00:05:44.086Z",
   "health": {
     "benchmarkProviders": [
       "openai-compatible"
@@ -38,8 +38,8 @@
     "defaultProvider": "openai-compatible",
     "environment": "staging",
     "promptVersion": "2026-03-31.v1",
-    "requestId": "4a3a48c7-ba79-4b32-a1ef-fd768756a3b9",
-    "roundTripLatencyMs": 191,
+    "requestId": "6d046c0b-9ada-42cf-bf66-46ee82e689c8",
+    "roundTripLatencyMs": 162,
     "statusCode": 200,
     "statusText": "OK"
   },

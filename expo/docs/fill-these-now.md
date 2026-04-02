@@ -22,9 +22,11 @@ Charlie still needs to set these values before launch execution can finish:
   - Live URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
   - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
   - `OPENAI_API_KEY`: still missing, so live analyze remains safe fallback only
+  - `npm run verify:secrets:staging`: currently fails on the missing `OPENAI_API_KEY`
 - Production Worker
   - Live URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
   - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
   - `OPENAI_API_KEY`: still missing, so `testflight` and `store` hard-fail the release gate
+  - `npm run verify:secrets:production`: currently fails on the missing `OPENAI_API_KEY`
 
 After updating them, rerun the matching iOS track gate from `expo/`, for example `npm run release:preflight:testflight`.

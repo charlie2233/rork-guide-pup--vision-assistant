@@ -13,23 +13,32 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `4a3a48c7-ba79-4b32-a1ef-fd768756a3b9`
-  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`, round-trip latency `191ms`
+  - request id: `6d046c0b-9ada-42cf-bf66-46ee82e689c8`
+  - notes: returned `defaultProvider=openai-compatible`, `defaultModel=gpt-4.1-mini`, prompt version `2026-03-31.v1`, round-trip latency `162ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `ffed295a-aa77-417c-baca-90d2a6371d25`
-  - device id suffix: `196fa383`
-  - notes: anonymous bootstrap succeeded with 24-hour session expiry after staging `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret, round-trip latency `26ms`
+  - request id: `cc9fd5e7-84ee-417c-bcb5-72d27eb0776c`
+  - device id suffix: `aa825c2b`
+  - notes: anonymous bootstrap succeeded with 24-hour session expiry after staging `BOOTSTRAP_SIGNING_SECRET` was configured as a Wrangler secret, round-trip latency `32ms`
 - `POST /v1/vision/analyze`
   - status: `503 provider_error`
-  - request id: `b292ee81-844b-4eef-88ac-b98da4211e63`
+  - request id: `279e25d7-a56c-4af5-bd74-ecc87f33526b`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
   - result summary: explicit safe `STOP` fallback with message `Stop. Vision guidance is unavailable.`
   - execution path: `safe-fallback`
   - fallback reason: `provider_error`
-  - notes: request reached the provider path, but staging `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet; round-trip latency `695ms`, provider latency `673ms`
+  - notes: request reached the provider path, but staging `OPENAI_API_KEY` is still unset so analyze is not provider-backed yet; round-trip latency `745ms`, provider latency `664ms`
+
+## Secret verification
+
+- `npm run verify:secrets:staging`
+  - result: failed before deploy
+  - blocker: `Missing required Cloudflare secrets for staging: OPENAI_API_KEY.`
+- `npm run check:staging`
+  - result: failed before deploy
+  - blocker: `Missing required Cloudflare secrets for staging: OPENAI_API_KEY.`
 
 ## Generated artifacts
 
