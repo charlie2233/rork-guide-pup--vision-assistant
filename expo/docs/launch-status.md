@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Public site
 
@@ -87,6 +87,20 @@ Last updated: 2026-04-01
 - Re-ran staging and production smoke after the new deploy gate landed, recording fresh request IDs and confirming both envs still return `safe-fallback`.
 - Confirmed with `printenv EXPO_TOKEN` and `eas whoami` that Expo auth is still the first iOS release blocker, so no remote build or submit IDs were created this pass.
 
+## Actions taken on 2026-04-02
+
+- Added a checked-in local Expo module at `expo/modules/guidepup-navigation-core` for the first native iOS navigation seam.
+- Implemented `GuidePupNavigationCore` on iOS with native camera-session ownership, frame capture, accessibility announcement bridging, and haptic hooks.
+- Updated the JS boundary so `NavigationScreen` can start/stop a native session, capture frames through the native core, and fall back to the existing JS camera path when the module is unavailable.
+- Added diagnostics for native-module availability, native session state, capture latency, total guidance-loop latency, and `native-core` vs `js-fallback` execution path.
+- Added `expo/app.config.ts` so local prebuild uses syntactically valid dev bundle/package identifiers without replacing the unresolved release identifiers in launch docs.
+- Ran `npx expo config --type public` successfully with the new dynamic config.
+- Ran `npx expo-modules-autolinking search --platform apple` and `resolve --platform apple`; both confirmed `guidepup-navigation-core` resolves to the local Expo module and iOS podspec.
+- Ran `npx expo prebuild --platform ios --no-install` successfully and generated `expo/ios/GuidePupVisionAssistant.xcodeproj`.
+- Ran `xcodebuild -project GuidePupVisionAssistant.xcodeproj -list` successfully and confirmed the `GuidePupVisionAssistant` scheme exists.
+- Ran `pod install` in `expo/ios`; it failed on CocoaPods CDN TLS validation: `SSL_connect returned=1 ... certificate verify failed (unable to get local issuer certificate)`.
+- Ran `xcodebuild -project GuidePupVisionAssistant.xcodeproj -scheme GuidePupVisionAssistant -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build`; it failed at `[CP] Check Pods Manifest.lock` because `pod install` did not complete and no `Podfile.lock` was produced.
+
 ## Blockers
 
 - iOS bundle identifier is still unresolved.
@@ -95,3 +109,4 @@ Last updated: 2026-04-01
 - Staging `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and staging deploy verification now fails before deploy.
 - Production `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and production deploy verification now fails before deploy. Without a real provider key or a fully configured AI Gateway path, the production backend only returns the safe `STOP` fallback instead of real scene guidance.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
+- Local iOS native validation is now blocked on CocoaPods/CDN certificate trust on this machine. The generated Xcode project exists, but a simulator/device build still requires a successful `pod install`.

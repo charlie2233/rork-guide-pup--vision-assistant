@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AccessibilityInfo,
   Linking,
   Platform,
   Pressable,
@@ -10,7 +9,6 @@ import {
   Animated,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Haptics from "expo-haptics";
 import { useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,8 +17,16 @@ import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { captureAppError } from "@/src/lib/sentry";
 import { useGuidePupRouter } from "@/src/lib/router";
-import { classifyAnalyzeError, recordCameraPermissionSnapshot } from "@/src/lib/diagnostics";
-import { GuidePupNavigationCore } from "@/src/native/GuidePupNavigationCore";
+import {
+  classifyAnalyzeError,
+  recordCameraPermissionSnapshot,
+  recordNavigationLoopSnapshot,
+} from "@/src/lib/diagnostics";
+import {
+  GuidePupNavigationCore,
+  type GuidePupNavigationCoreExecutionPath,
+  type GuidePupNavigationCoreHapticType,
+} from "@/src/native/GuidePupNavigationCore";
 
 const ANALYSIS_INTERVAL_MS = 4500;
 
@@ -66,6 +72,9 @@ export default function NavigationScreen() {
   const [direction, setDirection] = useState<GuideAIDirection | null>(null);
   const [guidanceStatus, setGuidanceStatus] = useState<StatusBanner>(initialStatus);
   const [isGuiding, setIsGuiding] = useState(true);
+  const [navigationCorePath, setNavigationCorePath] = useState<GuidePupNavigationCoreExecutionPath>(
+    GuidePupNavigationCore.implementation,
+  );
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const analyzingRef = useRef(false);
@@ -73,9 +82,34 @@ export default function NavigationScreen() {
   const isSpeakingRef = useRef(false);
   const hasAnnouncedStartRef = useRef(false);
 
+  const refreshNavigationCoreState = useCallback(
+    async (partial?: {
+      lastCaptureLatencyMs?: number;
+      lastError?: string | null;
+      lastTotalGuidanceLoopLatencyMs?: number;
+      sessionActive?: boolean;
+    }) => {
+      const [available, state] = await Promise.all([
+        GuidePupNavigationCore.isAvailable().catch(() => false),
+        GuidePupNavigationCore.getState().catch(() => null),
+      ]);
+      const executionPath: GuidePupNavigationCoreExecutionPath = available ? "native-core" : "js-fallback";
+      setNavigationCorePath(executionPath);
+      recordNavigationLoopSnapshot({
+        available,
+        executionPath,
+        lastCaptureLatencyMs: partial?.lastCaptureLatencyMs ?? state?.lastCaptureLatencyMs,
+        lastError: partial?.lastError !== undefined ? partial.lastError : state?.lastError ?? null,
+        lastTotalGuidanceLoopLatencyMs: partial?.lastTotalGuidanceLoopLatencyMs,
+        sessionActive: partial?.sessionActive ?? state?.sessionActive ?? false,
+        voiceOverRunning: state?.voiceOverRunning,
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     guidingRef.current = isGuiding;
-    void GuidePupNavigationCore.setCameraSessionState(isGuiding ? "running" : "paused");
   }, [isGuiding]);
 
   useEffect(() => {
@@ -121,6 +155,11 @@ export default function NavigationScreen() {
         tone: "critical",
         title: "Camera access needed",
       });
+      void GuidePupNavigationCore.stopSession();
+      void refreshNavigationCoreState({
+        lastError: "Camera permission not granted.",
+        sessionActive: false,
+      });
       return;
     }
 
@@ -134,9 +173,10 @@ export default function NavigationScreen() {
       if (!hasAnnouncedStartRef.current) {
         hasAnnouncedStartRef.current = true;
         speak("Guidance started. Analyzing your surroundings.");
+        void GuidePupNavigationCore.announce("Guidance started. Analyzing your surroundings.");
       }
     }
-  }, [isGuiding, permission, speak]);
+  }, [isGuiding, permission, refreshNavigationCoreState, speak]);
 
   useEffect(() => {
     if (permission?.status === "undetermined") {
@@ -144,19 +184,75 @@ export default function NavigationScreen() {
     }
   }, [permission?.status, requestPermission]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncNavigationSession = async () => {
+      if (!permission?.granted || !isGuiding) {
+        await GuidePupNavigationCore.stopSession();
+        if (!isCancelled) {
+          await refreshNavigationCoreState({
+            lastError: null,
+            sessionActive: false,
+          });
+        }
+        return;
+      }
+
+      try {
+        await GuidePupNavigationCore.startSession({
+          preferredCamera: "back",
+        });
+
+        if (!isCancelled) {
+          await refreshNavigationCoreState({
+            lastError: null,
+            sessionActive: true,
+          });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unable to start navigation core.";
+        if (!isCancelled) {
+          await refreshNavigationCoreState({
+            lastError: errorMessage,
+            sessionActive: false,
+          });
+        }
+        void captureAppError(error, {
+          screen: "NavigationScreen",
+          stage: "startNavigationSession",
+        });
+      }
+    };
+
+    void syncNavigationSession();
+
+    return () => {
+      isCancelled = true;
+      void GuidePupNavigationCore.stopSession();
+    };
+  }, [isGuiding, permission?.granted, refreshNavigationCoreState]);
+
   const analyzeCurrentFrame = useCallback(async () => {
     if (analyzingRef.current || !guidingRef.current) {
       return;
     }
 
-    if (!cameraRef.current) {
-      return;
-    }
-
+    const loopStartedAt = Date.now();
     try {
       analyzingRef.current = true;
 
-      const frame = await GuidePupNavigationCore.captureFrame(cameraRef.current);
+      const frame = await GuidePupNavigationCore.captureFrame({
+        cameraRef: cameraRef.current,
+        compressionQuality: 0.4,
+        maxDimension: 768,
+      });
+      await refreshNavigationCoreState({
+        lastCaptureLatencyMs: frame.captureLatencyMs,
+        lastError: null,
+        sessionActive: true,
+      });
+
       const result = await GuideAI.analyzeWithVision(frame);
 
       if (!guidingRef.current || !result) {
@@ -183,9 +279,26 @@ export default function NavigationScreen() {
         speak(result.message);
       }
 
-      void GuidePupNavigationCore.emitGuidanceCue({
-        direction: result.direction,
-        obstacle: result.obstacle,
+      const hapticType: GuidePupNavigationCoreHapticType =
+        result.obstacle || result.direction === "stop"
+          ? "stop"
+          : result.direction === "turn-left"
+            ? "left"
+            : result.direction === "turn-right"
+              ? "right"
+              : "forward";
+
+      await GuidePupNavigationCore.playHaptic(hapticType);
+
+      if ((result.obstacle || result.direction === "stop") && result.message) {
+        void GuidePupNavigationCore.announce(result.message);
+      }
+
+      await refreshNavigationCoreState({
+        lastCaptureLatencyMs: frame.captureLatencyMs,
+        lastError: null,
+        lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
+        sessionActive: true,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -215,6 +328,12 @@ export default function NavigationScreen() {
       if (!isSpeakingRef.current) {
         speak(fallbackMessage);
       }
+      void GuidePupNavigationCore.announce(fallbackMessage);
+      void refreshNavigationCoreState({
+        lastError: errorMessage,
+        lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
+        sessionActive: guidingRef.current,
+      });
 
       void captureAppError(error, {
         screen: "NavigationScreen",
@@ -253,8 +372,9 @@ export default function NavigationScreen() {
       tone: "neutral",
       title: "Guidance stopped",
     });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     speak("Stopping guidance.");
+    void GuidePupNavigationCore.playHaptic("success");
+    void GuidePupNavigationCore.announce("Stopping guidance.");
 
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -264,8 +384,9 @@ export default function NavigationScreen() {
   }, [navigation, router, speak]);
 
   const handleSOS = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     speak("Emergency SOS activated.");
+    void GuidePupNavigationCore.playHaptic("error");
+    void GuidePupNavigationCore.announce("Emergency SOS activated.");
   }, [speak]);
 
   const canOpenCameraSettings = typeof Linking.openSettings === "function" && Platform.OS !== "web";
@@ -278,7 +399,7 @@ export default function NavigationScreen() {
 
   return (
     <View style={styles.container}>
-      {permission?.granted ? (
+      {permission?.granted && navigationCorePath !== "native-core" ? (
         <CameraView
           ref={cameraRef}
           style={styles.hiddenCamera}

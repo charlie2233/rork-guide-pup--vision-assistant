@@ -179,6 +179,44 @@ export default function DiagnosticsScreen() {
         </InfoCard>
 
         <InfoCard
+          tone={diagnostics.navigationLoop.lastError ? "warning" : "neutral"}
+          title="Guidance loop"
+        >
+          <KeyValue
+            label="Native module available"
+            value={diagnostics.navigationLoop.available ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Execution path"
+            value={diagnostics.navigationLoop.executionPath}
+          />
+          <KeyValue
+            label="Native session active"
+            value={diagnostics.navigationLoop.sessionActive ? "yes" : "no"}
+          />
+          <KeyValue
+            label="VoiceOver running"
+            value={diagnostics.navigationLoop.voiceOverRunning ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Last capture latency"
+            value={formatMs(diagnostics.navigationLoop.lastCaptureLatencyMs)}
+          />
+          <KeyValue
+            label="Last analyze latency"
+            value={formatMs(diagnostics.lastAnalyze?.latencyMs)}
+          />
+          <KeyValue
+            label="Last total guidance loop latency"
+            value={formatMs(diagnostics.navigationLoop.lastTotalGuidanceLoopLatencyMs)}
+          />
+          <KeyValue
+            label="Last native/core error"
+            value={diagnostics.navigationLoop.lastError || "None"}
+          />
+        </InfoCard>
+
+        <InfoCard
           tone={diagnostics.lastHealthCheck?.ok ? "neutral" : "warning"}
           title="Backend health"
           action={

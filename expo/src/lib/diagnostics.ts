@@ -15,6 +15,7 @@ export type DiagnosticsAnalyzeDirection = "turn-left" | "turn-right" | "forward"
 export type DiagnosticsHazardLevel = "none" | "low" | "medium" | "high";
 export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright";
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
+export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -63,6 +64,17 @@ export interface DiagnosticsHealthSnapshot {
   latencyMs?: number;
 }
 
+export interface DiagnosticsNavigationLoopSnapshot {
+  available: boolean;
+  executionPath: DiagnosticsNavigationExecutionPath;
+  lastCaptureLatencyMs?: number;
+  lastError?: string;
+  lastTotalGuidanceLoopLatencyMs?: number;
+  sessionActive: boolean;
+  updatedAt: number;
+  voiceOverRunning?: boolean;
+}
+
 export interface DiagnosticsAnalyzeEvent {
   confidence?: number;
   detail?: "low" | "high";
@@ -90,6 +102,7 @@ export interface DiagnosticsSnapshot {
   cameraPermission: DiagnosticsCameraPermissionSnapshot | null;
   lastAnalyze: DiagnosticsAnalyzeEvent | null;
   lastHealthCheck: DiagnosticsHealthSnapshot | null;
+  navigationLoop: DiagnosticsNavigationLoopSnapshot;
   recentAnalyzeEvents: DiagnosticsAnalyzeEvent[];
   runtime: DiagnosticsRuntimeSnapshot;
   session: DiagnosticsSessionSnapshot;
@@ -119,6 +132,13 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
   cameraPermission: null,
   lastAnalyze: null,
   lastHealthCheck: null,
+  navigationLoop: {
+    available: false,
+    executionPath: "js-fallback",
+    sessionActive: false,
+    updatedAt: Date.now(),
+    voiceOverRunning: false,
+  },
   recentAnalyzeEvents: [],
   runtime: createInitialRuntime(),
   session: {
@@ -311,6 +331,33 @@ export function recordHealthCheckSnapshot(input: {
   }));
 }
 
+export function recordNavigationLoopSnapshot(input: {
+  available?: boolean;
+  executionPath?: DiagnosticsNavigationExecutionPath;
+  lastCaptureLatencyMs?: number;
+  lastError?: string | null;
+  lastTotalGuidanceLoopLatencyMs?: number;
+  sessionActive?: boolean;
+  voiceOverRunning?: boolean;
+}) {
+  updateSnapshot((current) => ({
+    ...current,
+    navigationLoop: {
+      ...current.navigationLoop,
+      available: input.available ?? current.navigationLoop.available,
+      executionPath: input.executionPath ?? current.navigationLoop.executionPath,
+      lastCaptureLatencyMs: input.lastCaptureLatencyMs ?? current.navigationLoop.lastCaptureLatencyMs,
+      lastError:
+        input.lastError === undefined ? current.navigationLoop.lastError : sanitizeMessage(input.lastError ?? undefined, 120),
+      lastTotalGuidanceLoopLatencyMs:
+        input.lastTotalGuidanceLoopLatencyMs ?? current.navigationLoop.lastTotalGuidanceLoopLatencyMs,
+      sessionActive: input.sessionActive ?? current.navigationLoop.sessionActive,
+      updatedAt: Date.now(),
+      voiceOverRunning: input.voiceOverRunning ?? current.navigationLoop.voiceOverRunning,
+    },
+  }));
+}
+
 export function recordAnalyzeEvent(
   input: Omit<DiagnosticsAnalyzeEvent, "id" | "timestamp"> & {
     timestamp?: number;
@@ -407,6 +454,27 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Device suffix: ${session.deviceIdSuffix || "Not found in repo"}`);
   lines.push(`- Expires at: ${session.expiresAt || "Not found in repo"}`);
   lines.push(`- Error: ${session.error || "None"}`);
+  lines.push("");
+  lines.push("## Guidance loop");
+  lines.push(`- Native module available: ${input.navigationLoop.available ? "yes" : "no"}`);
+  lines.push(`- Execution path: ${input.navigationLoop.executionPath}`);
+  lines.push(`- Session active: ${input.navigationLoop.sessionActive ? "yes" : "no"}`);
+  lines.push(`- VoiceOver running: ${input.navigationLoop.voiceOverRunning ? "yes" : "no"}`);
+  lines.push(
+    `- Last capture latency: ${
+      typeof input.navigationLoop.lastCaptureLatencyMs === "number"
+        ? `${Math.round(input.navigationLoop.lastCaptureLatencyMs)}ms`
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(
+    `- Last total guidance loop latency: ${
+      typeof input.navigationLoop.lastTotalGuidanceLoopLatencyMs === "number"
+        ? `${Math.round(input.navigationLoop.lastTotalGuidanceLoopLatencyMs)}ms`
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(`- Last native/core error: ${input.navigationLoop.lastError || "None"}`);
   lines.push("");
   lines.push("## Backend health");
   if (lastHealthCheck) {

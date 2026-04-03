@@ -11,7 +11,10 @@ export type VisionAnalysis = VisionAnalyzeResponse;
 
 export interface AnalyzeFrameInput {
   base64?: string;
+  captureLatencyMs?: number;
   height?: number;
+  source?: "native-core" | "js-fallback";
+  timestampMs?: number;
   uri?: string;
   width?: number;
 }

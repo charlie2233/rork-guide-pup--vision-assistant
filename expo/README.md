@@ -46,6 +46,21 @@ npm run ios
 npm run web
 ```
 
+Native-capable iOS spike:
+
+- `modules/guidepup-navigation-core/` is the local Expo module that now owns the first native camera/accessibility seam.
+- `npm run ios` now uses `expo run:ios` against the checked-in `ios/` project.
+- `npm run start:ios` still keeps the JS-first Metro/dev-client path available.
+- Local native generation command:
+
+```bash
+npx expo prebuild --platform ios --no-install
+cd ios
+pod install
+```
+
+- Current machine-specific blocker from the latest validation run: `pod install` failed on CocoaPods CDN certificate verification, so a full simulator build still requires fixing local CocoaPods trust or using a machine with a working CocoaPods setup.
+
 Required Expo env vars:
 
 - `EXPO_PUBLIC_API_BASE_URL`

@@ -5,15 +5,18 @@ import { AppState } from "react-native";
 
 import { appConfig } from "@/src/lib/config";
 import {
+  recordNavigationLoopSnapshot,
   recordCameraPermissionSnapshot,
   recordSessionBootstrapState,
   setDiagnosticsRuntime,
 } from "@/src/lib/diagnostics";
 import { getStoredDeviceSession } from "@/src/lib/device";
+import { GuidePupNavigationCore } from "@/src/native/GuidePupNavigationCore";
 
 async function refreshDiagnosticsSnapshots() {
-  const [cameraPermission, session] = await Promise.all([
+  const [cameraPermission, navigationCoreState, session] = await Promise.all([
     Camera.getCameraPermissionsAsync().catch(() => null),
+    GuidePupNavigationCore.getState().catch(() => null),
     getStoredDeviceSession().catch(() => null),
   ]);
 
@@ -31,6 +34,17 @@ async function refreshDiagnosticsSnapshots() {
       deviceId: session.deviceId,
       expiresAt: session.expiresAt,
       status: "ready",
+    });
+  }
+
+  if (navigationCoreState) {
+    recordNavigationLoopSnapshot({
+      available: navigationCoreState.available,
+      executionPath: navigationCoreState.available ? "native-core" : "js-fallback",
+      lastCaptureLatencyMs: navigationCoreState.lastCaptureLatencyMs,
+      lastError: navigationCoreState.lastError ?? undefined,
+      sessionActive: navigationCoreState.sessionActive,
+      voiceOverRunning: navigationCoreState.voiceOverRunning,
     });
   }
 }

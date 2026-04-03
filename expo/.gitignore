@@ -36,8 +36,7 @@ yarn-error.*
 *.tsbuildinfo
 .vercel
 
-ios/
-android/
+/android/
 .rork
 .env
 rork-eslint.config.js

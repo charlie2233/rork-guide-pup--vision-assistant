@@ -1,100 +1,141 @@
-import { AccessibilityInfo, NativeModules, Platform } from "react-native";
+import { requireOptionalNativeModule } from "expo";
 import type { CameraView } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import { AccessibilityInfo, Platform } from "react-native";
 
 import type { AnalyzeFrameInput } from "@/src/logic/VisionAI";
 
-export type GuidePupNavigationSessionState = "idle" | "running" | "paused" | "stopped";
-export type GuidePupNavigationDirection = "turn-left" | "turn-right" | "forward" | "stop";
+export type GuidePupNavigationCoreExecutionPath = "native-core" | "js-fallback";
+export type GuidePupNavigationCoreSessionState = "idle" | "running" | "paused" | "stopped";
+export type GuidePupNavigationCoreHapticType = "stop" | "left" | "right" | "forward" | "error" | "success";
 
-export interface GuidePupGuidanceCue {
-  direction: GuidePupNavigationDirection;
-  obstacle: boolean;
+export interface GuidePupNavigationCoreStartOptions {
+  preferredCamera?: "back";
 }
 
-interface NativeCaptureResult {
-  base64?: string;
-  height?: number;
-  uri?: string;
-  width?: number;
+export interface GuidePupNavigationCoreCaptureOptions {
+  cameraRef?: CameraView | null;
+  compressionQuality?: number;
+  maxDimension?: number;
+}
+
+export interface GuidePupNavigationCoreCaptureResult extends AnalyzeFrameInput {
+  captureLatencyMs?: number;
+  executionPath: GuidePupNavigationCoreExecutionPath;
+  timestampMs: number;
+}
+
+export interface GuidePupNavigationCoreState {
+  available: boolean;
+  lastCaptureLatencyMs?: number;
+  lastError?: string | null;
+  permissionStatus?: string;
+  sessionActive: boolean;
+  sessionState: GuidePupNavigationCoreSessionState;
+  voiceOverRunning?: boolean;
 }
 
 interface GuidePupNavigationCoreNativeModule {
-  announceForVoiceOver?: (message: string) => Promise<void> | void;
-  captureFrame?: () => Promise<NativeCaptureResult> | NativeCaptureResult;
-  emitGuidanceCue?: (cue: GuidePupGuidanceCue) => Promise<void> | void;
-  setCameraSessionState?: (state: GuidePupNavigationSessionState) => Promise<void> | void;
+  announce(message: string): Promise<void>;
+  captureFrame(): Promise<Omit<GuidePupNavigationCoreCaptureResult, "executionPath">>;
+  getState(): Promise<GuidePupNavigationCoreState>;
+  isAvailable(): Promise<boolean>;
+  playHaptic(type: GuidePupNavigationCoreHapticType): Promise<void>;
+  startSession(options?: GuidePupNavigationCoreStartOptions): Promise<GuidePupNavigationCoreState>;
+  stopSession(): Promise<GuidePupNavigationCoreState>;
 }
 
-const nativeModule = NativeModules.GuidePupNavigationCore as
-  | GuidePupNavigationCoreNativeModule
-  | undefined;
+const nativeModule =
+  Platform.OS === "ios"
+    ? requireOptionalNativeModule<GuidePupNavigationCoreNativeModule>("GuidePupNavigationCore")
+    : null;
 
-function hasNativeImplementation() {
-  return Boolean(nativeModule);
+const fallbackState: GuidePupNavigationCoreState = {
+  available: false,
+  lastError: null,
+  permissionStatus: Platform.OS === "ios" ? "unknown" : "unsupported",
+  sessionActive: false,
+  sessionState: "idle",
+  voiceOverRunning: false,
+};
+
+function getExecutionPath(): GuidePupNavigationCoreExecutionPath {
+  return nativeModule ? "native-core" : "js-fallback";
 }
 
-async function captureFrame(cameraRef: CameraView | null): Promise<AnalyzeFrameInput> {
-  if (nativeModule?.captureFrame) {
+async function captureFrame(
+  options?: GuidePupNavigationCoreCaptureOptions,
+): Promise<GuidePupNavigationCoreCaptureResult> {
+  if (nativeModule) {
     const captured = await nativeModule.captureFrame();
-    if (captured.uri || captured.base64) {
-      return captured;
-    }
+    return {
+      ...captured,
+      executionPath: "native-core",
+    };
   }
 
+  const cameraRef = options?.cameraRef ?? null;
   if (!cameraRef) {
+    fallbackState.lastError = "Camera session is unavailable.";
     throw new Error("Camera session is unavailable.");
   }
 
+  const startedAt = Date.now();
   const photo = await cameraRef.takePictureAsync({
-    quality: 0.4,
+    quality: options?.compressionQuality ?? 0.4,
     skipProcessing: true,
   });
 
   if (!photo?.uri && !photo?.base64) {
+    fallbackState.lastError = "Guide Pup could not read a camera frame.";
     throw new Error("Guide Pup could not read a camera frame.");
   }
 
+  const captureLatencyMs = Date.now() - startedAt;
+  fallbackState.lastCaptureLatencyMs = captureLatencyMs;
+  fallbackState.lastError = null;
+
   return {
     base64: photo.base64,
+    captureLatencyMs,
+    executionPath: "js-fallback",
     height: photo.height,
+    timestampMs: Date.now(),
     uri: photo.uri,
     width: photo.width,
   };
 }
 
-async function emitGuidanceCue(cue: GuidePupGuidanceCue) {
-  if (nativeModule?.emitGuidanceCue) {
-    await nativeModule.emitGuidanceCue(cue);
-    return;
+async function startSession(options?: GuidePupNavigationCoreStartOptions) {
+  if (nativeModule) {
+    return nativeModule.startSession(options);
   }
 
-  if (cue.obstacle || cue.direction === "stop") {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    return;
-  }
-
-  if (cue.direction === "turn-left") {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    return;
-  }
-
-  if (cue.direction === "turn-right") {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    return;
-  }
-
-  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  fallbackState.available = false;
+  fallbackState.lastError = null;
+  fallbackState.sessionActive = true;
+  fallbackState.sessionState = "running";
+  return fallbackState;
 }
 
-async function announceForVoiceOver(message: string) {
+async function stopSession() {
+  if (nativeModule) {
+    return nativeModule.stopSession();
+  }
+
+  fallbackState.sessionActive = false;
+  fallbackState.sessionState = "stopped";
+  return fallbackState;
+}
+
+async function announce(message: string) {
   const trimmed = message.trim();
   if (!trimmed) {
     return;
   }
 
-  if (nativeModule?.announceForVoiceOver) {
-    await nativeModule.announceForVoiceOver(trimmed);
+  if (nativeModule) {
+    await nativeModule.announce(trimmed);
     return;
   }
 
@@ -103,17 +144,61 @@ async function announceForVoiceOver(message: string) {
   }
 }
 
-async function setCameraSessionState(state: GuidePupNavigationSessionState) {
-  if (nativeModule?.setCameraSessionState) {
-    await nativeModule.setCameraSessionState(state);
+async function playHaptic(type: GuidePupNavigationCoreHapticType) {
+  if (nativeModule) {
+    await nativeModule.playHaptic(type);
+    return;
   }
+
+  if (type === "stop" || type === "error") {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    return;
+  }
+
+  if (type === "success") {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    return;
+  }
+
+  if (type === "left") {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    return;
+  }
+
+  if (type === "right") {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    return;
+  }
+
+  await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+}
+
+async function getState(): Promise<GuidePupNavigationCoreState> {
+  if (nativeModule) {
+    return nativeModule.getState();
+  }
+
+  return fallbackState;
+}
+
+async function isAvailable() {
+  if (nativeModule) {
+    return nativeModule.isAvailable();
+  }
+
+  return false;
 }
 
 export const GuidePupNavigationCore = {
-  announceForVoiceOver,
+  announce,
   captureFrame,
-  emitGuidanceCue,
-  implementation: hasNativeImplementation() ? ("native" as const) : ("js-fallback" as const),
-  isNativeAvailable: hasNativeImplementation,
-  setCameraSessionState,
+  getState,
+  implementation: getExecutionPath(),
+  isAvailable,
+  isNativeAvailable() {
+    return Boolean(nativeModule);
+  },
+  playHaptic,
+  startSession,
+  stopSession,
 };
