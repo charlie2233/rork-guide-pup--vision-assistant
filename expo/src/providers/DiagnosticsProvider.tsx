@@ -5,6 +5,7 @@ import { AppState } from "react-native";
 
 import { appConfig } from "@/src/lib/config";
 import {
+  getDiagnosticsSnapshot,
   recordNavigationLoopSnapshot,
   recordCameraPermissionSnapshot,
   recordSessionBootstrapState,
@@ -38,9 +39,10 @@ async function refreshDiagnosticsSnapshots() {
   }
 
   if (navigationCoreState) {
+    const currentNavigationLoop = getDiagnosticsSnapshot().navigationLoop;
     recordNavigationLoopSnapshot({
-      available: navigationCoreState.available,
-      executionPath: navigationCoreState.available ? "native-core" : "js-fallback",
+      available: GuidePupNavigationCore.isNativeAvailable(),
+      executionPath: currentNavigationLoop.executionPath,
       lastCaptureLatencyMs: navigationCoreState.lastCaptureLatencyMs,
       lastError: navigationCoreState.lastError ?? undefined,
       sessionActive: navigationCoreState.sessionActive,

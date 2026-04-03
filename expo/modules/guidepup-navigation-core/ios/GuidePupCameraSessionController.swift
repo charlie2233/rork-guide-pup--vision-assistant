@@ -73,9 +73,6 @@ final class GuidePupCameraSessionController: NSObject, AVCaptureVideoDataOutputS
           }
 
           let sampleBuffer = try self.copyLatestSampleBuffer()
-          defer {
-            CFRelease(sampleBuffer)
-          }
 
           let result = try self.encodeFrame(
             sampleBuffer: sampleBuffer,
@@ -127,12 +124,7 @@ final class GuidePupCameraSessionController: NSObject, AVCaptureVideoDataOutputS
     didOutput sampleBuffer: CMSampleBuffer,
     from connection: AVCaptureConnection
   ) {
-    CFRetain(sampleBuffer)
-
     stateLock.lock()
-    if let existingBuffer = latestSampleBuffer {
-      CFRelease(existingBuffer)
-    }
     latestSampleBuffer = sampleBuffer
     if let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
       latestFrameWidth = CVPixelBufferGetWidth(imageBuffer)
@@ -199,7 +191,6 @@ final class GuidePupCameraSessionController: NSObject, AVCaptureVideoDataOutputS
       stateLock.unlock()
       throw GuidePupFrameUnavailableException()
     }
-    CFRetain(sampleBuffer)
     stateLock.unlock()
     return sampleBuffer
   }
@@ -250,10 +241,7 @@ final class GuidePupCameraSessionController: NSObject, AVCaptureVideoDataOutputS
 
   private func releaseLatestSampleBuffer() {
     stateLock.lock()
-    if let existingBuffer = latestSampleBuffer {
-      CFRelease(existingBuffer)
-      latestSampleBuffer = nil
-    }
+    latestSampleBuffer = nil
     stateLock.unlock()
   }
 

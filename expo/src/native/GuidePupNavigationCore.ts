@@ -16,6 +16,7 @@ export interface GuidePupNavigationCoreStartOptions {
 export interface GuidePupNavigationCoreCaptureOptions {
   cameraRef?: CameraView | null;
   compressionQuality?: number;
+  forceFallback?: boolean;
   maxDimension?: number;
 }
 
@@ -66,7 +67,7 @@ function getExecutionPath(): GuidePupNavigationCoreExecutionPath {
 async function captureFrame(
   options?: GuidePupNavigationCoreCaptureOptions,
 ): Promise<GuidePupNavigationCoreCaptureResult> {
-  if (nativeModule) {
+  if (nativeModule && !options?.forceFallback) {
     const captured = await nativeModule.captureFrame();
     return {
       ...captured,

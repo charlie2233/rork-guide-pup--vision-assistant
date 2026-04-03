@@ -73,7 +73,7 @@ export default function NavigationScreen() {
   const [guidanceStatus, setGuidanceStatus] = useState<StatusBanner>(initialStatus);
   const [isGuiding, setIsGuiding] = useState(true);
   const [navigationCorePath, setNavigationCorePath] = useState<GuidePupNavigationCoreExecutionPath>(
-    GuidePupNavigationCore.implementation,
+    GuidePupNavigationCore.isNativeAvailable() ? "native-core" : "js-fallback",
   );
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -84,19 +84,22 @@ export default function NavigationScreen() {
 
   const refreshNavigationCoreState = useCallback(
     async (partial?: {
+      executionPath?: GuidePupNavigationCoreExecutionPath;
       lastCaptureLatencyMs?: number;
       lastError?: string | null;
       lastTotalGuidanceLoopLatencyMs?: number;
       sessionActive?: boolean;
     }) => {
-      const [available, state] = await Promise.all([
+      const [runtimeAvailable, state] = await Promise.all([
         GuidePupNavigationCore.isAvailable().catch(() => false),
         GuidePupNavigationCore.getState().catch(() => null),
       ]);
-      const executionPath: GuidePupNavigationCoreExecutionPath = available ? "native-core" : "js-fallback";
+      const moduleAvailable = GuidePupNavigationCore.isNativeAvailable();
+      const executionPath: GuidePupNavigationCoreExecutionPath =
+        partial?.executionPath ?? (moduleAvailable && runtimeAvailable ? "native-core" : "js-fallback");
       setNavigationCorePath(executionPath);
       recordNavigationLoopSnapshot({
-        available,
+        available: moduleAvailable,
         executionPath,
         lastCaptureLatencyMs: partial?.lastCaptureLatencyMs ?? state?.lastCaptureLatencyMs,
         lastError: partial?.lastError !== undefined ? partial.lastError : state?.lastError ?? null,
@@ -206,6 +209,7 @@ export default function NavigationScreen() {
 
         if (!isCancelled) {
           await refreshNavigationCoreState({
+            executionPath: "native-core",
             lastError: null,
             sessionActive: true,
           });
@@ -214,6 +218,7 @@ export default function NavigationScreen() {
         const errorMessage = error instanceof Error ? error.message : "Unable to start navigation core.";
         if (!isCancelled) {
           await refreshNavigationCoreState({
+            executionPath: "js-fallback",
             lastError: errorMessage,
             sessionActive: false,
           });
@@ -242,12 +247,40 @@ export default function NavigationScreen() {
     try {
       analyzingRef.current = true;
 
-      const frame = await GuidePupNavigationCore.captureFrame({
-        cameraRef: cameraRef.current,
-        compressionQuality: 0.4,
-        maxDimension: 768,
-      });
+      let frame: Awaited<ReturnType<typeof GuidePupNavigationCore.captureFrame>>;
+
+      try {
+        frame = await GuidePupNavigationCore.captureFrame({
+          cameraRef: cameraRef.current,
+          compressionQuality: 0.4,
+          forceFallback: navigationCorePath !== "native-core",
+          maxDimension: 768,
+        });
+      } catch (captureError) {
+        const captureErrorMessage =
+          captureError instanceof Error ? captureError.message : "Guide Pup could not capture a frame.";
+
+        if (navigationCorePath === "native-core" && cameraRef.current) {
+          setNavigationCorePath("js-fallback");
+          await refreshNavigationCoreState({
+            executionPath: "js-fallback",
+            lastError: captureErrorMessage,
+            sessionActive: true,
+          });
+
+          frame = await GuidePupNavigationCore.captureFrame({
+            cameraRef: cameraRef.current,
+            compressionQuality: 0.4,
+            forceFallback: true,
+            maxDimension: 768,
+          });
+        } else {
+          throw captureError;
+        }
+      }
+
       await refreshNavigationCoreState({
+        executionPath: frame.executionPath,
         lastCaptureLatencyMs: frame.captureLatencyMs,
         lastError: null,
         sessionActive: true,
@@ -295,6 +328,7 @@ export default function NavigationScreen() {
       }
 
       await refreshNavigationCoreState({
+        executionPath: frame.executionPath,
         lastCaptureLatencyMs: frame.captureLatencyMs,
         lastError: null,
         lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
