@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
-import * as Speech from 'expo-speech';
+
+import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 interface VoiceContextType {
-  speak: (text: string, options?: Speech.SpeechOptions) => void;
+  speak: (text: string, options?: { language?: string; rate?: number }) => void;
   stop: () => void;
   isSpeaking: boolean;
 }
@@ -10,10 +12,11 @@ interface VoiceContextType {
 const VoiceContext = createContext<VoiceContextType | undefined>(undefined);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
+  const { getSpeechRateValue } = useSettings();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const queueRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const optionsRef = useRef<Speech.SpeechOptions | undefined>(undefined);
+  const optionsRef = useRef<{ locale?: string; rate?: number } | undefined>(undefined);
   const sessionRef = useRef(0);
 
   const flushQueue = useCallback(() => {
@@ -31,31 +34,43 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const sessionId = sessionRef.current + 1;
     sessionRef.current = sessionId;
 
-    // Stop any ongoing speech so the new batch starts immediately.
-    Speech.stop();
     setIsSpeaking(true);
 
-    Speech.speak(combinedMessage, {
-      ...optionsRef.current,
-      onStart: () => setIsSpeaking(true),
-      onDone: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
-      onStopped: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
-      onError: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
-    });
-  }, []);
+    void (async () => {
+      const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
+      const shouldResumeListening = Boolean(voiceState?.listening);
 
-  const speak = useCallback((text: string, options?: Speech.SpeechOptions) => {
+      if (shouldResumeListening) {
+        await GuidePupVoiceControl.stopCommandSession().catch(() => undefined);
+      }
+
+      await GuidePupVoiceControl.speak(combinedMessage, {
+        interrupt: true,
+        locale: optionsRef.current?.locale,
+        rate: optionsRef.current?.rate ?? getSpeechRateValue(),
+      }).catch(() => undefined);
+
+      if (shouldResumeListening) {
+        await GuidePupVoiceControl.startCommandSession({
+          partialResults: false,
+        }).catch(() => undefined);
+      }
+    })().finally(() => {
+      if (sessionRef.current === sessionId) {
+        setIsSpeaking(false);
+      }
+    });
+  }, [getSpeechRateValue]);
+
+  const speak = useCallback((text: string, options?: { language?: string; rate?: number }) => {
     // Add to queue
     queueRef.current.push(text);
-    if (options) {
-      optionsRef.current = options;
-    }
+    optionsRef.current = options
+      ? {
+          locale: options.language,
+          rate: options.rate,
+        }
+      : undefined;
 
     // Clear existing timeout to batch calls
     if (timeoutRef.current) {
@@ -72,7 +87,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       timeoutRef.current = null;
     }
     queueRef.current = [];
-    Speech.stop();
+    void GuidePupVoiceControl.stopSpeaking();
     sessionRef.current += 1; // invalidate any in-flight callbacks
     setIsSpeaking(false);
   }, []);

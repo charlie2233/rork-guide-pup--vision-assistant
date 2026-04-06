@@ -9,16 +9,19 @@ import {
   recordNavigationLoopSnapshot,
   recordCameraPermissionSnapshot,
   recordSessionBootstrapState,
+  recordVoiceSnapshot,
   setDiagnosticsRuntime,
 } from "@/src/lib/diagnostics";
 import { getStoredDeviceSession } from "@/src/lib/device";
 import { GuidePupNavigationCore } from "@/src/native/GuidePupNavigationCore";
+import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 
 async function refreshDiagnosticsSnapshots() {
-  const [cameraPermission, navigationCoreState, session] = await Promise.all([
+  const [cameraPermission, navigationCoreState, session, voiceState] = await Promise.all([
     Camera.getCameraPermissionsAsync().catch(() => null),
     GuidePupNavigationCore.getState().catch(() => null),
     getStoredDeviceSession().catch(() => null),
+    GuidePupVoiceControl.getState().catch(() => null),
   ]);
 
   if (cameraPermission) {
@@ -47,6 +50,17 @@ async function refreshDiagnosticsSnapshots() {
       lastError: navigationCoreState.lastError ?? undefined,
       sessionActive: navigationCoreState.sessionActive,
       voiceOverRunning: navigationCoreState.voiceOverRunning,
+    });
+  }
+
+  if (voiceState) {
+    recordVoiceSnapshot({
+      available: GuidePupVoiceControl.isNativeModuleAvailable(),
+      executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+      lastError: voiceState.lastError ?? undefined,
+      listening: voiceState.listening,
+      microphonePermission: voiceState.microphonePermission,
+      speechPermission: voiceState.speechPermission,
     });
   }
 }

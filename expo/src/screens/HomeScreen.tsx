@@ -1,15 +1,119 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
 import { useSettings } from '@/src/providers/SettingsProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGuidePupRouter } from '@/src/lib/router';
+import { recordVoiceSnapshot } from '@/src/lib/diagnostics';
+import { buildVoiceHelpPrompt, parseVoiceCommand } from '@/src/lib/voiceCommands';
+import { buildVoiceStatusSummary, describeHaptics, describeSpeechRate, fasterSpeechRate, slowerSpeechRate } from '@/src/lib/voiceSettings';
+import { GuidePupNavigationCore } from '@/src/native/GuidePupNavigationCore';
+import { GuidePupVoiceControl } from '@/src/native/GuidePupVoiceControl';
 
 export default function HomeScreen() {
   const router = useGuidePupRouter();
   const { speak } = useVoice();
-  const { isReady, settings } = useSettings();
+  const {
+    isReady,
+    settings,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  } = useSettings();
+  const lastHandledTranscriptRef = useRef<string | null>(null);
+  const lastSpokenMessageRef = useRef("Welcome. Say start guidance or tap the screen to start guidance.");
+  const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const syncVoiceState = useCallback(async () => {
+    const state = await GuidePupVoiceControl.getState().catch(() => null);
+    if (!state) {
+      return;
+    }
+
+    recordVoiceSnapshot({
+      available: GuidePupVoiceControl.isNativeModuleAvailable(),
+      executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+      lastError: state.lastError ?? undefined,
+      listening: state.listening,
+      microphonePermission: state.microphonePermission,
+      speechPermission: state.speechPermission,
+    });
+  }, []);
+
+  const startVoiceSession = useCallback(async () => {
+    if (!GuidePupVoiceControl.isNativeModuleAvailable()) {
+      recordVoiceSnapshot({
+        available: false,
+        executionPath: "js-fallback",
+        listening: false,
+      });
+      return;
+    }
+
+    const permissions = await GuidePupVoiceControl.requestPermissions();
+    recordVoiceSnapshot({
+      available: true,
+      executionPath: "native-voice",
+      listening: false,
+      microphonePermission: permissions.microphone,
+      speechPermission: permissions.speech,
+    });
+
+    if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+      return;
+    }
+
+    const state = await GuidePupVoiceControl.startCommandSession({
+      partialResults: false,
+    }).catch(() => null);
+
+    if (state) {
+      recordVoiceSnapshot({
+        available: true,
+        executionPath: "native-voice",
+        lastError: state.lastError ?? undefined,
+        listening: state.listening,
+        microphonePermission: state.microphonePermission,
+        speechPermission: state.speechPermission,
+      });
+    }
+  }, []);
+
+  const speakVoiceResponse = useCallback(async (
+    message: string,
+    haptic: "success" | "stop" | null = "success",
+    rateOverride?: number,
+  ) => {
+    lastSpokenMessageRef.current = message;
+    if (resumeListeningTimerRef.current) {
+      clearTimeout(resumeListeningTimerRef.current);
+      resumeListeningTimerRef.current = null;
+    }
+
+    await GuidePupVoiceControl.stopCommandSession().catch(() => undefined);
+    recordVoiceSnapshot({
+      listening: false,
+    });
+
+    if (settings.hapticsEnabled && haptic) {
+      await GuidePupNavigationCore.playHaptic(haptic).catch(() => undefined);
+    }
+
+    await GuidePupVoiceControl.speak(message, {
+      interrupt: true,
+      rate: rateOverride ?? (
+        settings.speechRate === "slow"
+          ? 0.7
+          : settings.speechRate === "fast"
+            ? 1.2
+            : 0.9
+      ),
+    }).catch(() => undefined);
+
+    resumeListeningTimerRef.current = setTimeout(() => {
+      void startVoiceSession();
+    }, 600);
+  }, [settings.hapticsEnabled, settings.speechRate, startVoiceSession]);
 
   useEffect(() => {
     if (!isReady) {
@@ -21,17 +125,169 @@ export default function HomeScreen() {
       return;
     }
 
-    speak("Welcome. Tap the screen to start guidance.");
-  }, [isReady, router, settings.hasCompletedOnboarding, speak]);
+    speak("Welcome. Say start guidance or tap the screen to start guidance.");
+    void startVoiceSession();
+
+    return () => {
+      if (resumeListeningTimerRef.current) {
+        clearTimeout(resumeListeningTimerRef.current);
+      }
+      void GuidePupVoiceControl.stopCommandSession();
+    };
+  }, [isReady, router, settings.hasCompletedOnboarding, speak, startVoiceSession]);
+
+  useEffect(() => {
+    const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
+      if (!isFinal) {
+        return;
+      }
+
+      const normalizedTranscript = transcript.trim().toLowerCase();
+      if (!normalizedTranscript || normalizedTranscript === lastHandledTranscriptRef.current) {
+        return;
+      }
+
+      lastHandledTranscriptRef.current = normalizedTranscript;
+      const intent = parseVoiceCommand(normalizedTranscript);
+
+      recordVoiceSnapshot({
+        executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastRecognizedCommand: intent ?? "unsupported",
+      });
+
+      if (!intent) {
+        void speakVoiceResponse("That command is not supported here. Say help for the available commands.", "stop");
+        return;
+      }
+
+      switch (intent) {
+        case "start-guidance":
+          void speakVoiceResponse("Guidance starting. Say stop guidance any time to pause.", "success");
+          router.push('/navigation' as never);
+          return;
+        case "stop-guidance":
+          void speakVoiceResponse("Guidance is not running yet. Say start guidance when you are ready.", "stop");
+          return;
+        case "repeat":
+          void speakVoiceResponse(lastSpokenMessageRef.current, null);
+          return;
+        case "help":
+          void speakVoiceResponse(buildVoiceHelpPrompt(false), null);
+          return;
+        case "slower-speech": {
+          const nextRate = slowerSpeechRate(settings.speechRate);
+          updateSpeechRate(nextRate);
+          void speakVoiceResponse(
+            nextRate === settings.speechRate
+              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
+              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`,
+            "success",
+            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
+          );
+          return;
+        }
+        case "faster-speech": {
+          const nextRate = fasterSpeechRate(settings.speechRate);
+          updateSpeechRate(nextRate);
+          void speakVoiceResponse(
+            nextRate === settings.speechRate
+              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
+              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`,
+            "success",
+            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
+          );
+          return;
+        }
+        case "more-detail":
+          updateDescriptionMode("detailed");
+          void speakVoiceResponse(
+            settings.descriptionMode === "detailed"
+              ? "Detail level is already detailed."
+              : "Detail level set to detailed. Say less detail to undo.",
+            "success",
+          );
+          return;
+        case "less-detail":
+          updateDescriptionMode("short");
+          void speakVoiceResponse(
+            settings.descriptionMode === "short"
+              ? "Detail level is already short."
+              : "Detail level set to short. Say more detail to undo.",
+            "success",
+          );
+          return;
+        case "haptics-on":
+          updateHapticsEnabled(true);
+          void speakVoiceResponse(
+            settings.hapticsEnabled
+              ? `Haptics are already ${describeHaptics(true)}.`
+              : "Haptics turned on. Say haptics off to undo.",
+            "success",
+          );
+          return;
+        case "haptics-off":
+          updateHapticsEnabled(false);
+          void speakVoiceResponse(
+            settings.hapticsEnabled
+              ? "Haptics turned off. Say haptics on to undo."
+              : `Haptics are already ${describeHaptics(false)}.`,
+            null,
+          );
+          return;
+        case "status":
+          void speakVoiceResponse(
+            buildVoiceStatusSummary({
+              isGuiding: false,
+              settings,
+            }),
+            null,
+          );
+          return;
+        case "what-do-you-see":
+          void speakVoiceResponse("Start guidance first, then ask what do you see.", "stop");
+          return;
+      }
+    });
+
+    const stateSubscription = GuidePupVoiceControl.addStateListener((state) => {
+      recordVoiceSnapshot({
+        available: GuidePupVoiceControl.isNativeModuleAvailable(),
+        executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastError: state.lastError ?? undefined,
+        listening: state.listening,
+        microphonePermission: state.microphonePermission,
+        speechPermission: state.speechPermission,
+      });
+    });
+
+    void syncVoiceState();
+
+    return () => {
+      recognitionSubscription.remove();
+      stateSubscription.remove();
+    };
+  }, [
+    router,
+    settings,
+    speakVoiceResponse,
+    syncVoiceState,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  ]);
 
   const handlePress = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("success");
+    }
     speak("Guidance started.");
     router.push('/navigation' as never);
   };
 
   const handleLongPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("error");
+    }
     speak("SOS mode activated. Connecting to emergency services.");
     // Placeholder for SOS logic
   };

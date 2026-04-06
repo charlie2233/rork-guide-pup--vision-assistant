@@ -7,6 +7,7 @@ export type DescriptionMode = "short" | "detailed";
 
 export interface Settings {
   hasCompletedOnboarding: boolean;
+  hapticsEnabled: boolean;
   speechRate: SpeechRate;
   descriptionMode: DescriptionMode;
   showBoundingBoxes: boolean;
@@ -14,6 +15,7 @@ export interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   hasCompletedOnboarding: false,
+  hapticsEnabled: true,
   speechRate: "normal",
   descriptionMode: "short",
   showBoundingBoxes: false,
@@ -48,10 +50,9 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     }
   };
 
-  const saveSettings = async (newSettings: Settings) => {
+  const persistSettings = async (newSettings: Settings) => {
     try {
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-      setSettings(newSettings);
     } catch (error) {
       if (__DEV__) {
         console.error("[SettingsProvider] Failed to save settings", error);
@@ -59,21 +60,33 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     }
   };
 
+  const updateSettings = useCallback((updater: (current: Settings) => Settings) => {
+    setSettings((current) => {
+      const next = updater(current);
+      void persistSettings(next);
+      return next;
+    });
+  }, []);
+
   const updateSpeechRate = useCallback((rate: SpeechRate) => {
-    saveSettings({ ...settings, speechRate: rate });
-  }, [settings]);
+    updateSettings((current) => ({ ...current, speechRate: rate }));
+  }, [updateSettings]);
 
   const updateDescriptionMode = useCallback((mode: DescriptionMode) => {
-    saveSettings({ ...settings, descriptionMode: mode });
-  }, [settings]);
+    updateSettings((current) => ({ ...current, descriptionMode: mode }));
+  }, [updateSettings]);
+
+  const updateHapticsEnabled = useCallback((enabled: boolean) => {
+    updateSettings((current) => ({ ...current, hapticsEnabled: enabled }));
+  }, [updateSettings]);
 
   const toggleBoundingBoxes = useCallback(() => {
-    saveSettings({ ...settings, showBoundingBoxes: !settings.showBoundingBoxes });
-  }, [settings]);
+    updateSettings((current) => ({ ...current, showBoundingBoxes: !current.showBoundingBoxes }));
+  }, [updateSettings]);
 
   const markOnboardingComplete = useCallback(() => {
-    saveSettings({ ...settings, hasCompletedOnboarding: true });
-  }, [settings]);
+    updateSettings((current) => ({ ...current, hasCompletedOnboarding: true }));
+  }, [updateSettings]);
 
   const getSpeechRateValue = useCallback((): number => {
     switch (settings.speechRate) {
@@ -90,9 +103,19 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     isReady,
     markOnboardingComplete,
     settings,
+    updateHapticsEnabled,
     updateSpeechRate,
     updateDescriptionMode,
     toggleBoundingBoxes,
     getSpeechRateValue,
-  }), [getSpeechRateValue, isReady, markOnboardingComplete, settings, toggleBoundingBoxes, updateDescriptionMode, updateSpeechRate]);
+  }), [
+    getSpeechRateValue,
+    isReady,
+    markOnboardingComplete,
+    settings,
+    toggleBoundingBoxes,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  ]);
 });

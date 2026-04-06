@@ -179,6 +179,40 @@ export default function DiagnosticsScreen() {
         </InfoCard>
 
         <InfoCard
+          tone={diagnostics.voice.lastError ? "warning" : "neutral"}
+          title="Voice control"
+        >
+          <KeyValue
+            label="Native voice module available"
+            value={diagnostics.voice.available ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Execution path"
+            value={diagnostics.voice.executionPath}
+          />
+          <KeyValue
+            label="Microphone permission"
+            value={diagnostics.voice.microphonePermission || "Not found in repo"}
+          />
+          <KeyValue
+            label="Speech recognition permission"
+            value={diagnostics.voice.speechPermission || "Not found in repo"}
+          />
+          <KeyValue
+            label="Listening active"
+            value={diagnostics.voice.listening ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Last recognized command"
+            value={diagnostics.voice.lastRecognizedCommand || "None"}
+          />
+          <KeyValue
+            label="Last voice-module error"
+            value={diagnostics.voice.lastError || "None"}
+          />
+        </InfoCard>
+
+        <InfoCard
           tone={diagnostics.navigationLoop.lastError ? "warning" : "neutral"}
           title="Guidance loop"
         >

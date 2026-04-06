@@ -1,4 +1,4 @@
-import { type AnalyzeFrameInput, VisionAI, VisionAnalysis } from "./VisionAI";
+import { type AnalyzeFrameInput, type AnalyzeFrameOptions, VisionAI, VisionAnalysis } from "./VisionAI";
 
 export interface GuideAIDirection {
   confidence?: number;
@@ -325,9 +325,10 @@ export const GuideAI = {
   },
 
   async analyzeWithVision(
-    frame: AnalyzeFrameInput
+    frame: AnalyzeFrameInput,
+    options?: AnalyzeFrameOptions,
   ): Promise<GuideAIDirection | null> {
-    const result = await VisionAI.analyzeFrame(frame);
+    const result = await VisionAI.analyzeFrame(frame, options);
 
     if (!result.success || !result.analysis) {
       lastDirection = "stop";

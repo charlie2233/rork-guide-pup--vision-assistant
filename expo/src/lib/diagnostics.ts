@@ -16,6 +16,7 @@ export type DiagnosticsHazardLevel = "none" | "low" | "medium" | "high";
 export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright";
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
 export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
+export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -75,6 +76,17 @@ export interface DiagnosticsNavigationLoopSnapshot {
   voiceOverRunning?: boolean;
 }
 
+export interface DiagnosticsVoiceSnapshot {
+  available: boolean;
+  executionPath: DiagnosticsVoiceExecutionPath;
+  lastError?: string;
+  lastRecognizedCommand?: string;
+  listening: boolean;
+  microphonePermission?: string;
+  speechPermission?: string;
+  updatedAt: number;
+}
+
 export interface DiagnosticsAnalyzeEvent {
   confidence?: number;
   detail?: "low" | "high";
@@ -106,6 +118,7 @@ export interface DiagnosticsSnapshot {
   recentAnalyzeEvents: DiagnosticsAnalyzeEvent[];
   runtime: DiagnosticsRuntimeSnapshot;
   session: DiagnosticsSessionSnapshot;
+  voice: DiagnosticsVoiceSnapshot;
 }
 
 const MAX_ANALYZE_EVENTS = 12;
@@ -143,6 +156,12 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
   runtime: createInitialRuntime(),
   session: {
     status: "unknown",
+    updatedAt: Date.now(),
+  },
+  voice: {
+    available: false,
+    executionPath: "js-fallback",
+    listening: false,
     updatedAt: Date.now(),
   },
 });
@@ -358,6 +377,34 @@ export function recordNavigationLoopSnapshot(input: {
   }));
 }
 
+export function recordVoiceSnapshot(input: {
+  available?: boolean;
+  executionPath?: DiagnosticsVoiceExecutionPath;
+  lastError?: string | null;
+  lastRecognizedCommand?: string | null;
+  listening?: boolean;
+  microphonePermission?: string;
+  speechPermission?: string;
+}) {
+  updateSnapshot((current) => ({
+    ...current,
+    voice: {
+      ...current.voice,
+      available: input.available ?? current.voice.available,
+      executionPath: input.executionPath ?? current.voice.executionPath,
+      lastError: input.lastError === undefined ? current.voice.lastError : sanitizeMessage(input.lastError ?? undefined, 120),
+      lastRecognizedCommand:
+        input.lastRecognizedCommand === undefined
+          ? current.voice.lastRecognizedCommand
+          : sanitizeMessage(input.lastRecognizedCommand ?? undefined, 80),
+      listening: input.listening ?? current.voice.listening,
+      microphonePermission: input.microphonePermission ?? current.voice.microphonePermission,
+      speechPermission: input.speechPermission ?? current.voice.speechPermission,
+      updatedAt: Date.now(),
+    },
+  }));
+}
+
 export function recordAnalyzeEvent(
   input: Omit<DiagnosticsAnalyzeEvent, "id" | "timestamp"> & {
     timestamp?: number;
@@ -454,6 +501,15 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Device suffix: ${session.deviceIdSuffix || "Not found in repo"}`);
   lines.push(`- Expires at: ${session.expiresAt || "Not found in repo"}`);
   lines.push(`- Error: ${session.error || "None"}`);
+  lines.push("");
+  lines.push("## Voice control");
+  lines.push(`- Native voice module available: ${input.voice.available ? "yes" : "no"}`);
+  lines.push(`- Execution path: ${input.voice.executionPath}`);
+  lines.push(`- Microphone permission: ${input.voice.microphonePermission || "Not found in repo"}`);
+  lines.push(`- Speech recognition permission: ${input.voice.speechPermission || "Not found in repo"}`);
+  lines.push(`- Listening active: ${input.voice.listening ? "yes" : "no"}`);
+  lines.push(`- Last recognized command: ${input.voice.lastRecognizedCommand || "None"}`);
+  lines.push(`- Last voice-module error: ${input.voice.lastError || "None"}`);
   lines.push("");
   lines.push("## Guidance loop");
   lines.push(`- Native module available: ${input.navigationLoop.available ? "yes" : "no"}`);

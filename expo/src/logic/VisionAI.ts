@@ -26,6 +26,10 @@ export interface VisionAIResult {
   timestamp: number;
 }
 
+export interface AnalyzeFrameOptions {
+  detail?: "low" | "high";
+}
+
 async function preprocessFrame(input: AnalyzeFrameInput) {
   if (input.uri) {
     const shouldResize = Boolean(input.width && input.width > MAX_UPLOAD_WIDTH);
@@ -63,14 +67,15 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
   throw new Error("No image data was available for vision analysis.");
 }
 
-export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIResult> {
+export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFrameOptions): Promise<VisionAIResult> {
   const timestamp = Date.now();
+  const detail = options?.detail ?? (Platform.OS === "web" ? "high" : "low");
 
   try {
     const prepared = await preprocessFrame(frame);
 
     const analysis = await analyzeVision({
-      detail: Platform.OS === "web" ? "high" : "low",
+      detail,
       imageBase64: prepared.base64,
       mimeType: prepared.mimeType,
       sourceHeight: prepared.height,
@@ -85,7 +90,7 @@ export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIRe
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     recordAnalyzeEvent({
-      detail: Platform.OS === "web" ? "high" : "low",
+      detail,
       error: errorMessage,
       latencyMs: Date.now() - timestamp,
       outcome: "preprocess-failure",

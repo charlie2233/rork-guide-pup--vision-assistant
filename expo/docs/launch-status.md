@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-03
+Last updated: 2026-04-06
 
 ## Public site
 
@@ -117,6 +117,28 @@ Last updated: 2026-04-03
   - Last total guidance loop latency: `20ms`
 - Fixed a runtime semantics bug where diagnostics treated "camera hardware unavailable" as "native module unavailable", and added a narrower capture fallback so native capture failures can fall back to the existing JS `CameraView` path.
 - Confirmed the app still launches and the hidden diagnostics route still works after the runtime fix.
+
+## Actions taken on 2026-04-06
+
+- Added a checked-in local Expo module at `expo/modules/guidepup-voice-control` for the first bounded hands-free command lane.
+- Added `GuidePupVoiceControl` as a JS-facing boundary with native iOS speech-permission, speech-recognition, speech-synthesis, and command-session hooks, while preserving a JS `expo-speech` fallback when the native module is unavailable.
+- Added a deterministic command parser for `start guidance`, `stop guidance`, `repeat`, `help`, `slower speech`, `faster speech`, `more detail`, `less detail`, `haptics on`, `haptics off`, `status`, and `what do you see`.
+- Added voice-driven settings changes for speech rate, detail level, and haptics, persisting them through the existing `@guidepup:settings` storage path.
+- Added voice diagnostics for native module availability, execution path, microphone permission, speech-recognition permission, listening state, last recognized command, and last voice-module error.
+- Re-ran `pod install` successfully after adding the new voice module; CocoaPods now installs `GuidePupVoiceControl (1.0.0)` and keeps `expo/ios/Podfile.lock` current.
+- Ran `npm run typecheck`, `npm run lint`, `npx expo config --type public`, `npx expo-modules-autolinking search --platform apple`, and `npx expo-modules-autolinking resolve --platform apple`; all succeeded with the new voice module linked.
+- Built the prebuilt iOS app successfully for the `iPhone 16e` simulator in `Release` with `SENTRY_DISABLE_AUTO_UPLOAD=true`; the app installed and launched in the simulator.
+- The same simulator build in `Debug` still fails at link time on pre-existing React Native new-architecture symbols; the current blocker is not inside `GuidePupVoiceControl`.
+- Runtime evidence from the simulator:
+  - The app launches to the existing JS screens with the new native voice module linked.
+  - The home screen triggers the real iOS microphone-permission prompt, proving the native voice boundary is loaded and executed at runtime.
+  - The existing Settings screen remains reachable after the voice integration.
+- Runtime evidence still missing:
+  - End-to-end recognized voice commands through live speech recognition.
+  - Audible spoken confirmations from the native speech path.
+  - Native haptic confirmation on device hardware.
+  - End-to-end spoken settings persistence validated through real recognition.
+  - Real-device validation for microphone, speech recognition, VoiceOver announcements, and haptics.
 
 ## Blockers
 

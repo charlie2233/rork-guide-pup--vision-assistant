@@ -15,18 +15,30 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useVoice } from "@/src/components/VoiceAnnouncer";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
+import { getConversationLaneState } from "@/src/lib/voiceConversation";
+import { buildVoiceHelpPrompt, parseVoiceCommand } from "@/src/lib/voiceCommands";
+import {
+  buildVoiceStatusSummary,
+  describeHaptics,
+  describeSpeechRate,
+  fasterSpeechRate,
+  slowerSpeechRate,
+} from "@/src/lib/voiceSettings";
 import { captureAppError } from "@/src/lib/sentry";
 import { useGuidePupRouter } from "@/src/lib/router";
 import {
   classifyAnalyzeError,
   recordCameraPermissionSnapshot,
   recordNavigationLoopSnapshot,
+  recordVoiceSnapshot,
 } from "@/src/lib/diagnostics";
 import {
   GuidePupNavigationCore,
   type GuidePupNavigationCoreExecutionPath,
   type GuidePupNavigationCoreHapticType,
 } from "@/src/native/GuidePupNavigationCore";
+import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 const ANALYSIS_INTERVAL_MS = 4500;
 
@@ -68,6 +80,12 @@ export default function NavigationScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
   const { speak, isSpeaking } = useVoice();
+  const {
+    settings,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  } = useSettings();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [direction, setDirection] = useState<GuideAIDirection | null>(null);
   const [guidanceStatus, setGuidanceStatus] = useState<StatusBanner>(initialStatus);
@@ -81,6 +99,8 @@ export default function NavigationScreen() {
   const guidingRef = useRef(true);
   const isSpeakingRef = useRef(false);
   const hasAnnouncedStartRef = useRef(false);
+  const lastHandledTranscriptRef = useRef<string | null>(null);
+  const lastSpokenMessageRef = useRef("Guidance started. Analyzing your surroundings.");
 
   const refreshNavigationCoreState = useCallback(
     async (partial?: {
@@ -110,6 +130,86 @@ export default function NavigationScreen() {
     },
     [],
   );
+
+  const syncVoiceState = useCallback(async () => {
+    const state = await GuidePupVoiceControl.getState().catch(() => null);
+    if (!state) {
+      return;
+    }
+
+    recordVoiceSnapshot({
+      available: GuidePupVoiceControl.isNativeModuleAvailable(),
+      executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+      lastError: state.lastError ?? undefined,
+      listening: state.listening,
+      microphonePermission: state.microphonePermission,
+      speechPermission: state.speechPermission,
+    });
+  }, []);
+
+  const startVoiceSession = useCallback(async () => {
+    if (!GuidePupVoiceControl.isNativeModuleAvailable()) {
+      recordVoiceSnapshot({
+        available: false,
+        executionPath: "js-fallback",
+        listening: false,
+      });
+      return;
+    }
+
+    const permissions = await GuidePupVoiceControl.requestPermissions();
+    recordVoiceSnapshot({
+      available: true,
+      executionPath: "native-voice",
+      listening: false,
+      microphonePermission: permissions.microphone,
+      speechPermission: permissions.speech,
+    });
+
+    if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+      return;
+    }
+
+    const state = await GuidePupVoiceControl.startCommandSession({
+      partialResults: false,
+    }).catch(() => null);
+
+    if (state) {
+      recordVoiceSnapshot({
+        available: true,
+        executionPath: "native-voice",
+        lastError: state.lastError ?? undefined,
+        listening: state.listening,
+        microphonePermission: state.microphonePermission,
+        speechPermission: state.speechPermission,
+      });
+    }
+  }, []);
+
+  const speakCommandResponse = useCallback((message: string, rateOverride?: number) => {
+    lastSpokenMessageRef.current = message;
+    speak(message, {
+      rate: rateOverride ?? (
+        settings.speechRate === "slow"
+          ? 0.7
+          : settings.speechRate === "fast"
+            ? 1.2
+            : 0.9
+      ),
+    });
+  }, [settings.speechRate, speak]);
+
+  const pauseGuidanceForVoice = useCallback(() => {
+    guidingRef.current = false;
+    hasAnnouncedStartRef.current = false;
+    setIsGuiding(false);
+    setDirection(null);
+    setGuidanceStatus({
+      detail: "Guide Pup is paused. Say start guidance to continue.",
+      tone: "warning",
+      title: "Guidance paused",
+    });
+  }, []);
 
   useEffect(() => {
     guidingRef.current = isGuiding;
@@ -154,7 +254,7 @@ export default function NavigationScreen() {
       setDirection(null);
       setGuidanceStatus({
         detail:
-          "Guide Pup needs camera access to analyze the scene. The shipping path does not request microphone access.",
+          "Guide Pup needs camera access to analyze the scene. Voice commands remain optional and fall back cleanly when speech permissions are denied.",
         tone: "critical",
         title: "Camera access needed",
       });
@@ -175,6 +275,7 @@ export default function NavigationScreen() {
 
       if (!hasAnnouncedStartRef.current) {
         hasAnnouncedStartRef.current = true;
+        lastSpokenMessageRef.current = "Guidance started. Analyzing your surroundings.";
         speak("Guidance started. Analyzing your surroundings.");
         void GuidePupNavigationCore.announce("Guidance started. Analyzing your surroundings.");
       }
@@ -238,8 +339,24 @@ export default function NavigationScreen() {
     };
   }, [isGuiding, permission?.granted, refreshNavigationCoreState]);
 
-  const analyzeCurrentFrame = useCallback(async () => {
-    if (analyzingRef.current || !guidingRef.current) {
+  const resumeGuidanceForVoice = useCallback(() => {
+    if (guidingRef.current) {
+      speakCommandResponse("Guidance is already active.");
+      return;
+    }
+
+    hasAnnouncedStartRef.current = false;
+    guidingRef.current = true;
+    setIsGuiding(true);
+    setGuidanceStatus({
+      detail: "Analyzing your surroundings.",
+      tone: "neutral",
+      title: "Guidance active",
+    });
+  }, [speakCommandResponse]);
+
+  const analyzeCurrentFrame = useCallback(async (mode: "guidance" | "scene-query" = "guidance") => {
+    if (analyzingRef.current || (!guidingRef.current && mode === "guidance")) {
       return;
     }
 
@@ -286,9 +403,11 @@ export default function NavigationScreen() {
         sessionActive: true,
       });
 
-      const result = await GuideAI.analyzeWithVision(frame);
+      const result = await GuideAI.analyzeWithVision(frame, {
+        detail: settings.descriptionMode === "detailed" ? "high" : "low",
+      });
 
-      if (!guidingRef.current || !result) {
+      if ((!guidingRef.current && mode === "guidance") || !result) {
         return;
       }
 
@@ -308,8 +427,13 @@ export default function NavigationScreen() {
         });
       }
 
-      if (result.message && !isSpeakingRef.current) {
-        speak(result.message);
+      const spokenGuidance = mode === "scene-query"
+        ? result.sceneDescription || result.message
+        : result.message;
+
+      if (spokenGuidance && !isSpeakingRef.current) {
+        lastSpokenMessageRef.current = spokenGuidance;
+        speakCommandResponse(spokenGuidance);
       }
 
       const hapticType: GuidePupNavigationCoreHapticType =
@@ -321,9 +445,11 @@ export default function NavigationScreen() {
               ? "right"
               : "forward";
 
-      await GuidePupNavigationCore.playHaptic(hapticType);
+      if (mode === "guidance" && settings.hapticsEnabled) {
+        await GuidePupNavigationCore.playHaptic(hapticType);
+      }
 
-      if ((result.obstacle || result.direction === "stop") && result.message) {
+      if (mode === "guidance" && (result.obstacle || result.direction === "stop") && result.message) {
         void GuidePupNavigationCore.announce(result.message);
       }
 
@@ -360,7 +486,8 @@ export default function NavigationScreen() {
       });
       setDirection(null);
       if (!isSpeakingRef.current) {
-        speak(fallbackMessage);
+        lastSpokenMessageRef.current = fallbackMessage;
+        speakCommandResponse(fallbackMessage);
       }
       void GuidePupNavigationCore.announce(fallbackMessage);
       void refreshNavigationCoreState({
@@ -376,7 +503,171 @@ export default function NavigationScreen() {
     } finally {
       analyzingRef.current = false;
     }
-  }, [speak]);
+  }, [settings.descriptionMode, settings.hapticsEnabled, speakCommandResponse]);
+
+  useEffect(() => {
+    const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
+      if (!isFinal) {
+        return;
+      }
+
+      const normalizedTranscript = transcript.trim().toLowerCase();
+      if (!normalizedTranscript || normalizedTranscript === lastHandledTranscriptRef.current) {
+        return;
+      }
+
+      lastHandledTranscriptRef.current = normalizedTranscript;
+      const intent = parseVoiceCommand(normalizedTranscript);
+
+      recordVoiceSnapshot({
+        executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastRecognizedCommand: intent ?? "unsupported",
+      });
+
+      if (!intent) {
+        speakCommandResponse("That command is not supported. Say help for the supported commands.");
+        return;
+      }
+
+      switch (intent) {
+        case "start-guidance":
+          resumeGuidanceForVoice();
+          if (permission?.granted) {
+            void analyzeCurrentFrame();
+          }
+          return;
+        case "stop-guidance":
+          if (!guidingRef.current) {
+            speakCommandResponse("Guidance is already paused.");
+            return;
+          }
+          pauseGuidanceForVoice();
+          if (settings.hapticsEnabled) {
+            void GuidePupNavigationCore.playHaptic("stop");
+          }
+          speakCommandResponse("Guidance paused. Say start guidance to resume.");
+          return;
+        case "repeat":
+          speakCommandResponse(lastSpokenMessageRef.current);
+          return;
+        case "help":
+          speakCommandResponse(buildVoiceHelpPrompt(true));
+          return;
+        case "slower-speech": {
+          const nextRate = slowerSpeechRate(settings.speechRate);
+          updateSpeechRate(nextRate);
+          speakCommandResponse(
+            nextRate === settings.speechRate
+              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
+              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`,
+            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
+          );
+          return;
+        }
+        case "faster-speech": {
+          const nextRate = fasterSpeechRate(settings.speechRate);
+          updateSpeechRate(nextRate);
+          speakCommandResponse(
+            nextRate === settings.speechRate
+              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
+              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`,
+            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
+          );
+          return;
+        }
+        case "more-detail":
+          updateDescriptionMode("detailed");
+          speakCommandResponse(
+            settings.descriptionMode === "detailed"
+              ? "Detail level is already detailed."
+              : "Detail level set to detailed. Say less detail to undo.",
+          );
+          return;
+        case "less-detail":
+          updateDescriptionMode("short");
+          speakCommandResponse(
+            settings.descriptionMode === "short"
+              ? "Detail level is already short."
+              : "Detail level set to short. Say more detail to undo.",
+          );
+          return;
+        case "haptics-on":
+          updateHapticsEnabled(true);
+          if (!settings.hapticsEnabled) {
+            void GuidePupNavigationCore.playHaptic("success");
+          }
+          speakCommandResponse(
+            settings.hapticsEnabled
+              ? `Haptics are already ${describeHaptics(true)}.`
+              : "Haptics turned on. Say haptics off to undo.",
+          );
+          return;
+        case "haptics-off":
+          updateHapticsEnabled(false);
+          speakCommandResponse(
+            settings.hapticsEnabled
+              ? "Haptics turned off. Say haptics on to undo."
+              : `Haptics are already ${describeHaptics(false)}.`,
+          );
+          return;
+        case "status":
+          speakCommandResponse(
+            buildVoiceStatusSummary({
+              isGuiding: guidingRef.current,
+              settings,
+            }),
+          );
+          return;
+        case "what-do-you-see":
+          if (!permission?.granted) {
+            speakCommandResponse("Camera access is required before I can describe the scene.");
+            return;
+          }
+          if (!getConversationLaneState().supportedPrompts.includes("what do you see")) {
+            speakCommandResponse("The experimental conversation lane is not enabled right now.");
+            return;
+          }
+          if (direction?.sceneDescription) {
+            speakCommandResponse(direction.sceneDescription);
+            return;
+          }
+          speakCommandResponse("Analyzing the scene now.");
+          void analyzeCurrentFrame("scene-query");
+      }
+    });
+
+    const stateSubscription = GuidePupVoiceControl.addStateListener((state) => {
+      recordVoiceSnapshot({
+        available: GuidePupVoiceControl.isNativeModuleAvailable(),
+        executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastError: state.lastError ?? undefined,
+        listening: state.listening,
+        microphonePermission: state.microphonePermission,
+        speechPermission: state.speechPermission,
+      });
+    });
+
+    void startVoiceSession();
+    void syncVoiceState();
+
+    return () => {
+      recognitionSubscription.remove();
+      stateSubscription.remove();
+      void GuidePupVoiceControl.stopCommandSession();
+    };
+  }, [
+    analyzeCurrentFrame,
+    direction?.sceneDescription,
+    permission?.granted,
+    resumeGuidanceForVoice,
+    settings,
+    speakCommandResponse,
+    startVoiceSession,
+    syncVoiceState,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  ]);
 
   useEffect(() => {
     if (!isGuiding || !permission?.granted) {
@@ -400,14 +691,18 @@ export default function NavigationScreen() {
   const handleStop = useCallback(() => {
     setIsGuiding(false);
     guidingRef.current = false;
+    hasAnnouncedStartRef.current = false;
     setDirection(null);
     setGuidanceStatus({
       detail: "Guide Pup is paused. Return when you are ready to continue.",
       tone: "neutral",
       title: "Guidance stopped",
     });
+    lastSpokenMessageRef.current = "Stopping guidance.";
     speak("Stopping guidance.");
-    void GuidePupNavigationCore.playHaptic("success");
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("success");
+    }
     void GuidePupNavigationCore.announce("Stopping guidance.");
 
     if (navigation.canGoBack()) {
@@ -415,13 +710,16 @@ export default function NavigationScreen() {
     } else {
       router.replace("/");
     }
-  }, [navigation, router, speak]);
+  }, [navigation, router, settings.hapticsEnabled, speak]);
 
   const handleSOS = useCallback(() => {
+    lastSpokenMessageRef.current = "Emergency SOS activated.";
     speak("Emergency SOS activated.");
-    void GuidePupNavigationCore.playHaptic("error");
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("error");
+    }
     void GuidePupNavigationCore.announce("Emergency SOS activated.");
-  }, [speak]);
+  }, [settings.hapticsEnabled, speak]);
 
   const canOpenCameraSettings = typeof Linking.openSettings === "function" && Platform.OS !== "web";
 
@@ -484,8 +782,9 @@ export default function NavigationScreen() {
             <View style={styles.permissionCard}>
               <Text style={styles.permissionTitle}>Camera access is required</Text>
               <Text style={styles.permissionBody}>
-                Guide Pup sends compressed camera frames to the backend for navigation analysis. The
-                shipping path does not request microphone access.
+                Guide Pup sends compressed camera frames to the backend for navigation analysis.
+                Voice commands are optional and use on-device speech recognition for a bounded
+                command set.
               </Text>
 
               <View style={styles.permissionActions}>

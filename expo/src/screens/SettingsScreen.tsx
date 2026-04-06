@@ -23,7 +23,13 @@ export default function SettingsScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes } = useSettings();
+  const {
+    settings,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+    toggleBoundingBoxes,
+  } = useSettings();
   const diagnosticsTapCountRef = useRef(0);
   const diagnosticsTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -83,6 +89,16 @@ export default function SettingsScreen() {
       );
     }
   }, [settings.showBoundingBoxes, toggleBoundingBoxes]);
+
+  const handleHapticsToggle = useCallback(() => {
+    const nextValue = !settings.hapticsEnabled;
+    updateHapticsEnabled(nextValue);
+    if (Platform.OS === "ios") {
+      AccessibilityInfo.announceForAccessibility(
+        nextValue ? "Haptics turned on" : "Haptics turned off",
+      );
+    }
+  }, [settings.hapticsEnabled, updateHapticsEnabled]);
 
   const openDiagnostics = useCallback(() => {
     router.push("/diagnostics" as never);
@@ -179,8 +195,30 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Debug / Visual</Text>
-          <Text style={styles.sectionDescription}>Advanced options for testing and troubleshooting.</Text>
+          <Text style={styles.sectionTitle}>Guidance feedback</Text>
+          <Text style={styles.sectionDescription}>Touch fallback controls for haptics and tester-only overlays.</Text>
+          <View style={styles.toggleCard}>
+            <View style={styles.toggleContent}>
+              <View style={styles.toggleTextGroup}>
+                <Text style={styles.toggleLabel}>Haptics</Text>
+                <Text style={styles.toggleHint}>
+                  Vibrations that confirm spoken guidance and voice-command changes.
+                </Text>
+              </View>
+              <Switch
+                value={settings.hapticsEnabled}
+                onValueChange={handleHapticsToggle}
+                thumbColor={Colors.palette.textPrimary}
+                trackColor={{ false: "#343843", true: Colors.palette.accent }}
+                accessibilityRole="switch"
+                accessibilityLabel="Haptics"
+                accessibilityHint="Double tap to turn haptic guidance on or off"
+                accessibilityState={{ checked: settings.hapticsEnabled }}
+                testID="settings-haptics-switch"
+              />
+            </View>
+          </View>
+
           <View style={styles.toggleCard}>
             <View style={styles.toggleContent}>
               <View style={styles.toggleTextGroup}>

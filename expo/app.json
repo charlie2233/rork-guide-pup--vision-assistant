@@ -22,7 +22,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "TODO_IOS_BUNDLE_IDENTIFIER",
       "infoPlist": {
-        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers."
+        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers.",
+        "NSMicrophoneUsageDescription": "Guide Pup uses the microphone for optional hands-free voice commands such as start, stop, repeat, and spoken settings changes.",
+        "NSSpeechRecognitionUsageDescription": "Guide Pup uses speech recognition for optional hands-free voice commands. Spoken commands are parsed on-device into a bounded control set."
       }
     },
     "android": {
