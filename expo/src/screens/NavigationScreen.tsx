@@ -157,31 +157,40 @@ export default function NavigationScreen() {
       return;
     }
 
-    const permissions = await GuidePupVoiceControl.requestPermissions();
-    recordVoiceSnapshot({
-      available: true,
-      executionPath: "native-voice",
-      listening: false,
-      microphonePermission: permissions.microphone,
-      speechPermission: permissions.speech,
-    });
-
-    if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
-      return;
-    }
-
-    const state = await GuidePupVoiceControl.startCommandSession({
-      partialResults: false,
-    }).catch(() => null);
-
-    if (state) {
+    try {
+      const permissions = await GuidePupVoiceControl.requestPermissions();
       recordVoiceSnapshot({
         available: true,
         executionPath: "native-voice",
-        lastError: state.lastError ?? undefined,
-        listening: state.listening,
-        microphonePermission: state.microphonePermission,
-        speechPermission: state.speechPermission,
+        listening: false,
+        microphonePermission: permissions.microphone,
+        speechPermission: permissions.speech,
+      });
+
+      if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+        return;
+      }
+
+      const state = await GuidePupVoiceControl.startCommandSession({
+        partialResults: false,
+      }).catch(() => null);
+
+      if (state) {
+        recordVoiceSnapshot({
+          available: true,
+          executionPath: "native-voice",
+          lastError: state.lastError ?? undefined,
+          listening: state.listening,
+          microphonePermission: state.microphonePermission,
+          speechPermission: state.speechPermission,
+        });
+      }
+    } catch (error) {
+      recordVoiceSnapshot({
+        available: true,
+        executionPath: "js-fallback",
+        lastError: error instanceof Error ? error.message : "Unable to start voice control.",
+        listening: false,
       });
     }
   }, []);
@@ -391,6 +400,14 @@ export default function NavigationScreen() {
             forceFallback: true,
             maxDimension: 768,
           });
+        } else if (navigationCorePath === "native-core") {
+          setNavigationCorePath("js-fallback");
+          await refreshNavigationCoreState({
+            executionPath: "js-fallback",
+            lastError: captureErrorMessage,
+            sessionActive: true,
+          });
+          return;
         } else {
           throw captureError;
         }

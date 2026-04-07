@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-06
+Last updated: 2026-04-07
 
 ## Public site
 
@@ -140,6 +140,17 @@ Last updated: 2026-04-06
   - End-to-end spoken settings persistence validated through real recognition.
   - Real-device validation for microphone, speech recognition, VoiceOver announcements, and haptics.
 
+## Actions taken on 2026-04-07
+
+- Re-validated the current iOS blind-user spike after commit `24f6b2c` with `npm run typecheck`, `npm run lint`, and `npx expo config --type public`; all passed.
+- Confirmed the physical validation target is still unavailable on this machine: `xcrun xctrace list devices` reports `charlie的iPhone (26.2.1) (00008130-000A001A1178001C)` under `Devices Offline`.
+- Hardened the JS-to-native seam so blind-user control does not break when native helpers reject:
+  - `GuidePupNavigationCore.announce()` now falls back to the JS accessibility announce path if the native bridge throws.
+  - `GuidePupNavigationCore.playHaptic()` now falls back to Expo haptics if the native bridge throws.
+  - Home and navigation voice-session startup now catch native voice startup failures and record a clean `js-fallback` diagnostics state instead of leaving an unhandled rejection.
+  - Navigation now downgrades cleanly from `native-core` capture to the existing JS camera fallback if native capture fails before a `CameraView` ref is ready.
+- No fresh real-iPhone runtime evidence was created in this pass because the only attached iPhone remained offline. The latest runtime evidence is still the simulator-linked validation recorded on `2026-04-03` and `2026-04-06`.
+
 ## Blockers
 
 - iOS bundle identifier is still unresolved.
@@ -150,3 +161,4 @@ Last updated: 2026-04-06
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
 - Real device validation has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
+- The immediate blocker for real blind-user validation is the offline device state from `xcrun xctrace list devices`; until the iPhone reconnects, the branch cannot prove end-to-end spoken commands, spoken settings persistence, hardware haptics, or VoiceOver announcement behavior on real hardware.

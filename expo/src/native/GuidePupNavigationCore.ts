@@ -136,8 +136,12 @@ async function announce(message: string) {
   }
 
   if (nativeModule) {
-    await nativeModule.announce(trimmed);
-    return;
+    try {
+      await nativeModule.announce(trimmed);
+      return;
+    } catch {
+      // Fall through to the JS accessibility path if the native bridge rejects.
+    }
   }
 
   if (Platform.OS === "ios") {
@@ -147,8 +151,12 @@ async function announce(message: string) {
 
 async function playHaptic(type: GuidePupNavigationCoreHapticType) {
   if (nativeModule) {
-    await nativeModule.playHaptic(type);
-    return;
+    try {
+      await nativeModule.playHaptic(type);
+      return;
+    } catch {
+      // Fall through to the JS haptics fallback if the native bridge rejects.
+    }
   }
 
   if (type === "stop" || type === "error") {

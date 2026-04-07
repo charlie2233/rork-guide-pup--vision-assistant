@@ -21,7 +21,7 @@ export default function HomeScreen() {
     updateSpeechRate,
   } = useSettings();
   const lastHandledTranscriptRef = useRef<string | null>(null);
-  const lastSpokenMessageRef = useRef("Welcome. Say start guidance or tap the screen to start guidance.");
+  const lastSpokenMessageRef = useRef("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
   const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const syncVoiceState = useCallback(async () => {
@@ -50,31 +50,40 @@ export default function HomeScreen() {
       return;
     }
 
-    const permissions = await GuidePupVoiceControl.requestPermissions();
-    recordVoiceSnapshot({
-      available: true,
-      executionPath: "native-voice",
-      listening: false,
-      microphonePermission: permissions.microphone,
-      speechPermission: permissions.speech,
-    });
-
-    if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
-      return;
-    }
-
-    const state = await GuidePupVoiceControl.startCommandSession({
-      partialResults: false,
-    }).catch(() => null);
-
-    if (state) {
+    try {
+      const permissions = await GuidePupVoiceControl.requestPermissions();
       recordVoiceSnapshot({
         available: true,
         executionPath: "native-voice",
-        lastError: state.lastError ?? undefined,
-        listening: state.listening,
-        microphonePermission: state.microphonePermission,
-        speechPermission: state.speechPermission,
+        listening: false,
+        microphonePermission: permissions.microphone,
+        speechPermission: permissions.speech,
+      });
+
+      if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+        return;
+      }
+
+      const state = await GuidePupVoiceControl.startCommandSession({
+        partialResults: false,
+      }).catch(() => null);
+
+      if (state) {
+        recordVoiceSnapshot({
+          available: true,
+          executionPath: "native-voice",
+          lastError: state.lastError ?? undefined,
+          listening: state.listening,
+          microphonePermission: state.microphonePermission,
+          speechPermission: state.speechPermission,
+        });
+      }
+    } catch (error) {
+      recordVoiceSnapshot({
+        available: true,
+        executionPath: "js-fallback",
+        lastError: error instanceof Error ? error.message : "Unable to start voice control.",
+        listening: false,
       });
     }
   }, []);
@@ -125,7 +134,7 @@ export default function HomeScreen() {
       return;
     }
 
-    speak("Welcome. Say start guidance or tap the screen to start guidance.");
+    speak("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
     void startVoiceSession();
 
     return () => {
