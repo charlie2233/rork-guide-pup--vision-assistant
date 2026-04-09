@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-07
+Last updated: 2026-04-09
 
 ## Public site
 
@@ -151,6 +151,25 @@ Last updated: 2026-04-07
   - Navigation now downgrades cleanly from `native-core` capture to the existing JS camera fallback if native capture fails before a `CameraView` ref is ready.
 - No fresh real-iPhone runtime evidence was created in this pass because the only attached iPhone remained offline. The latest runtime evidence is still the simulator-linked validation recorded on `2026-04-03` and `2026-04-06`.
 
+## Actions taken on 2026-04-09
+
+- Re-checked real-device visibility before any more blind-user validation.
+- `xcrun xctrace list devices` still reports `charlie的iPhone (26.2.1) (00008130-000A001A1178001C)` under `Devices Offline`.
+- `xcrun devicectl list devices` reports the same phone as `unavailable` with hostname `charliedeiPhone.coredevice.local`.
+- `xcrun xcdevice list` returns the concrete deviceprep failure for the iPhone:
+  - code: `-27`
+  - domain: `com.apple.dt.deviceprep`
+  - description: `Browsing on the local area network for charlie的iPhone`
+  - recovery suggestion: `Ensure the device is unlocked and attached with a cable or associated with the same local area network as this Mac. The device must be opted into Developer Mode to connect wirelessly.`
+- `system_profiler SPUSBDataType` shows no connected iPhone on the USB bus on this Mac, so there is no active wired debugging path right now.
+- Because the device is unavailable before app launch, no fresh real-iPhone runtime evidence was created in this pass for:
+  - native voice recognition end-to-end
+  - spoken settings changes through live speech input
+  - `stop guidance` / `repeat` by real voice
+  - VoiceOver announcement behavior on hardware
+  - hardware haptics
+  - native camera capture on device
+
 ## Blockers
 
 - iOS bundle identifier is still unresolved.
@@ -162,3 +181,4 @@ Last updated: 2026-04-07
 - Real device validation has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
 - The immediate blocker for real blind-user validation is the offline device state from `xcrun xctrace list devices`; until the iPhone reconnects, the branch cannot prove end-to-end spoken commands, spoken settings persistence, hardware haptics, or VoiceOver announcement behavior on real hardware.
+- The concrete 2026-04-09 blocker is `com.apple.dt.deviceprep` error `-27`: Xcode can only browse for the iPhone over the local network, and there is no active USB connection visible on this Mac. Real blind-user validation cannot proceed until the phone is unlocked, trusted, Developer Mode-enabled, and either connected by cable or reachable on the same LAN for wireless debugging.
