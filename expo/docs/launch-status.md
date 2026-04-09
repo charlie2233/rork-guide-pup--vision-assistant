@@ -162,6 +162,10 @@ Last updated: 2026-04-09
   - description: `Browsing on the local area network for charlie的iPhone`
   - recovery suggestion: `Ensure the device is unlocked and attached with a cable or associated with the same local area network as this Mac. The device must be opted into Developer Mode to connect wirelessly.`
 - `system_profiler SPUSBDataType` shows no connected iPhone on the USB bus on this Mac, so there is no active wired debugging path right now.
+- Re-ran `pod install` in `expo/ios`; it still completes successfully on this machine with `Pod installation complete! There are 102 dependencies from the Podfile and 110 total pods installed.`
+- Re-launched the currently installed simulator app on `iPhone 16e` and confirmed the existing runtime shell is still reachable:
+  - the Home screen still renders the large `Start Guidance` affordance and the visible `Settings` fallback button
+  - navigation mode can still be entered in the simulator without changing the backend request/response contract
 - Because the device is unavailable before app launch, no fresh real-iPhone runtime evidence was created in this pass for:
   - native voice recognition end-to-end
   - spoken settings changes through live speech input
