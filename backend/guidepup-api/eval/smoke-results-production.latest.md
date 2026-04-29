@@ -12,24 +12,24 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `37cc6ca5-b89a-4f25-a620-9b689c781066`
+  - request id: `e46ed2f5-0bd1-48bb-ab37-2c95f0f28821`
   - provider: `openai-compatible`
   - model: `gpt-4.1`
   - prompt version: `2026-03-31.v1`
-  - latency: `371ms`
+  - latency: `300ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
-  - device id suffix: `5bddfd1a`
-  - latency: `58ms`
+  - request id: `6dafa3da-9abb-4c4d-b9c3-4669c924a056`
+  - device id suffix: `6abea7fc`
+  - latency: `105ms`
 - `POST /v1/vision/analyze`
   - status: `200 OK`
-  - request id: `d9238d01-bde9-4d5b-bcd8-7d498be76162`
+  - request id: `cebf5445-7923-4a87-8953-124f824914ef`
   - execution path: `provider-backed`
   - provider: `openai-compatible`
   - model: `gpt-4.1-2025-04-14`
   - prompt version: `2026-03-31.v1`
-  - request latency: `2870ms`
-  - service latency: `2086ms`
+  - request latency: `3822ms`
+  - service latency: `3076ms`
   - fallback reason: `none`
   - message: `Stop. I need a clearer view.`

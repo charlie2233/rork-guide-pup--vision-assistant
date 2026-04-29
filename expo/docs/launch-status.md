@@ -39,10 +39,10 @@ Last updated: 2026-04-29
 - Required-secret gate:
   - `npm run verify:secrets:production`: passes
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `37cc6ca5-b89a-4f25-a620-9b689c781066`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
-  - `/v1/vision/analyze`: `200 OK`, request ID `d9238d01-bde9-4d5b-bcd8-7d498be76162`
-- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `2086ms`, round-trip latency `2870ms`
+  - `/health`: `200 OK`, request ID `e46ed2f5-0bd1-48bb-ab37-2c95f0f28821`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `6dafa3da-9abb-4c4d-b9c3-4669c924a056`
+  - `/v1/vision/analyze`: `200 OK`, request ID `cebf5445-7923-4a87-8953-124f824914ef`
+- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `3076ms`, round-trip latency `3822ms`
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-production.latest.md`
 
@@ -190,12 +190,20 @@ Last updated: 2026-04-29
   - round-trip latency: `2715ms`
 - Latest production provider-backed evidence:
   - Worker version: `3bcc4095-53d2-4bf3-a5a2-5fee367f8a7d`
-  - health request ID: `37cc6ca5-b89a-4f25-a620-9b689c781066`
-  - bootstrap request ID: `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
-  - analyze request ID: `d9238d01-bde9-4d5b-bcd8-7d498be76162`
+  - health request ID: `e46ed2f5-0bd1-48bb-ab37-2c95f0f28821`
+  - bootstrap request ID: `6dafa3da-9abb-4c4d-b9c3-4669c924a056`
+  - analyze request ID: `cebf5445-7923-4a87-8953-124f824914ef`
   - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
-  - provider latency: `2086ms`
-  - round-trip latency: `2870ms`
+  - provider latency: `3076ms`
+  - round-trip latency: `3822ms`
+- Reconnected `charlie的iPhone`; `xcrun xcdevice list` reports `available: true`, `interface: usb`, iOS `26.3.1`, and `xcrun devicectl device info details` reports Developer Mode enabled, pairing state `paired`, and transport `wired`.
+- Confirmed the Mac has one Apple Development signing identity: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- Attempted a direct signed Release device build with:
+  - `SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=00008130-000A001A1178001C' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build`
+- The device install path is now blocked by Apple signing account/provisioning, not by device connectivity:
+  - `No Account for Team "SBSJ3MX9GZ". Add a new account in Accounts settings or verify that your accounts have valid credentials.`
+  - `No profiles for 'dev.guidepup.visionassist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'dev.guidepup.visionassist'.`
+- Rechecked EAS auth with `npx --yes eas-cli whoami`; it still returns `Not logged in`, so an EAS installable build link cannot be created from this machine yet.
 
 ## Blockers
 
@@ -203,7 +211,6 @@ Last updated: 2026-04-29
 - Apple Team ID and App Store Connect App ID are still unresolved.
 - Store copyright holder is still unresolved.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
-- Real device validation has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
+- Real device app install has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
-- The immediate blocker for real blind-user validation is the offline device state from `xcrun xctrace list devices`; until the iPhone reconnects, the branch cannot prove end-to-end spoken commands, spoken settings persistence, hardware haptics, or VoiceOver announcement behavior on real hardware.
-- The concrete 2026-04-09 blocker is `com.apple.dt.deviceprep` error `-27`: Xcode can only browse for the iPhone over the local network, and there is no active USB connection visible on this Mac. Real blind-user validation cannot proceed until the phone is unlocked, trusted, Developer Mode-enabled, and either connected by cable or reachable on the same LAN for wireless debugging.
+- The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `dev.guidepup.visionassist`.
