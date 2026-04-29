@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-09
+Last updated: 2026-04-29
 
 ## Public site
 
@@ -17,15 +17,14 @@ Last updated: 2026-04-09
 - Current Worker version: `358c7f85-8266-406c-b343-7e1679f900db`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
-  - `OPENAI_API_KEY`: still missing
+  - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
-  - `npm run verify:secrets:staging`: fails with `Missing required Cloudflare secrets for staging: OPENAI_API_KEY.`
-  - `npm run check:staging`: now fails before deploy on the same missing secret
+  - `npm run verify:secrets:staging`: passes
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `6d046c0b-9ada-42cf-bf66-46ee82e689c8`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `cc9fd5e7-84ee-417c-bcb5-72d27eb0776c`
-  - `/v1/vision/analyze`: `503 provider_error`, request ID `279e25d7-a56c-4af5-bd74-ecc87f33526b`
-- Analyze result: explicit safe `STOP` fallback from `openai-compatible` / `gpt-4.1-mini`, prompt version `2026-03-31.v1`, not provider-backed, because staging `OPENAI_API_KEY` is still unset
+  - `/health`: `200 OK`, request ID `69d63c1b-226f-4cbc-b9e1-826475c4ce78`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `4929f890-8df9-421a-8fc3-5ed2c00dccef`
+  - `/v1/vision/analyze`: `200 OK`, request ID `814e648d-fd61-42e7-8c10-b2235307cb89`
+- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-mini-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `3400ms`, round-trip latency `4309ms`
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.md`
 
@@ -36,15 +35,14 @@ Last updated: 2026-04-09
 - Current Worker version: `fedabdcc-7c07-415d-825f-b4782f76ddc9`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
-  - `OPENAI_API_KEY`: still missing
+  - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
-  - `npm run verify:secrets:production`: fails with `Missing required Cloudflare secrets for production: OPENAI_API_KEY.`
-  - `npm run check`: now fails before deploy on the same missing secret
+  - `npm run verify:secrets:production`: passes
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `f98c9729-5e28-42b2-abcb-80305fc358f6`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `431ef41d-a856-44ac-81f8-74654bbe1443`
-  - `/v1/vision/analyze`: `503 provider_error`, request ID `51e5fcd8-e1ea-4eff-b180-fa5c033757a1`
-- Analyze result: explicit safe `STOP` fallback from `openai-compatible` / `gpt-4.1-mini`, prompt version `2026-03-31.v1`, not provider-backed, because production `OPENAI_API_KEY` is still unset
+  - `/health`: `200 OK`, request ID `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `feb57968-63c7-438b-a414-a439409d3938`
+  - `/v1/vision/analyze`: `200 OK`, request ID `3c96d11d-7804-40f8-b894-36732872a5ce`
+- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-mini-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `3704ms`, round-trip latency `4517ms`
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-production.latest.md`
 
@@ -62,9 +60,9 @@ Last updated: 2026-04-09
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
-  - `preview`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, with a warning that staging smoke is still `safe-fallback` because `OPENAI_API_KEY` is missing
-  - `testflight`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and production smoke still showing `safe-fallback`
-  - `store`: blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and production smoke still showing `safe-fallback`
+  - `preview`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`; staging smoke is now provider-backed
+  - `testflight`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`; production provider-backed smoke gate is now satisfied
+  - `store`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`; production provider-backed smoke gate is now satisfied
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
@@ -174,13 +172,33 @@ Last updated: 2026-04-09
   - hardware haptics
   - native camera capture on device
 
+## Actions taken on 2026-04-29
+
+- Set `OPENAI_API_KEY` as a Wrangler secret for both `staging` and `production`.
+- Re-ran `npm run verify:secrets:staging`; it passed for `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY`.
+- Re-ran `npm run verify:secrets:production`; it passed for `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY`.
+- Re-ran `npm run smoke:staging`; staging `/v1/vision/analyze` returned `200 OK` with provider-backed execution.
+- Re-ran `npm run smoke:production`; production `/v1/vision/analyze` returned `200 OK` with provider-backed execution.
+- Latest staging provider-backed evidence:
+  - health request ID: `69d63c1b-226f-4cbc-b9e1-826475c4ce78`
+  - bootstrap request ID: `4929f890-8df9-421a-8fc3-5ed2c00dccef`
+  - analyze request ID: `814e648d-fd61-42e7-8c10-b2235307cb89`
+  - provider/model: `openai-compatible` / `gpt-4.1-mini-2025-04-14`
+  - provider latency: `3400ms`
+  - round-trip latency: `4309ms`
+- Latest production provider-backed evidence:
+  - health request ID: `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
+  - bootstrap request ID: `feb57968-63c7-438b-a414-a439409d3938`
+  - analyze request ID: `3c96d11d-7804-40f8-b894-36732872a5ce`
+  - provider/model: `openai-compatible` / `gpt-4.1-mini-2025-04-14`
+  - provider latency: `3704ms`
+  - round-trip latency: `4517ms`
+
 ## Blockers
 
 - iOS bundle identifier is still unresolved.
 - Apple Team ID and App Store Connect App ID are still unresolved.
 - Store copyright holder is still unresolved.
-- Staging `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and staging deploy verification now fails before deploy.
-- Production `OPENAI_API_KEY` is still missing, so `/v1/vision/analyze` is not provider-backed yet and production deploy verification now fails before deploy. Without a real provider key or a fully configured AI Gateway path, the production backend only returns the safe `STOP` fallback instead of real scene guidance.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
 - Real device validation has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.

@@ -1,6 +1,6 @@
 # Guide Pup Smoke Results
 
-Date: 2026-04-02
+Date: 2026-04-29
 Environment: production
 Operator: Codex
 
@@ -12,24 +12,24 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `f98c9729-5e28-42b2-abcb-80305fc358f6`
+  - request id: `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
   - provider: `openai-compatible`
   - model: `gpt-4.1-mini`
   - prompt version: `2026-03-31.v1`
-  - latency: `161ms`
+  - latency: `165ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `431ef41d-a856-44ac-81f8-74654bbe1443`
-  - device id suffix: `76919543`
-  - latency: `31ms`
+  - request id: `feb57968-63c7-438b-a414-a439409d3938`
+  - device id suffix: `599cca01`
+  - latency: `59ms`
 - `POST /v1/vision/analyze`
-  - status: `503 Service Unavailable`
-  - request id: `51e5fcd8-e1ea-4eff-b180-fa5c033757a1`
-  - execution path: `safe-fallback`
+  - status: `200 OK`
+  - request id: `3c96d11d-7804-40f8-b894-36732872a5ce`
+  - execution path: `provider-backed`
   - provider: `openai-compatible`
-  - model: `gpt-4.1-mini`
+  - model: `gpt-4.1-mini-2025-04-14`
   - prompt version: `2026-03-31.v1`
-  - request latency: `732ms`
-  - service latency: `661ms`
-  - fallback reason: `provider_error`
-  - message: `Stop. Vision guidance is unavailable.`
+  - request latency: `4517ms`
+  - service latency: `3704ms`
+  - fallback reason: `none`
+  - message: `Stop. Path looks unsafe.`

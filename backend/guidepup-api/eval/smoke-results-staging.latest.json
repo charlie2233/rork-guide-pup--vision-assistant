@@ -1,35 +1,34 @@
 {
   "analyze": {
-    "confidence": 0,
+    "confidence": 0.45,
     "direction": "stop",
-    "errorCode": "provider_error",
-    "errorMessage": "Vision guidance is temporarily unavailable.",
-    "executionPath": "safe-fallback",
-    "fallbackReason": "provider_error",
+    "executionPath": "provider-backed",
     "hazardLevel": "high",
-    "latencyMs": 664,
-    "message": "Stop. Vision guidance is unavailable.",
-    "model": "gpt-4.1-mini",
+    "latencyMs": 3400,
+    "message": "Stop. Path looks unsafe.",
+    "model": "gpt-4.1-mini-2025-04-14",
     "promptVersion": "2026-03-31.v1",
     "provider": "openai-compatible",
-    "requestId": "279e25d7-a56c-4af5-bd74-ecc87f33526b",
-    "roundTripLatencyMs": 745,
-    "statusCode": 503,
-    "statusText": "Service Unavailable"
+    "requestId": "814e648d-fd61-42e7-8c10-b2235307cb89",
+    "roundTripLatencyMs": 4309,
+    "sceneDescription": "Sidewalk blocked by a parked vehicle and a person standing close ahead",
+    "statusCode": 200,
+    "surfaceType": "sidewalk",
+    "statusText": "OK"
   },
   "apiUrl": "https://guidepup-api-staging.charliehan-lifepage.workers.dev",
   "bootstrap": {
-    "deviceIdSuffix": "aa825c2b",
-    "expiresAt": "2026-04-03T00:05:43.000Z",
+    "deviceIdSuffix": "51e6abe8",
+    "expiresAt": "2026-04-30T18:40:17.000Z",
     "promptVersion": "2026-03-31.v1",
     "rateLimitPerMinute": 20,
-    "requestId": "cc9fd5e7-84ee-417c-bcb5-72d27eb0776c",
-    "roundTripLatencyMs": 32,
+    "requestId": "4929f890-8df9-421a-8fc3-5ed2c00dccef",
+    "roundTripLatencyMs": 63,
     "statusCode": 200,
     "statusText": "OK"
   },
   "environment": "staging",
-  "generatedAt": "2026-04-02T00:05:44.086Z",
+  "generatedAt": "2026-04-29T18:40:21.796Z",
   "health": {
     "benchmarkProviders": [
       "openai-compatible"
@@ -38,11 +37,11 @@
     "defaultProvider": "openai-compatible",
     "environment": "staging",
     "promptVersion": "2026-03-31.v1",
-    "requestId": "6d046c0b-9ada-42cf-bf66-46ee82e689c8",
-    "roundTripLatencyMs": 162,
+    "requestId": "69d63c1b-226f-4cbc-b9e1-826475c4ce78",
+    "roundTripLatencyMs": 169,
     "statusCode": 200,
     "statusText": "OK"
   },
   "operator": "Codex",
-  "providerBacked": false
+  "providerBacked": true
 }
