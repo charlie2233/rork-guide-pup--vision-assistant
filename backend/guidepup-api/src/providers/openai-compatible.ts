@@ -14,7 +14,7 @@ type OpenAIChatCompletionResponse = {
 };
 
 function getModel(env: Env) {
-  return env.OPENAI_MODEL || "gpt-4.1-mini";
+  return env.OPENAI_MODEL || "gpt-4.1";
 }
 
 function extractTextContent(content: string | Array<{ text?: string; type?: string }> | undefined) {

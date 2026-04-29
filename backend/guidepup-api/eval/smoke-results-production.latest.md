@@ -12,24 +12,24 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
+  - request id: `37cc6ca5-b89a-4f25-a620-9b689c781066`
   - provider: `openai-compatible`
-  - model: `gpt-4.1-mini`
+  - model: `gpt-4.1`
   - prompt version: `2026-03-31.v1`
-  - latency: `165ms`
+  - latency: `371ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `feb57968-63c7-438b-a414-a439409d3938`
-  - device id suffix: `599cca01`
-  - latency: `59ms`
+  - request id: `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
+  - device id suffix: `5bddfd1a`
+  - latency: `58ms`
 - `POST /v1/vision/analyze`
   - status: `200 OK`
-  - request id: `3c96d11d-7804-40f8-b894-36732872a5ce`
+  - request id: `d9238d01-bde9-4d5b-bcd8-7d498be76162`
   - execution path: `provider-backed`
   - provider: `openai-compatible`
-  - model: `gpt-4.1-mini-2025-04-14`
+  - model: `gpt-4.1-2025-04-14`
   - prompt version: `2026-03-31.v1`
-  - request latency: `4517ms`
-  - service latency: `3704ms`
+  - request latency: `2870ms`
+  - service latency: `2086ms`
   - fallback reason: `none`
-  - message: `Stop. Path looks unsafe.`
+  - message: `Stop. I need a clearer view.`

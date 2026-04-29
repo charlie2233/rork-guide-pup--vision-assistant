@@ -14,17 +14,17 @@ Last updated: 2026-04-29
 
 - Worker env: `staging`
 - Live API URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
-- Current Worker version: `358c7f85-8266-406c-b343-7e1679f900db`
+- Current Worker version: `eafec4a6-c543-4406-9c13-d23077034321`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
   - `npm run verify:secrets:staging`: passes
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `69d63c1b-226f-4cbc-b9e1-826475c4ce78`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `4929f890-8df9-421a-8fc3-5ed2c00dccef`
-  - `/v1/vision/analyze`: `200 OK`, request ID `814e648d-fd61-42e7-8c10-b2235307cb89`
-- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-mini-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `3400ms`, round-trip latency `4309ms`
+  - `/health`: `200 OK`, request ID `c9aa8993-902d-4dd8-9f58-92006449dd24`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `2b3dde3a-4543-489a-88e2-f672faf5b3d7`
+  - `/v1/vision/analyze`: `200 OK`, request ID `1641e817-2f16-40ad-9167-82832db82c9e`
+- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `1989ms`, round-trip latency `2715ms`
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-staging.latest.md`
 
@@ -32,17 +32,17 @@ Last updated: 2026-04-29
 
 - Worker env: `production`
 - Live API URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
-- Current Worker version: `fedabdcc-7c07-415d-825f-b4782f76ddc9`
+- Current Worker version: `3bcc4095-53d2-4bf3-a5a2-5fee367f8a7d`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
   - `npm run verify:secrets:production`: passes
 - Latest smoke run:
-  - `/health`: `200 OK`, request ID `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
-  - `/v1/device/bootstrap`: `200 OK`, request ID `feb57968-63c7-438b-a414-a439409d3938`
-  - `/v1/vision/analyze`: `200 OK`, request ID `3c96d11d-7804-40f8-b894-36732872a5ce`
-- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-mini-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `3704ms`, round-trip latency `4517ms`
+  - `/health`: `200 OK`, request ID `37cc6ca5-b89a-4f25-a620-9b689c781066`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
+  - `/v1/vision/analyze`: `200 OK`, request ID `d9238d01-bde9-4d5b-bcd8-7d498be76162`
+- Analyze result: provider-backed response from `openai-compatible` / `gpt-4.1-2025-04-14`, prompt version `2026-03-31.v1`, provider latency `2086ms`, round-trip latency `2870ms`
 - Latest machine artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 - Latest markdown artifact: `backend/guidepup-api/eval/smoke-results-production.latest.md`
 
@@ -179,20 +179,23 @@ Last updated: 2026-04-29
 - Re-ran `npm run verify:secrets:production`; it passed for `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY`.
 - Re-ran `npm run smoke:staging`; staging `/v1/vision/analyze` returned `200 OK` with provider-backed execution.
 - Re-ran `npm run smoke:production`; production `/v1/vision/analyze` returned `200 OK` with provider-backed execution.
+- Upgraded the default OpenAI-compatible shipping model from `gpt-4.1-mini` to `gpt-4.1` in `wrangler.jsonc`, regenerated Worker types, and deployed the change to staging and production.
 - Latest staging provider-backed evidence:
-  - health request ID: `69d63c1b-226f-4cbc-b9e1-826475c4ce78`
-  - bootstrap request ID: `4929f890-8df9-421a-8fc3-5ed2c00dccef`
-  - analyze request ID: `814e648d-fd61-42e7-8c10-b2235307cb89`
-  - provider/model: `openai-compatible` / `gpt-4.1-mini-2025-04-14`
-  - provider latency: `3400ms`
-  - round-trip latency: `4309ms`
+  - Worker version: `eafec4a6-c543-4406-9c13-d23077034321`
+  - health request ID: `c9aa8993-902d-4dd8-9f58-92006449dd24`
+  - bootstrap request ID: `2b3dde3a-4543-489a-88e2-f672faf5b3d7`
+  - analyze request ID: `1641e817-2f16-40ad-9167-82832db82c9e`
+  - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
+  - provider latency: `1989ms`
+  - round-trip latency: `2715ms`
 - Latest production provider-backed evidence:
-  - health request ID: `67c0917c-ef78-45f1-b344-c1ce5f73abaf`
-  - bootstrap request ID: `feb57968-63c7-438b-a414-a439409d3938`
-  - analyze request ID: `3c96d11d-7804-40f8-b894-36732872a5ce`
-  - provider/model: `openai-compatible` / `gpt-4.1-mini-2025-04-14`
-  - provider latency: `3704ms`
-  - round-trip latency: `4517ms`
+  - Worker version: `3bcc4095-53d2-4bf3-a5a2-5fee367f8a7d`
+  - health request ID: `37cc6ca5-b89a-4f25-a620-9b689c781066`
+  - bootstrap request ID: `9241d4d3-6dac-4ff5-9319-193a19fe3acb`
+  - analyze request ID: `d9238d01-bde9-4d5b-bcd8-7d498be76162`
+  - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
+  - provider latency: `2086ms`
+  - round-trip latency: `2870ms`
 
 ## Blockers
 

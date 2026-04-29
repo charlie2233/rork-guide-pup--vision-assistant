@@ -7,7 +7,7 @@ export function getVisionProvider(env: Env) {
 
 export function getProviderSummary(env: Env) {
   return {
-    model: env.OPENAI_MODEL || "gpt-4.1-mini",
+    model: env.OPENAI_MODEL || "gpt-4.1",
     provider: "openai-compatible",
   };
 }
