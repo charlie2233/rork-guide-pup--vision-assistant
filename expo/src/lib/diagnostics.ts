@@ -92,6 +92,7 @@ export interface DiagnosticsAnalyzeEvent {
   detail?: "low" | "high";
   direction?: DiagnosticsAnalyzeDirection;
   error?: string;
+  fallbackReason?: string;
   hazardLevel?: DiagnosticsHazardLevel;
   id: string;
   latencyMs?: number;
@@ -416,6 +417,7 @@ export function recordAnalyzeEvent(
     confidence: input.confidence,
     direction: input.direction,
     error: sanitizeMessage(input.error, 120),
+    fallbackReason: sanitizeMessage(input.fallbackReason, 120),
     id: input.id || createEventId(),
     latencyMs: input.latencyMs,
     message: sanitizeMessage(input.message, 160),

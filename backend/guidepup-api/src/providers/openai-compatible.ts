@@ -1,4 +1,4 @@
-import { buildVisionSystemPrompt, buildVisionUserPrompt } from "../lib/prompts";
+import { buildVisionSystemPrompt, buildVisionUserPrompt, ProviderVisionJsonSchema } from "../lib/prompts";
 import { logWarn } from "../lib/logging";
 import { ProviderVisionSchema } from "../schemas/vision";
 import { getOpenAIProviderAttempts } from "./config";
@@ -8,13 +8,22 @@ type OpenAIChatCompletionResponse = {
   choices?: Array<{
     message?: {
       content?: string | Array<{ text?: string; type?: string }>;
+      refusal?: string;
     };
   }>;
   model?: string;
 };
 
 function getModel(env: Env) {
-  return env.OPENAI_MODEL || "gpt-4.1";
+  return env.OPENAI_MODEL || "gpt-5.5";
+}
+
+function getReasoningEffort(env: Env, model: string) {
+  if (!model.startsWith("gpt-5")) {
+    return undefined;
+  }
+
+  return env.OPENAI_REASONING_EFFORT || "low";
 }
 
 function extractTextContent(content: string | Array<{ text?: string; type?: string }> | undefined) {
@@ -41,8 +50,14 @@ function extractJsonObject(text: string) {
   return stripped.slice(firstBrace, lastBrace + 1);
 }
 
-async function analyzeWithAttempt(input: ProviderInput, attempt: ReturnType<typeof getOpenAIProviderAttempts>[number], model: string) {
+async function analyzeWithAttempt(
+  input: ProviderInput,
+  attempt: ReturnType<typeof getOpenAIProviderAttempts>[number],
+  model: string,
+  env: Env,
+) {
   const startedAt = Date.now();
+  const reasoningEffort = getReasoningEffort(env, model);
   const response = await fetch(`${attempt.baseUrl}${attempt.path}`, {
     method: "POST",
     headers: {
@@ -52,10 +67,15 @@ async function analyzeWithAttempt(input: ProviderInput, attempt: ReturnType<type
     body: JSON.stringify({
       model,
       response_format: {
-        type: "json_object",
+        type: "json_schema",
+        json_schema: {
+          name: "guidepup_navigation_vision",
+          strict: true,
+          schema: ProviderVisionJsonSchema,
+        },
       },
-      temperature: 0.1,
-      max_tokens: 500,
+      max_completion_tokens: 700,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       messages: [
         {
           role: "system",
@@ -66,7 +86,7 @@ async function analyzeWithAttempt(input: ProviderInput, attempt: ReturnType<type
           content: [
             {
               type: "text",
-              text: buildVisionUserPrompt(),
+              text: buildVisionUserPrompt(input),
             },
             {
               type: "image_url",
@@ -87,7 +107,11 @@ async function analyzeWithAttempt(input: ProviderInput, attempt: ReturnType<type
   }
 
   const payload = (await response.json()) as OpenAIChatCompletionResponse;
-  const text = extractTextContent(payload.choices?.[0]?.message?.content);
+  const message = payload.choices?.[0]?.message;
+  if (message?.refusal) {
+    throw new Error(`Provider refused vision analysis: ${message.refusal.slice(0, 160)}`);
+  }
+  const text = extractTextContent(message?.content);
   const parsed = ProviderVisionSchema.parse(JSON.parse(extractJsonObject(text)));
 
   return {
@@ -113,7 +137,7 @@ export class OpenAICompatibleProvider implements VisionProvider {
 
     for (const attempt of attempts) {
       try {
-        const result = await analyzeWithAttempt(input, attempt, this.model);
+        const result = await analyzeWithAttempt(input, attempt, this.model, env);
         return {
           ...result,
           provider: this.name,

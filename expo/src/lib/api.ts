@@ -14,6 +14,7 @@ import { addBreadcrumb, setSentryTag } from "./sentry";
 export const VisionAnalyzeResponseSchema = z.object({
   confidence: z.number().min(0).max(1),
   direction: z.enum(["turn-left", "turn-right", "forward", "stop"]),
+  fallbackReason: z.string().nullable().optional(),
   hazardLevel: z.enum(["none", "low", "medium", "high"]),
   latencyMs: z.number().min(0),
   lighting: z.enum(["dark", "dim", "normal", "bright"]).optional(),
@@ -53,10 +54,15 @@ export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema> & {
 
 export type AnalyzeVisionPayload = {
   detail?: "low" | "high";
+  frameId?: string;
   imageBase64: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
+  nativePath?: "native-core" | "js-fallback";
+  priorGuidance?: string;
+  sessionId?: string;
   sourceHeight?: number;
   sourceWidth?: number;
+  timestampMs?: number;
 };
 
 async function fetchWithTimeout(url: string, init: RequestInit) {
@@ -114,6 +120,7 @@ function recordAnalyzeTelemetry(
     direction?: VisionAnalyzeResponse["direction"];
     error?: string;
     hazardLevel?: VisionAnalyzeResponse["hazardLevel"];
+    fallbackReason?: string | null;
     latencyMs?: number;
     message?: string;
     model?: string;
@@ -137,6 +144,7 @@ function recordAnalyzeTelemetry(
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     requestId: sanitizeMessage(input.requestId, 80),
     provider: sanitizeMessage(input.provider, 64),
+    fallbackReason: sanitizeMessage(input.fallbackReason ?? undefined, 120),
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
@@ -315,11 +323,16 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       body: JSON.stringify({
         appVersion: undefined,
         detail: payload.detail || "low",
+        frameId: payload.frameId,
         imageBase64: payload.imageBase64,
         mimeType: payload.mimeType,
+        nativePath: payload.nativePath,
         platform: getPlatform(),
+        priorGuidance: payload.priorGuidance,
+        sessionId: payload.sessionId,
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,
+        timestampMs: payload.timestampMs,
       }),
     });
 
@@ -362,6 +375,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
           detail: payload.detail,
           direction: safeResponse.direction,
           error: parsedError.data.error.message,
+          fallbackReason: safeResponse.fallbackReason,
           hazardLevel: safeResponse.hazardLevel,
           latencyMs,
           message: safeResponse.message,
@@ -461,6 +475,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       requestId,
       provider: result.provider,
       safeReason: result.direction === "stop" ? "direction-stop" : result.obstacle ? "obstacle-detected" : undefined,
+      fallbackReason: result.fallbackReason,
       sceneDescription: result.sceneDescription,
       sourceHeight: payload.sourceHeight,
       sourceWidth: payload.sourceWidth,

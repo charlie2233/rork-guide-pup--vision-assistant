@@ -15,12 +15,17 @@ export const ObstacleSchema = z.object({
 
 export const AnalyzeVisionRequestSchema = z.object({
   appVersion: z.string().max(64).optional(),
+  frameId: z.string().min(1).max(80).optional(),
   detail: z.enum(["low", "high"]).default("low"),
   locale: z.string().max(32).optional(),
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
+  nativePath: z.enum(["native-core", "js-fallback"]).optional(),
   platform: z.enum(["ios", "android", "web", "unknown"]).optional(),
+  priorGuidance: z.string().max(280).optional(),
+  sessionId: z.string().min(1).max(80).optional(),
   sourceHeight: z.number().int().positive().optional(),
   sourceWidth: z.number().int().positive().optional(),
+  timestampMs: z.number().int().positive().optional(),
   imageBase64: z.string().min(128),
 });
 
@@ -44,6 +49,7 @@ export const VisionAnalyzeResponseSchema = z.object({
   direction: DirectionSchema,
   hazardLevel: HazardLevelSchema,
   latencyMs: z.number().min(0),
+  fallbackReason: z.string().max(120).nullable().optional(),
   lighting: LightingSchema.optional(),
   message: z.string().min(1).max(160),
   model: z.string().min(1).max(128),

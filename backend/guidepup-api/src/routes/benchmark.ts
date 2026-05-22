@@ -76,11 +76,14 @@ export async function handleBenchmark(request: Request, env: Env, requestId: str
       try {
         const providerResult = await provider.analyze({
           detail: body.detail,
+          frameId: `benchmark-${sampleIndex + 1}`,
           imageBase64: body.imageBase64,
           mimeType: body.mimeType,
           promptVersion,
+          sessionId: `benchmark-${requestId}`,
           sourceHeight: body.sourceHeight,
           sourceWidth: body.sourceWidth,
+          timestampMs: Date.now(),
         }, env);
 
         const normalized = normalizeProviderVision(providerResult.parsed, {

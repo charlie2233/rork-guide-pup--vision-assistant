@@ -74,7 +74,7 @@ export async function handleAnalyze(
       model: providerSummary.model,
       promptVersion,
       provider: providerSummary.provider,
-    }, "Stop. Guidance is cooling down.");
+    }, "Stop. Guidance is cooling down.", "rate-limited");
 
     logWarn("vision.rate_limited", {
       deviceId,
@@ -106,11 +106,16 @@ export async function handleAnalyze(
   try {
     const providerResult = await provider.analyze({
       detail: body.detail,
+      frameId: body.frameId,
       imageBase64: body.imageBase64,
       mimeType: body.mimeType,
+      nativePath: body.nativePath,
       promptVersion,
+      priorGuidance: body.priorGuidance,
+      sessionId: body.sessionId,
       sourceHeight: body.sourceHeight,
       sourceWidth: body.sourceWidth,
+      timestampMs: body.timestampMs,
     }, env);
 
     const normalized = normalizeProviderVision(providerResult.parsed, {
@@ -149,7 +154,7 @@ export async function handleAnalyze(
       model: providerSummary.model,
       promptVersion,
       provider: providerSummary.provider,
-    }, "Stop. Vision guidance is unavailable.");
+    }, "Stop. Vision guidance is unavailable.", "provider-error");
 
     logError("vision.analyze_failed", {
       deviceId,

@@ -28,6 +28,9 @@ export interface VisionAIResult {
 
 export interface AnalyzeFrameOptions {
   detail?: "low" | "high";
+  frameId?: string;
+  priorGuidance?: string;
+  sessionId?: string;
 }
 
 async function preprocessFrame(input: AnalyzeFrameInput) {
@@ -76,10 +79,15 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
 
     const analysis = await analyzeVision({
       detail,
+      frameId: options?.frameId,
       imageBase64: prepared.base64,
       mimeType: prepared.mimeType,
+      nativePath: frame.source,
+      priorGuidance: options?.priorGuidance,
+      sessionId: options?.sessionId,
       sourceHeight: prepared.height,
       sourceWidth: prepared.width,
+      timestampMs: frame.timestampMs,
     });
 
     return {

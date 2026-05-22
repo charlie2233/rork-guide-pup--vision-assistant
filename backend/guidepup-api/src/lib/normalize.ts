@@ -126,10 +126,12 @@ function buildMessage(response: Omit<VisionAnalyzeResponse, "message">, raw: Pro
 export function createSafeFallbackResponse(
   metadata: NormalizeMetadata,
   message = "Stop. Vision guidance is unavailable.",
+  fallbackReason = "safe-fallback",
 ) {
   return VisionAnalyzeResponseSchema.parse({
     confidence: 0,
     direction: "stop",
+    fallbackReason,
     hazardLevel: "high",
     latencyMs: metadata.latencyMs,
     message,
@@ -150,6 +152,7 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
   const normalizedBase: Omit<VisionAnalyzeResponse, "message"> = {
     confidence,
     direction,
+    fallbackReason: null,
     hazardLevel,
     latencyMs: metadata.latencyMs,
     lighting: raw.lighting,

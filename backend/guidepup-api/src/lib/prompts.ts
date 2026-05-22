@@ -1,4 +1,15 @@
-const DEFAULT_PROMPT_VERSION = "2026-03-31.v1";
+const DEFAULT_PROMPT_VERSION = "2026-05-22.v1";
+
+type VisionPromptInput = {
+  detail?: "low" | "high";
+  frameId?: string;
+  nativePath?: "native-core" | "js-fallback";
+  priorGuidance?: string;
+  sessionId?: string;
+  sourceHeight?: number;
+  sourceWidth?: number;
+  timestampMs?: number;
+};
 
 export function getPromptVersion(env: Env) {
   return env.PROMPT_VERSION || DEFAULT_PROMPT_VERSION;
@@ -11,28 +22,130 @@ export function buildVisionSystemPrompt(promptVersion: string) {
     "Assess whether a person can move forward safely while holding a phone camera at chest height.",
     "Look carefully for stairs, curbs, drop-offs, ledges, vehicles, bikes, wet floors, blocked sidewalks, and uncertain walkability.",
     "If the scene is ambiguous, low-quality, dark, blurry, backlit, or partially occluded, recommend stop.",
-    "Return JSON only. No markdown. No prose outside the JSON object.",
-    "Required JSON shape:",
-    "{",
-    '  "recommendedDirection": "turn-left|turn-right|forward|stop",',
-    '  "confidence": 0.0,',
-    '  "hazardLevel": "none|low|medium|high",',
-    '  "sceneDescription": "short accessibility description",',
-    '  "shortMessage": "short spoken guidance",',
-    '  "surfaceType": "sidewalk|hallway|stairs|grass|crosswalk|unknown",',
-    '  "lighting": "dark|dim|normal|bright",',
-    '  "walkability": "clear|caution|uncertain",',
-    '  "pathClear": true,',
-    '  "criticalHazards": ["stairs", "curb", "drop-off", "vehicle"],',
-    '  "obstacles": [{"type":"person","position":"left|center|right","distance":"very-close|close|medium|far","confidence":0.0}]',
-    "}",
+    "Return only the structured fields requested by the API schema.",
+    "Use notes for brief internal rationale, not spoken user guidance.",
   ].join("\n");
 }
 
-export function buildVisionUserPrompt() {
+export const ProviderVisionJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "recommendedDirection",
+    "confidence",
+    "hazardLevel",
+    "sceneDescription",
+    "shortMessage",
+    "surfaceType",
+    "lighting",
+    "walkability",
+    "pathClear",
+    "criticalHazards",
+    "obstacles",
+    "notes",
+  ],
+  properties: {
+    recommendedDirection: {
+      type: "string",
+      enum: ["turn-left", "turn-right", "forward", "stop"],
+    },
+    confidence: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+    },
+    hazardLevel: {
+      type: "string",
+      enum: ["none", "low", "medium", "high"],
+    },
+    sceneDescription: {
+      type: "string",
+      maxLength: 280,
+    },
+    shortMessage: {
+      type: "string",
+      maxLength: 120,
+    },
+    surfaceType: {
+      type: "string",
+      maxLength: 80,
+    },
+    lighting: {
+      type: "string",
+      enum: ["dark", "dim", "normal", "bright"],
+    },
+    walkability: {
+      type: "string",
+      enum: ["clear", "caution", "uncertain"],
+    },
+    pathClear: {
+      type: "boolean",
+    },
+    criticalHazards: {
+      type: "array",
+      maxItems: 6,
+      items: {
+        type: "string",
+        maxLength: 64,
+      },
+    },
+    obstacles: {
+      type: "array",
+      maxItems: 6,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["type", "position", "distance", "confidence"],
+        properties: {
+          type: {
+            type: "string",
+            maxLength: 80,
+          },
+          position: {
+            type: "string",
+            enum: ["left", "center", "right"],
+          },
+          distance: {
+            type: "string",
+            enum: ["very-close", "close", "medium", "far"],
+          },
+          confidence: {
+            type: "number",
+            minimum: 0,
+            maximum: 1,
+          },
+        },
+      },
+    },
+    notes: {
+      type: "string",
+      maxLength: 280,
+    },
+  },
+} as const;
+
+function buildCompactFrameContext(input?: VisionPromptInput) {
+  if (!input) {
+    return "{}";
+  }
+
+  return JSON.stringify({
+    detail: input.detail,
+    frameId: input.frameId,
+    nativePath: input.nativePath,
+    priorGuidance: input.priorGuidance,
+    sessionId: input.sessionId,
+    sourceHeight: input.sourceHeight,
+    sourceWidth: input.sourceWidth,
+    timestampMs: input.timestampMs,
+  });
+}
+
+export function buildVisionUserPrompt(input?: VisionPromptInput) {
   return [
     "Analyze this single camera frame for safe pedestrian navigation.",
     "Keep the spoken message short enough for real-time audio guidance.",
     "Only recommend forward if the path looks confidently walkable.",
+    `Compact frame context: ${buildCompactFrameContext(input)}`,
   ].join(" ");
 }

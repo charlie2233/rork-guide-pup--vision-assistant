@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-04-29
+Last updated: 2026-05-22
 
 ## Public site
 
@@ -214,3 +214,26 @@ Last updated: 2026-04-29
 - Real device app install has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
 - The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `dev.guidepup.visionassist`.
+
+## Actions taken on 2026-05-22
+
+- Re-ran live staging smoke:
+  - `/health`: `200 OK`, request ID `1135d81c-65d5-4910-af55-ec9ed7932869`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `6985c962-725b-4305-b316-2e923adb2bd8`
+  - `/v1/vision/analyze`: `200 OK`, request ID `372a702d-de22-4df9-ad74-19ef7d8b7de3`
+  - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
+  - execution path: `provider-backed`
+- Re-ran live production smoke:
+  - `/health`: `200 OK`, request ID `f8abcbf4-16e5-4965-8c6f-fe586c550bb7`
+  - `/v1/device/bootstrap`: `200 OK`, request ID `bc18b829-1200-4bee-a9f0-839010435a5a`
+  - `/v1/vision/analyze`: `200 OK`, request ID `09ff3bf0-1ab7-4fdd-a525-4007328cc731`
+  - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
+  - execution path: `provider-backed`
+- Prepared the Worker code for strict JSON Schema Structured Outputs, compact frame context, `fallbackReason`, `gpt-5.5`, low reasoning effort, and prompt version `2026-05-22.v1`.
+- Confirmed the new Worker contract has not been deployed yet because this shell lacks Cloudflare auth: `CLOUDFLARE_API_TOKEN` is missing and `npx wrangler whoami` reports `Not logged in`.
+- Rechecked physical iPhone status:
+  - `charlie的iPhone` is paired and Developer Mode is enabled, but Xcode reports it unavailable/offline.
+  - `xcrun xcdevice list` reports deviceprep code `-27` with LAN/cable recovery guidance.
+  - `system_profiler SPUSBDataType` does not show the iPhone on the USB bus.
+- Re-ran `npm run release:preflight:preview`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
+- Re-ran `npm run release:preflight:testflight`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.

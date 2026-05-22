@@ -1,6 +1,6 @@
 # Guide Pup Smoke Results
 
-Date: 2026-04-29
+Date: 2026-05-22
 Environment: staging
 Operator: Codex
 
@@ -12,24 +12,24 @@ Operator: Codex
 
 - `GET /health`
   - status: `200 OK`
-  - request id: `c9aa8993-902d-4dd8-9f58-92006449dd24`
+  - request id: `1135d81c-65d5-4910-af55-ec9ed7932869`
   - provider: `openai-compatible`
   - model: `gpt-4.1`
   - prompt version: `2026-03-31.v1`
-  - latency: `157ms`
+  - latency: `880ms`
 - `POST /v1/device/bootstrap`
   - status: `200 OK`
-  - request id: `2b3dde3a-4543-489a-88e2-f672faf5b3d7`
-  - device id suffix: `6ab0d41e`
-  - latency: `35ms`
+  - request id: `6985c962-725b-4305-b316-2e923adb2bd8`
+  - device id suffix: `8594a6fe`
+  - latency: `300ms`
 - `POST /v1/vision/analyze`
   - status: `200 OK`
-  - request id: `1641e817-2f16-40ad-9167-82832db82c9e`
+  - request id: `372a702d-de22-4df9-ad74-19ef7d8b7de3`
   - execution path: `provider-backed`
   - provider: `openai-compatible`
   - model: `gpt-4.1-2025-04-14`
   - prompt version: `2026-03-31.v1`
-  - request latency: `2715ms`
-  - service latency: `1989ms`
+  - request latency: `3654ms`
+  - service latency: `2953ms`
   - fallback reason: `none`
   - message: `Stop. I need a clearer view.`

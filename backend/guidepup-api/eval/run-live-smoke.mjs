@@ -103,7 +103,7 @@ function deriveAnalyzeSummary(result) {
       errorCode: undefined,
       errorMessage: undefined,
       executionPath: "provider-backed",
-      fallbackReason: undefined,
+      fallbackReason: result.json.fallbackReason ?? undefined,
       hazardLevel: result.json.hazardLevel,
       latencyMs: result.json.latencyMs,
       message: result.json.message,

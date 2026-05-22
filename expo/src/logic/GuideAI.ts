@@ -4,6 +4,7 @@ export interface GuideAIDirection {
   confidence?: number;
   direction: "turn-left" | "turn-right" | "forward" | "stop";
   hazardLevel?: "none" | "low" | "medium" | "high";
+  fallbackReason?: string | null;
   latencyMs?: number;
   obstacle: boolean;
   message: string;
@@ -356,6 +357,7 @@ export const GuideAI = {
     return {
       confidence: analysis.confidence,
       direction: smoothed.direction,
+      fallbackReason: analysis.fallbackReason,
       hazardLevel: analysis.hazardLevel,
       latencyMs: analysis.latencyMs,
       model: analysis.model,

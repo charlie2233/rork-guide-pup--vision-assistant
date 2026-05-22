@@ -101,6 +101,8 @@ export default function NavigationScreen() {
   const hasAnnouncedStartRef = useRef(false);
   const lastHandledTranscriptRef = useRef<string | null>(null);
   const lastSpokenMessageRef = useRef("Guidance started. Analyzing your surroundings.");
+  const guidanceSessionIdRef = useRef(`guidepup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+  const frameSequenceRef = useRef(0);
 
   const refreshNavigationCoreState = useCallback(
     async (partial?: {
@@ -422,6 +424,9 @@ export default function NavigationScreen() {
 
       const result = await GuideAI.analyzeWithVision(frame, {
         detail: settings.descriptionMode === "detailed" ? "high" : "low",
+        frameId: `${guidanceSessionIdRef.current}-${(frameSequenceRef.current += 1)}`,
+        priorGuidance: lastSpokenMessageRef.current,
+        sessionId: guidanceSessionIdRef.current,
       });
 
       if ((!guidingRef.current && mode === "guidance") || !result) {
