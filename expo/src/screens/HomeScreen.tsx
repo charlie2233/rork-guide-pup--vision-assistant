@@ -64,8 +64,9 @@ export default function HomeScreen() {
         return;
       }
 
+      lastHandledTranscriptRef.current = null;
       const state = await GuidePupVoiceControl.startCommandSession({
-        partialResults: false,
+        partialResults: true,
       }).catch(() => null);
 
       if (state) {
@@ -134,8 +135,10 @@ export default function HomeScreen() {
       return;
     }
 
-    speak("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
-    void startVoiceSession();
+    void speakVoiceResponse(
+      "Guide Pup is ready. Say start guidance to begin, or say help for commands.",
+      null,
+    );
 
     return () => {
       if (resumeListeningTimerRef.current) {
@@ -143,7 +146,7 @@ export default function HomeScreen() {
       }
       void GuidePupVoiceControl.stopCommandSession();
     };
-  }, [isReady, router, settings.hasCompletedOnboarding, speak, startVoiceSession]);
+  }, [isReady, router, settings.hasCompletedOnboarding, speakVoiceResponse]);
 
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {

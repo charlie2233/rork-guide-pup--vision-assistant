@@ -16,7 +16,7 @@ import { useVoice } from "@/src/components/VoiceAnnouncer";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { getConversationLaneState } from "@/src/lib/voiceConversation";
-import { buildVoiceHelpPrompt, parseVoiceCommand } from "@/src/lib/voiceCommands";
+import { buildVoiceHelpPrompt, isStopBargeInCommand, parseVoiceCommand } from "@/src/lib/voiceCommands";
 import {
   buildVoiceStatusSummary,
   describeHaptics,
@@ -79,7 +79,7 @@ function getStatusColors(tone: StatusTone) {
 export default function NavigationScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
-  const { speak, isSpeaking } = useVoice();
+  const { speak, stop: stopVoice, isSpeaking } = useVoice();
   const {
     settings,
     updateDescriptionMode,
@@ -101,6 +101,7 @@ export default function NavigationScreen() {
   const hasAnnouncedStartRef = useRef(false);
   const lastHandledTranscriptRef = useRef<string | null>(null);
   const lastSpokenMessageRef = useRef("Guidance started. Analyzing your surroundings.");
+  const lastStopHandledAtRef = useRef(0);
   const guidanceSessionIdRef = useRef(`guidepup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
   const frameSequenceRef = useRef(0);
 
@@ -173,8 +174,9 @@ export default function NavigationScreen() {
         return;
       }
 
+      lastHandledTranscriptRef.current = null;
       const state = await GuidePupVoiceControl.startCommandSession({
-        partialResults: false,
+        partialResults: true,
       }).catch(() => null);
 
       if (state) {
@@ -197,20 +199,26 @@ export default function NavigationScreen() {
     }
   }, []);
 
-  const speakCommandResponse = useCallback((message: string, rateOverride?: number) => {
+  const speakCommandResponse = useCallback((
+    message: string,
+    rateOverride?: number,
+    options?: { keepListeningDuringSpeech?: boolean },
+  ) => {
     lastSpokenMessageRef.current = message;
     speak(message, {
+      keepListeningDuringSpeech: options?.keepListeningDuringSpeech,
       rate: rateOverride ?? (
         settings.speechRate === "slow"
           ? 0.7
           : settings.speechRate === "fast"
             ? 1.2
-            : 0.9
+          : 0.9
       ),
     });
   }, [settings.speechRate, speak]);
 
   const pauseGuidanceForVoice = useCallback(() => {
+    lastHandledTranscriptRef.current = null;
     guidingRef.current = false;
     hasAnnouncedStartRef.current = false;
     setIsGuiding(false);
@@ -287,7 +295,9 @@ export default function NavigationScreen() {
       if (!hasAnnouncedStartRef.current) {
         hasAnnouncedStartRef.current = true;
         lastSpokenMessageRef.current = "Guidance started. Analyzing your surroundings.";
-        speak("Guidance started. Analyzing your surroundings.");
+        speak("Guidance started. Analyzing your surroundings.", {
+          keepListeningDuringSpeech: true,
+        });
         void GuidePupNavigationCore.announce("Guidance started. Analyzing your surroundings.");
       }
     }
@@ -454,8 +464,15 @@ export default function NavigationScreen() {
         : result.message;
 
       if (spokenGuidance && !isSpeakingRef.current) {
+        const canListenForStopBargeIn =
+          mode === "guidance" &&
+          result.direction !== "stop" &&
+          !result.obstacle &&
+          !/\b(stop|pause)\b/i.test(spokenGuidance);
         lastSpokenMessageRef.current = spokenGuidance;
-        speakCommandResponse(spokenGuidance);
+        speakCommandResponse(spokenGuidance, undefined, {
+          keepListeningDuringSpeech: canListenForStopBargeIn,
+        });
       }
 
       const hapticType: GuidePupNavigationCoreHapticType =
@@ -529,17 +546,41 @@ export default function NavigationScreen() {
 
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
-      if (!isFinal) {
-        return;
-      }
-
       const normalizedTranscript = transcript.trim().toLowerCase();
       if (!normalizedTranscript || normalizedTranscript === lastHandledTranscriptRef.current) {
         return;
       }
 
-      lastHandledTranscriptRef.current = normalizedTranscript;
       const intent = parseVoiceCommand(normalizedTranscript);
+      const recentlyHandledStop = Date.now() - lastStopHandledAtRef.current < 2000;
+
+      if (!isFinal) {
+        if (isStopBargeInCommand(normalizedTranscript) && guidingRef.current && !recentlyHandledStop) {
+          lastStopHandledAtRef.current = Date.now();
+          lastHandledTranscriptRef.current = normalizedTranscript;
+          stopVoice();
+          pauseGuidanceForVoice();
+          if (settings.hapticsEnabled) {
+            void GuidePupNavigationCore.playHaptic("stop");
+          }
+          speakCommandResponse("Guidance paused. Say start guidance to resume.");
+          recordVoiceSnapshot({
+            executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+            lastRecognizedCommand: "stop-guidance-partial",
+          });
+        }
+        return;
+      }
+
+      if (isSpeakingRef.current && intent !== "stop-guidance") {
+        return;
+      }
+
+      if (intent === "stop-guidance" && recentlyHandledStop) {
+        return;
+      }
+
+      lastHandledTranscriptRef.current = normalizedTranscript;
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
@@ -563,6 +604,8 @@ export default function NavigationScreen() {
             speakCommandResponse("Guidance is already paused.");
             return;
           }
+          lastStopHandledAtRef.current = Date.now();
+          stopVoice();
           pauseGuidanceForVoice();
           if (settings.hapticsEnabled) {
             void GuidePupNavigationCore.playHaptic("stop");
@@ -573,7 +616,7 @@ export default function NavigationScreen() {
           speakCommandResponse(lastSpokenMessageRef.current);
           return;
         case "help":
-          speakCommandResponse(buildVoiceHelpPrompt(true));
+          speakCommandResponse(buildVoiceHelpPrompt(guidingRef.current));
           return;
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
@@ -689,6 +732,7 @@ export default function NavigationScreen() {
     updateDescriptionMode,
     updateHapticsEnabled,
     updateSpeechRate,
+    stopVoice,
   ]);
 
   useEffect(() => {
@@ -721,6 +765,7 @@ export default function NavigationScreen() {
       title: "Guidance stopped",
     });
     lastSpokenMessageRef.current = "Stopping guidance.";
+    stopVoice();
     speak("Stopping guidance.");
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("success");
@@ -732,7 +777,7 @@ export default function NavigationScreen() {
     } else {
       router.replace("/");
     }
-  }, [navigation, router, settings.hapticsEnabled, speak]);
+  }, [navigation, router, settings.hapticsEnabled, speak, stopVoice]);
 
   const handleSOS = useCallback(() => {
     lastSpokenMessageRef.current = "Emergency SOS activated.";

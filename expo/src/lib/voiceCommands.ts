@@ -17,7 +17,7 @@ const commandMatchers: Array<[GuidePupVoiceCommandIntent, RegExp[]]> = [
     "start-guidance",
     [
       /\b(start|begin|resume|continue)( the)? guidance\b/,
-      /\b(start|begin|resume|continue)\b/,
+      /\b(start|begin|resume)\b/,
       /\blet'?s go\b/,
     ],
   ],
@@ -111,6 +111,23 @@ export function parseVoiceCommand(transcript: string): GuidePupVoiceCommandInten
   }
 
   return null;
+}
+
+const stopBargeInCommands = new Set([
+  "guide pup stop",
+  "guide pup stop guidance",
+  "pause",
+  "pause guidance",
+  "please pause",
+  "please pause guidance",
+  "please stop",
+  "please stop guidance",
+  "stop",
+  "stop guidance",
+]);
+
+export function isStopBargeInCommand(transcript: string) {
+  return stopBargeInCommands.has(normalizeVoiceTranscript(transcript));
 }
 
 export function buildVoiceHelpPrompt(isGuiding: boolean) {

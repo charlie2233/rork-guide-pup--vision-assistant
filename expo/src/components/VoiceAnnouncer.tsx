@@ -4,7 +4,7 @@ import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
 interface VoiceContextType {
-  speak: (text: string, options?: { language?: string; rate?: number }) => void;
+  speak: (text: string, options?: { keepListeningDuringSpeech?: boolean; language?: string; rate?: number }) => void;
   stop: () => void;
   isSpeaking: boolean;
 }
@@ -16,7 +16,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const queueRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const optionsRef = useRef<{ locale?: string; rate?: number } | undefined>(undefined);
+  const optionsRef = useRef<{ keepListeningDuringSpeech?: boolean; locale?: string; rate?: number } | undefined>(undefined);
   const sessionRef = useRef(0);
 
   const flushQueue = useCallback(() => {
@@ -31,6 +31,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     const combinedMessage = queueRef.current.join('. ');
     queueRef.current = [];
+    const speechOptions = optionsRef.current;
     const sessionId = sessionRef.current + 1;
     sessionRef.current = sessionId;
 
@@ -39,20 +40,21 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
       const shouldResumeListening = Boolean(voiceState?.listening);
+      const shouldPauseListening = shouldResumeListening && !speechOptions?.keepListeningDuringSpeech;
 
-      if (shouldResumeListening) {
+      if (shouldPauseListening) {
         await GuidePupVoiceControl.stopCommandSession().catch(() => undefined);
       }
 
       await GuidePupVoiceControl.speak(combinedMessage, {
         interrupt: true,
-        locale: optionsRef.current?.locale,
-        rate: optionsRef.current?.rate ?? getSpeechRateValue(),
+        locale: speechOptions?.locale,
+        rate: speechOptions?.rate ?? getSpeechRateValue(),
       }).catch(() => undefined);
 
-      if (shouldResumeListening) {
+      if (shouldPauseListening && sessionRef.current === sessionId) {
         await GuidePupVoiceControl.startCommandSession({
-          partialResults: false,
+          partialResults: true,
         }).catch(() => undefined);
       }
     })().finally(() => {
@@ -62,12 +64,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     });
   }, [getSpeechRateValue]);
 
-  const speak = useCallback((text: string, options?: { language?: string; rate?: number }) => {
+  const speak = useCallback((text: string, options?: { keepListeningDuringSpeech?: boolean; language?: string; rate?: number }) => {
     // Add to queue
     queueRef.current.push(text);
     optionsRef.current = options
       ? {
           locale: options.language,
+          keepListeningDuringSpeech: options.keepListeningDuringSpeech,
           rate: options.rate,
         }
       : undefined;
