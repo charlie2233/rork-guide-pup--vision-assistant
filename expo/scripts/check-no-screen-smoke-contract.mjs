@@ -126,6 +126,8 @@ mustInclude(diagnosticsScreen, "Frame summary", "Diagnostics screen frame summar
 
 const noScreenEvidence = read("../docs/no-screen-smoke-evidence.md");
 for (const phrase of [
+  "expo/release/no-screen-smoke.latest.json",
+  "check:no-screen-evidence",
   "Cold prompt",
   "start guidance",
   "status",
@@ -145,6 +147,9 @@ for (const phrase of [
 }
 
 const releasePreflight = read("../scripts/release-preflight.mjs");
+mustInclude(releasePreflight, "validateNoScreenSmokeEvidence", "No-screen hardware evidence preflight gate");
+mustInclude(releasePreflight, "NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH", "No-screen hardware artifact path");
+mustInclude(releasePreflight, "real-iPhone no-screen validation", "No-screen hardware missing-artifact message");
 mustInclude(releasePreflight, "artifact.health?.requestId", "Health request ID preflight gate");
 mustInclude(releasePreflight, "artifact.bootstrap?.requestId", "Bootstrap request ID preflight gate");
 mustInclude(releasePreflight, "artifact.analyze?.requestId", "Analyze request ID preflight gate");
@@ -162,5 +167,13 @@ mustInclude(liveSmoke, "captureHeuristics", "Live smoke records capture heuristi
 mustInclude(liveSmoke, "defaultMaxCompletionTokens", "Live smoke records max completion tokens");
 mustInclude(liveSmoke, "defaultRequestTimeoutMs", "Live smoke records provider timeout");
 mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry count");
+
+const noScreenEvidenceSchema = read("../scripts/no-screen-smoke-evidence.mjs");
+mustInclude(noScreenEvidenceSchema, "REQUIRED_NO_SCREEN_SEQUENCE", "No-screen evidence required sequence");
+mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidence STOP cut-through proof");
+mustInclude(noScreenEvidenceSchema, "settingsPersistence.nonDefaultSettingSurvivedRelaunch", "No-screen evidence settings persistence proof");
+mustInclude(noScreenEvidenceSchema, "nativeCore", "No-screen evidence native-core camera proof");
+mustInclude(noScreenEvidenceSchema, "jsFallback", "No-screen evidence JS fallback camera proof");
+mustInclude(noScreenEvidenceSchema, "privacy.containsRawMedia", "No-screen evidence privacy proof");
 
 console.log("No-screen smoke contract passed. Real iPhone validation is still required for hardware proof.");

@@ -1,0 +1,184 @@
+{
+  "artifactVersion": 1,
+  "validationMode": "real-iphone-no-screen",
+  "screenUse": "none",
+  "generatedAt": "2026-05-23T17:00:00.000Z",
+  "operator": "Internal tester",
+  "provenance": {
+    "schemaVersion": 1,
+    "artifactType": "real-iphone-no-screen-smoke",
+    "generatedAt": "2026-05-23T17:00:00.000Z",
+    "runId": "no-screen-smoke-2026-05-23T17-00-00Z",
+    "releaseTrack": "testflight",
+    "buildProfile": "testflight",
+    "appVersion": "1.0.0",
+    "buildNumber": "42",
+    "bundleIdentifier": "com.example.guidepup",
+    "apiEnvironment": "production",
+    "apiBaseUrlLabel": "production"
+  },
+  "device": {
+    "model": "iPhone 15 Pro",
+    "osVersion": "26.4.2",
+    "appVersion": "1.0.0",
+    "buildNumber": "42",
+    "bundleIdentifier": "com.example.guidepup",
+    "buildProfile": "testflight",
+    "identifierSuffix": "0B5CE6D3"
+  },
+  "deviceReadiness": {
+    "result": "ready",
+    "paired": true,
+    "trusted": true,
+    "developerModeEnabled": true,
+    "usbOrSameLan": true,
+    "xcodeDestinationAvailable": true
+  },
+  "noScreen": {
+    "noScreenUsed": true,
+    "screenReadingUsed": false,
+    "visualAssistanceUsed": false,
+    "voiceOnlyNavigation": true,
+    "cleanInstallOrReset": true
+  },
+  "assistiveTech": {
+    "voiceOverRunning": true,
+    "speechInputConfirmed": true,
+    "spokenOutputConfirmed": true,
+    "audioCuesAudible": true,
+    "hapticsFelt": true
+  },
+  "voiceOver": {
+    "runningAtStart": true,
+    "runningDuringGuidance": true,
+    "runningAtStop": true,
+    "runningAtExport": true
+  },
+  "backendSmoke": {
+    "environment": "production",
+    "apiBaseUrl": "https://guidepup-api-production.example.test",
+    "healthStatusCode": 200,
+    "bootstrapStatusCode": 200,
+    "analyzeStatusCode": 200,
+    "providerBacked": true,
+    "executionPath": "provider-backed",
+    "structuredOutputValid": true,
+    "model": "gpt-5.5-2026-05-22",
+    "promptVersion": "2026-05-22.v1",
+    "requestIds": {
+      "health": "11111111-1111-4111-8111-111111111111",
+      "bootstrap": "22222222-2222-4222-8222-222222222222",
+      "analyze": "33333333-3333-4333-8333-333333333333"
+    }
+  },
+  "cameraPaths": {
+    "nativeCore": {
+      "outcome": "success",
+      "nativePath": "native-core",
+      "requestId": "44444444-4444-4444-8444-444444444444",
+      "sampledFrame": true,
+      "hasImage": true,
+      "frameSummary": "Sanitized native-core sampled frame summary.",
+      "sourceHeight": 1080,
+      "sourceWidth": 1920,
+      "uploadedHeight": 480,
+      "uploadedWidth": 640,
+      "captureHeuristics": {
+        "imageSource": "uri",
+        "frameAgeMs": 0,
+        "resizedForUpload": true,
+        "uploadedHeight": 480,
+        "uploadedWidth": 640
+      }
+    },
+    "jsFallback": {
+      "outcome": "success",
+      "nativePath": "js-fallback",
+      "requestId": "55555555-5555-4555-8555-555555555555",
+      "sampledFrame": true,
+      "hasImage": true,
+      "frameSummary": "Sanitized js fallback sampled frame summary.",
+      "sourceHeight": 40,
+      "sourceWidth": 40,
+      "uploadedHeight": 40,
+      "uploadedWidth": 40,
+      "captureHeuristics": {
+        "imageSource": "base64",
+        "frameAgeMs": 0,
+        "resizedForUpload": false,
+        "uploadedHeight": 40,
+        "uploadedWidth": 40
+      }
+    }
+  },
+  "diagnostics": {
+    "speechListeningInvariant": "PASS",
+    "unexpectedSpeechListeningOverlapCount": 0,
+    "stopBargeInConfirmed": true,
+    "voiceOverRunning": true,
+    "settingsPersistedAfterRestart": true,
+    "nativeCameraCaptureConfirmed": true,
+    "jsFallbackCaptureConfirmed": true,
+    "noRawMediaOrSecrets": true,
+    "haptics": {
+      "successCount": 3
+    },
+    "audioCues": {
+      "successCount": 3
+    }
+  },
+  "stopBargeIn": {
+    "attemptedDuringSpeech": true,
+    "cutThrough": true,
+    "lastSpeechListeningOverlapReason": "stop-barge-in",
+    "unexpectedSpeechListeningOverlapCount": 0,
+    "speechListeningInvariant": "PASS",
+    "staleSpeechAfterStop": false,
+    "guidancePaused": true
+  },
+  "settingsPersistence": {
+    "before": {
+      "speechRate": 0.52,
+      "descriptionMode": "balanced",
+      "hapticsEnabled": true
+    },
+    "afterVoiceChange": {
+      "speechRate": 0.42,
+      "descriptionMode": "detailed",
+      "hapticsEnabled": false
+    },
+    "afterRelaunch": {
+      "speechRate": 0.42,
+      "descriptionMode": "detailed",
+      "hapticsEnabled": false
+    },
+    "afterRestore": {
+      "speechRate": 0.52,
+      "descriptionMode": "balanced",
+      "hapticsEnabled": true
+    },
+    "nonDefaultSettingSurvivedRelaunch": true,
+    "restoredDefaultsAfterValidation": true
+  },
+  "sequence": [
+    { "id": "cold-prompt", "pass": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true },
+    { "id": "start-guidance", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "cameraSessionActive": true },
+    { "id": "status", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "statusIncludesSettings": true },
+    { "id": "slower-speech", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
+    { "id": "faster-speech", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
+    { "id": "more-detail", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
+    { "id": "less-detail", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
+    { "id": "haptics-off", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "hapticBehaviorConfirmed": true },
+    { "id": "haptics-on", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "hapticBehaviorConfirmed": true },
+    { "id": "repeat", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "repeatedLastUtterance": true },
+    { "id": "what-do-you-see", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "conversationLane": true, "sampledFrameUsed": true, "settingsChanged": false },
+    { "id": "stop-guidance", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "stopCutThrough": true }
+  ],
+  "privacy": {
+    "containsRawMedia": false,
+    "containsRawAudio": false,
+    "containsSecrets": false,
+    "containsSignedUrls": false,
+    "containsFullDeviceIds": false
+  }
+}

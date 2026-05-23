@@ -20,6 +20,8 @@
     "release:preflight:all": "node scripts/release-preflight.mjs --track all",
     "check:voice-commands": "node scripts/check-voice-commands.mjs",
     "check:no-screen-smoke": "node scripts/check-no-screen-smoke-contract.mjs",
+    "check:no-screen-evidence": "node scripts/validate-no-screen-smoke-evidence.mjs",
+    "test:no-screen-evidence": "node --test scripts/no-screen-smoke-evidence.test.mjs",
     "check:ios-device": "node scripts/check-ios-device-ready.mjs",
     "build:internal:ios": "npx eas-cli build --profile preview --platform ios",
     "build:preview:ios": "npx eas-cli build --profile preview --platform ios",

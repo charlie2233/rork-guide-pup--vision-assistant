@@ -27,9 +27,11 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 9. `testflight` and `store` must not proceed unless `backend/guidepup-api/eval/smoke-results-production.latest.json` shows `provider-backed` analyze.
 10. Run `npx eas-cli build --profile preview --platform ios` for the internal preview / ad hoc build.
 11. Install the internal preview build on a physical device for smoke testing.
-12. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
-13. If Expo metadata push is needed and the account/app are already ready, run `npx eas-cli metadata:push --profile store`. Do not let a metadata-only issue block the build or submit path if manual App Store Connect entry can continue.
-14. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
+12. Write sanitized hardware evidence to `expo/release/no-screen-smoke.latest.json`, using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
+13. Run `npm run check:no-screen-evidence` from `expo/`.
+14. Run `npx eas-cli build --profile testflight --platform ios` for the real TestFlight candidate.
+15. If Expo metadata push is needed and the account/app are already ready, run `npx eas-cli metadata:push --profile store`. Do not let a metadata-only issue block the build or submit path if manual App Store Connect entry can continue.
+16. Run `npx eas-cli submit --profile testflight --platform ios` only after smoke testing passes.
 
 ## TestFlight smoke plan
 
@@ -60,4 +62,4 @@ Use [No-Screen Smoke Evidence](./no-screen-smoke-evidence.md) as the required ev
 - Missing backend production `OPENAI_API_KEY`, which hard-blocks `testflight` and `store`.
 - Missing App Store screenshots and metadata.
 - Missing or incorrect public website/privacy/support URLs in `store.config.js`.
-- Missing no-screen smoke evidence packet for the physical iPhone build.
+- Missing or invalid `expo/release/no-screen-smoke.latest.json` for the physical iPhone build.

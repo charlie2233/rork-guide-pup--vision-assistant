@@ -181,6 +181,7 @@ Reasoning:
 - Live staging and production Workers are provider-backed, but still stale for the launch contract: `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, missing `fallbackReason`, and missing the new provider runtime-control health fields.
 - Cloudflare deployment remains blocked because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 - Real iPhone no-screen smoke is still not validated because the paired device is unavailable/offline to Xcode.
+- TestFlight/store preflight now also requires `expo/release/no-screen-smoke.latest.json`, a machine-readable real-iPhone no-screen artifact; static checks and simulator builds no longer satisfy this gate.
 - Sentry issue health remains unverified because Sentry auth/org/project env vars are missing.
 
 Commands rerun for this submission review:
@@ -197,6 +198,8 @@ npm --prefix expo run typecheck
 npm --prefix expo run lint
 npm --prefix expo run check:voice-commands
 npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-evidence
 npm --prefix expo run check:ios-device
 npm --prefix expo run release:preflight:preview
 npm --prefix expo run release:preflight:testflight
@@ -212,7 +215,8 @@ Build iOS Apps plugin Release simulator build for `GuidePupVisionAssistant` on `
 Expected failures in the submission review:
 
 - `release:preflight:preview` fails on unresolved bundle identifier and stale staging smoke warnings.
-- `release:preflight:testflight` and `release:preflight:store` fail on unresolved Apple release inputs plus stale production smoke.
+- `release:preflight:testflight` and `release:preflight:store` fail on unresolved Apple release inputs, stale production smoke, and missing `release/no-screen-smoke.latest.json`.
+- `check:no-screen-evidence` fails until real hardware validation produces the sanitized no-screen artifact.
 - `verify:secrets:staging`, `verify:secrets:production`, and `wrangler whoami` fail because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 
 Browser, Computer Use, ChatGPT Atlas, and App Store Connect were not used to submit because submission would be invalid before these gates pass. WhatsApp escalation was not needed for this review because the blockers are explicit release/auth/device inputs, not an ambiguous login screen.
@@ -220,6 +224,7 @@ Browser, Computer Use, ChatGPT Atlas, and App Store Connect were not used to sub
 ## Remaining P0 blockers
 
 - Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
+- Machine-readable real-iPhone no-screen evidence is missing: `expo/release/no-screen-smoke.latest.json`.
 - Physical iPhone remains paired with Developer Mode enabled, but unavailable/offline to Xcode.
 - Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 - TestFlight execution is blocked: `EXPO_TOKEN` is missing and release inputs remain unresolved.

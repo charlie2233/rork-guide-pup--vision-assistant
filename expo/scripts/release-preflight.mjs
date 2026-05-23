@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import {
+  formatNoScreenSmokeEvidenceIssues,
+  NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH,
+  readNoScreenSmokeEvidenceArtifact,
+  validateNoScreenSmokeEvidenceArtifact,
+} from "./no-screen-smoke-evidence.mjs";
 
 const require = createRequire(import.meta.url);
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,6 +31,7 @@ const publicUrls = getPublicUrls();
 const validTracks = new Set(["preview", "testflight", "store", "all"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
+const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
 
 const errors = [];
 const warnings = [];
@@ -274,6 +281,41 @@ function validateSmokeArtifact(artifact, options) {
   warn(promptMatches, promptContractMessage);
 }
 
+function validateNoScreenSmokeEvidence(artifact, options) {
+  const {
+    allowWarning,
+    description,
+    expectedApiBaseUrl,
+  } = options;
+
+  if (!artifact) {
+    const message = `${description} no-screen smoke evidence artifact is missing: ${path.relative(projectDir, noScreenSmokeArtifactPath)}. Run the real-iPhone no-screen validation and write sanitized evidence before TestFlight.`;
+    if (allowWarning) {
+      warn(false, message);
+      return;
+    }
+    expect(false, message);
+    return;
+  }
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact, {
+    expectedApiBaseUrl,
+    expectedBundleIdentifier: isPlaceholderValue(launchInputs.iosBundleIdentifier)
+      ? undefined
+      : launchInputs.iosBundleIdentifier,
+    expectedPromptVersion: launchInputs.productionPromptVersion,
+    expectedVisionModel: launchInputs.productionVisionModel,
+  });
+  const message = `${description} no-screen smoke evidence must prove the real-iPhone voice/haptics/audio/VoiceOver sequence without raw media, secrets, signed URLs, or full device identifiers. ${formatNoScreenSmokeEvidenceIssues(result)}`;
+
+  if (allowWarning) {
+    warn(result.valid, message);
+    return;
+  }
+
+  expect(result.valid, message);
+}
+
 const argv = process.argv.slice(2);
 const selectedTrack = parseTrack(argv);
 if (!validTracks.has(selectedTrack)) {
@@ -290,6 +332,7 @@ const requiresStoreBackedDistribution = selectedTrack === "testflight" || select
 const requiresIos = requiresPreview || requiresStoreBackedDistribution;
 const stagingSmokeArtifact = readSmokeArtifact(stagingSmokeArtifactPath);
 const productionSmokeArtifact = readSmokeArtifact(productionSmokeArtifactPath);
+const noScreenSmokeArtifact = readNoScreenSmokeEvidenceArtifact(projectDir);
 
 if (requiresIos) {
   checkPlaceholder(launchInputs.iosBundleIdentifier, "iOS bundle identifier");
@@ -354,6 +397,11 @@ if (requiresPreview) {
     requireProviderBacked: strictPreviewProvider,
     targetUrl: launchInputs.stagingApiBaseUrl,
   });
+  validateNoScreenSmokeEvidence(noScreenSmokeArtifact, {
+    allowWarning: true,
+    description: "Preview / staging",
+    expectedApiBaseUrl: launchInputs.stagingApiBaseUrl,
+  });
 }
 
 for (const [profileName, profile] of Object.entries({ testflight: testflightProfile, store: storeProfile })) {
@@ -390,6 +438,11 @@ if (requiresStoreBackedDistribution) {
     requireProviderBacked: true,
     targetUrl: launchInputs.productionApiBaseUrl,
   });
+  validateNoScreenSmokeEvidence(noScreenSmokeArtifact, {
+    allowWarning: false,
+    description: "Production",
+    expectedApiBaseUrl: launchInputs.productionApiBaseUrl,
+  });
 }
 
 const submitTestflight = easJson.submit?.testflight;
@@ -421,6 +474,7 @@ expect(fileExists(launchInputs.metadataPath), `Metadata config file is missing: 
 expect(fileExists("docs/launch-inputs.md"), "docs/launch-inputs.md is missing.");
 expect(fileExists("docs/privacy-answer-matrix.md"), "docs/privacy-answer-matrix.md is missing.");
 expect(fileExists("docs/fill-these-now.md"), "docs/fill-these-now.md is missing.");
+expect(fileExists("docs/no-screen-smoke-evidence.md"), "docs/no-screen-smoke-evidence.md is missing.");
 
 const envExample = fs.readFileSync(path.join(projectDir, ".env.example"), "utf8");
 for (const requiredEnv of [

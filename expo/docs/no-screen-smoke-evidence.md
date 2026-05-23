@@ -2,6 +2,8 @@
 
 Use this packet for internal iPhone validation before TestFlight. The tester should be able to complete the sequence without reading the screen. Do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
 
+The machine-readable evidence artifact for release preflight is `expo/release/no-screen-smoke.latest.json`. The expected shape is documented in `expo/docs/no-screen-smoke-evidence.example.json`; the example is not launch evidence.
+
 ## Required Setup
 
 - Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
@@ -9,6 +11,7 @@ Use this packet for internal iPhone validation before TestFlight. The tester sho
 - Device state: paired/trusted, Developer Mode enabled, network path confirmed, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
 - Diagnostics export from the app after the run.
 - Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.
+- Machine-readable artifact fields for device readiness, assistive tech, diagnostics, backend request IDs, and every voice-sequence step.
 
 ## Voice Sequence
 
@@ -36,6 +39,17 @@ Run this exact sequence from a clean install or reset app state:
 - Camera fallback failures, if any, are labeled as camera-frame failures rather than backend failures.
 - VoiceOver, haptic, and audio-cue confirmations are usable without screen reading.
 - No raw images, raw audio, credentials, provider keys, or signed URLs are present in logs, screenshots, diagnostics, or notes.
+
+## Release Gate
+
+Before TestFlight or App Store submission, run:
+
+```bash
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run release:preflight:testflight
+```
+
+`check:no-screen-evidence` validates `expo/release/no-screen-smoke.latest.json` and fails if the artifact is missing, if any required step lacks no-screen voice proof, if STOP barge-in is not confirmed, if haptics/audio cues/VoiceOver/settings/native camera/JS fallback are not proven, or if raw media, secrets, signed URLs, or full device identifiers are present.
 
 ## Fail Criteria
 
