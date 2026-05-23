@@ -2,7 +2,6 @@
 
 Charlie still needs to set these values before launch execution can finish:
 
-- App Store Connect App ID (`ascAppId`)
 - Optional website custom domain override
 - Final public privacy policy URL if it should not be derived from `${WEBSITE_URL}/privacy`
 - Final public support URL if it should not be derived from `${WEBSITE_URL}/support`
@@ -16,11 +15,12 @@ Charlie still needs to set these values before launch execution can finish:
 
 ## Resolved locally on 2026-05-23
 
-- iOS bundle identifier: `dev.guidepup.visionassist`
-  - Evidence: `expo/app.config.ts`, `expo/app.json`, and `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`.
+- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
+  - Evidence: App Store Connect App Information, `expo/app.config.ts`, `expo/app.json`, and `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`.
 - Apple Team ID: `SBSJ3MX9GZ`
   - Evidence: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
-- App Store Connect was opened in the side-panel browser, but it redirected to Apple sign-in. Charlie still needs to log in / approve 2FA or provide the App Store Connect App ID.
+- App Store Connect App ID: `6756947790`
+  - Evidence: App Store Connect app list and App Information page for `Guide Pup: Vision Assistant`.
 
 ## Backend by environment
 

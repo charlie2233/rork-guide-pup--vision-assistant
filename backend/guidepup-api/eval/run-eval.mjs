@@ -10,6 +10,13 @@ const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"])
 const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
 const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
 const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
+const EXPECTED_LABEL_FIELDS = [
+  { expectedKey: "expectedDirection", label: "direction", responseKey: "direction" },
+  { expectedKey: "expectedHazardLevel", label: "hazardLevel", responseKey: "hazardLevel" },
+  { expectedKey: "expectedLighting", label: "lighting", responseKey: "lighting" },
+  { expectedKey: "expectedSurfaceType", label: "surfaceType", responseKey: "surfaceType" },
+  { expectedKey: "expectedWalkability", label: "walkability", responseKey: "walkability" },
+];
 
 function parseArgs(argv) {
   const args = {
@@ -138,6 +145,28 @@ function validateStructuredAnalyzeOutput(responseBody) {
     invalidFields,
     missingFields,
     valid: missingFields.length === 0 && invalidFields.length === 0,
+  };
+}
+
+function compareExpectedLabels(fixture, responseBody) {
+  const comparisons = EXPECTED_LABEL_FIELDS.flatMap(({ expectedKey, label, responseKey }) => {
+    const expected = fixture[expectedKey];
+    if (expected === undefined) {
+      return [];
+    }
+
+    const actual = responseBody?.[responseKey];
+    return [{
+      actual,
+      expected,
+      field: label,
+      matches: actual === expected,
+    }];
+  });
+
+  return {
+    comparisons,
+    mismatches: comparisons.filter((comparison) => !comparison.matches),
   };
 }
 
@@ -324,6 +353,7 @@ function summarizeFixtureResult(fixture, result) {
   const isStop = direction === "stop";
   const isFalseForward = fixture.expectedHazard && direction === "forward";
   const structuredOutput = result.structuredOutput || validateStructuredAnalyzeOutput(result.response);
+  const expectedLabels = compareExpectedLabels(fixture, result.response);
   const walkabilityMatches = fixture.expectedWalkability
     ? result.response?.walkability === fixture.expectedWalkability
     : undefined;
@@ -339,8 +369,18 @@ function summarizeFixtureResult(fixture, result) {
     confidence: result.response?.confidence,
     fallbackReason:
       result.response && "fallbackReason" in result.response ? result.response.fallbackReason : undefined,
+    expectedDirection: fixture.expectedDirection,
+    expectedHazardLevel: fixture.expectedHazardLevel,
+    expectedLabels: expectedLabels.comparisons,
+    expectedLighting: fixture.expectedLighting,
+    expectedSurfaceType: fixture.expectedSurfaceType,
+    expectedWalkability: fixture.expectedWalkability,
+    labelMismatches: expectedLabels.mismatches,
+    directionMatches: expectedLabels.comparisons.find((comparison) => comparison.field === "direction")?.matches,
     hazardLevel: result.response?.hazardLevel,
+    hazardLevelMatches: expectedLabels.comparisons.find((comparison) => comparison.field === "hazardLevel")?.matches,
     lighting: result.response?.lighting,
+    lightingMatches: expectedLabels.comparisons.find((comparison) => comparison.field === "lighting")?.matches,
     obstacle: result.response?.obstacle,
     sceneDescription: result.response?.sceneDescription,
     stop: isStop,
@@ -348,11 +388,15 @@ function summarizeFixtureResult(fixture, result) {
     structuredOutputMissingFields: structuredOutput.missingFields,
     structuredOutputValid: structuredOutput.valid,
     surfaceType: result.response?.surfaceType,
+    surfaceTypeMatches: expectedLabels.comparisons.find((comparison) => comparison.field === "surfaceType")?.matches,
     walkability: result.response?.walkability,
-    expectedWalkability: fixture.expectedWalkability,
     walkabilityMatches,
-    valid: structuredOutput.valid && walkabilityMatches !== false,
+    valid: structuredOutput.valid && expectedLabels.mismatches.length === 0,
   };
+}
+
+function formatLabelMismatch(mismatch) {
+  return `${mismatch.field} expected ${mismatch.expected}; got ${mismatch.actual ?? "missing"}`;
 }
 
 function calculateAverage(values) {
@@ -449,8 +493,15 @@ function renderMarkdown(report) {
     if (fixture.walkability) {
       lines.push(`  - walkability: \`${fixture.walkability}\``);
     }
-    if (fixture.expectedWalkability) {
-      lines.push(`  - expected walkability: \`${fixture.expectedWalkability}\`, match: \`${fixture.walkabilityMatches ? "yes" : "no"}\``);
+    if (fixture.expectedLabels?.length > 0) {
+      lines.push(
+        `  - expected labels: ${fixture.expectedLabels
+          .map((comparison) => `\`${comparison.field}\` expected \`${comparison.expected}\`, got \`${comparison.actual ?? "missing"}\`, match \`${comparison.matches ? "yes" : "no"}\``)
+          .join("; ")}`,
+      );
+    }
+    if (fixture.labelMismatches?.length > 0) {
+      lines.push(`  - label mismatches: \`${fixture.labelMismatches.map(formatLabelMismatch).join("; ")}\``);
     }
   }
   lines.push(``);
@@ -502,8 +553,8 @@ async function main() {
     const summary = summarizeFixtureResult(fixture, analyzeResult);
     const fixtureError = analyzeResult.ok
       ? summary.structuredOutputValid
-        ? summary.walkabilityMatches === false
-          ? `Expected walkability ${summary.expectedWalkability}; got ${summary.walkability || "missing"}`
+        ? summary.labelMismatches.length > 0
+          ? `Expected label mismatch: ${summary.labelMismatches.map(formatLabelMismatch).join("; ")}`
           : undefined
         : `Structured output missing: ${summary.structuredOutputMissingFields.join(", ") || "none"}; invalid: ${summary.structuredOutputInvalidFields.join(", ") || "none"}`
       : analyzeResult.error;
@@ -515,7 +566,7 @@ async function main() {
       scenario: fixture.scenario,
     });
 
-    if (analyzeResult.ok && summary.valid) {
+    if (analyzeResult.ok && summary.structuredOutputValid) {
       analyzeLatencies.push(analyzeResult.latencyMs);
       if (fixture.expectedHazard) {
         hazardFixtures.push(fixture.id);

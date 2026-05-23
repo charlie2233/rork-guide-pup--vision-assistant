@@ -253,16 +253,18 @@ Results:
 
 ## Identifier resolution continuation on 2026-05-23
 
-App Store Connect was opened in the side-panel browser at `https://appstoreconnect.apple.com/apps`, but it redirected to Apple sign-in with no active session. A WhatsApp note was sent to Charlie.H requesting login / 2FA or the App Store Connect App ID.
+App Store Connect was opened in the side-panel browser at `https://appstoreconnect.apple.com/apps`. The first attempt redirected to Apple sign-in, so a WhatsApp note was sent to Charlie.H requesting login / 2FA or the App Store Connect App ID. After Charlie logged in, the same side-panel browser showed the Guide Pup app record.
 
-Local Xcode evidence resolved two release identifiers without using secrets:
+Apple and local Xcode evidence resolved the iOS release identifiers without using secrets:
 
-- iOS bundle identifier: `dev.guidepup.visionassist`
-  - Evidence: `expo/app.config.ts`, `expo/app.json`, `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`, and `expo/ios/GuidePupVisionAssistant/Info.plist`.
+- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
+  - Evidence: App Store Connect App Information shows bundle ID `app.rork.guide-pup-vision-assist`; the repo now mirrors it in `expo/app.config.ts`, `expo/app.json`, `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`, and `expo/ios/GuidePupVisionAssistant/Info.plist`.
 - Apple Team ID: `SBSJ3MX9GZ`
   - Evidence: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- App Store Connect App ID: `6756947790`
+  - Evidence: App Store Connect app list links `Guide Pup: Vision Assistant` to `/apps/6756947790/distribution`; App Information lists Apple ID `6756947790`.
 
-The release source of truth was updated for those two values only. The App Store Connect App ID remains unresolved because it requires Apple login / 2FA or a value from Charlie.
+The release source of truth was updated for those values. App Store Connect also shows SKU `EX1766553072106`, primary category `Navigation`, version `1.0 Prepare for Submission`, empty copyright/support metadata, no build selected, and `Sign-in required` currently checked in App Review Information even though the app has no account flow; those remain submission-readiness gaps.
 
 Validation after resolving local identifiers:
 
@@ -289,10 +291,10 @@ xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES
 
 Results:
 
-- Evaluated Expo config now shows `ios.bundleIdentifier: dev.guidepup.visionassist`.
+- Evaluated Expo config now shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`.
 - Preview preflight now passes with warnings only; stale staging smoke, missing no-screen evidence, and missing Sentry env remain warnings for preview.
-- TestFlight/store preflight no longer fail on bundle identifier or Apple Team ID.
-- TestFlight/store still fail on unresolved App Store Connect App ID, copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env.
+- TestFlight/store preflight no longer fail on bundle identifier, Apple Team ID, or App Store Connect App ID.
+- TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env.
 - Expo typecheck, Expo lint, voice command contract, no-screen contract, no-screen evidence tests, smoke evidence tests, backend typecheck, and backend privacy tests passed.
 - `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` is missing.
 - `check:ios-device` still reports `charlie的iPhone` blocked: paired and Developer Mode enabled, but unavailable to CoreDevice, DDI unavailable, tunnel disconnected, and no USB iPhone present.
@@ -342,3 +344,79 @@ Results:
 ## Next quality gap
 
 The guidance reliability audit found that live smoke/eval scripts do not yet prove the full sampled-frame envelope (`sessionId`, `frameId`, timestamp, prior guidance, native path, dimensions) and client diagnostics omit some structured output fields (`lighting`, `surfaceType`, `sceneDescription`, `fallbackReason`). That should be handled in `phase-quality1-guidance-reliability`.
+
+## Privacy and App Store readiness continuation on 2026-05-23
+
+This continuation tightened App Store-facing privacy and identifier evidence after App Store Connect login became available.
+
+Code/config changes:
+
+- Mirrored App Store Connect bundle ID `app.rork.guide-pup-vision-assist` and Apple ID / ASC app ID `6756947790` into `expo/release/launch-inputs.js`, `expo/app.json`, `expo/eas.json`, and the native Xcode project.
+- Removed unused `expo-location` and `expo-image-picker` dependencies from the shipping Expo package and refreshed `expo/ios/Podfile.lock`; `pod install` removed `ExpoLocation` and `ExpoImagePicker`.
+- Removed unused native location and photo-library permission copy from `Info.plist`.
+- Updated `PrivacyInfo.xcprivacy` to disclose sampled camera frames as `NSPrivacyCollectedDataTypePhotosorVideos` and anonymous device/session bootstrap as `NSPrivacyCollectedDataTypeDeviceID`, both not linked, not tracking, and for app functionality.
+- Added release-preflight checks so iOS tracks fail if the privacy manifest omits those collected data types or if native `Info.plist` regains unused location/photo-library permission keys.
+
+Commands and results:
+
+```bash
+pod install
+npx expo config --type public
+plutil -p expo/ios/GuidePupVisionAssistant/Info.plist
+plutil -p expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run test:smoke-evidence
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run check:ios-device
+npx --yes eas-cli whoami
+npx --yes wrangler whoami
+git diff --check
+xcodebuildmcp session_show_defaults
+xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -sdk iphonesimulator -destination 'platform=iOS Simulator,id=09C3102D-6824-4BA2-8CBE-F6348561F6E8' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build -quiet
+```
+
+Results:
+
+- Expo config now evaluates to `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`.
+- `Info.plist` contains camera, microphone, and speech-recognition copy, and no unused location/photo-library permission copy.
+- `PrivacyInfo.xcprivacy` contains `PhotosorVideos` and `DeviceID` collected data entries for app functionality, not linked and not tracking.
+- Preview preflight passes with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env.
+- TestFlight/store preflights no longer fail on bundle identifier, Apple Team ID, or App Store Connect App ID.
+- TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support page readiness, stale production smoke contract, and missing real-iPhone no-screen evidence.
+- Typecheck, lint, voice-command contract, no-screen smoke contract, no-screen evidence tests, smoke-evidence tests, backend typecheck, backend privacy/runtime/prompt tests, and `git diff --check` passed.
+- `check:no-screen-evidence` still fails because `release/no-screen-smoke.latest.json` has not been produced by a real iPhone run.
+- `check:ios-device` still reports `charlie的iPhone` unavailable to CoreDevice, DDI unavailable, tunnel disconnected, and no USB iPhone present.
+- EAS remains blocked with `Not logged in`; Wrangler remains blocked with `Not logged in`.
+- Build iOS Apps plugin `build_sim` timed out at the tool limit; the underlying process was allowed to finish, then the explicit shell fallback Release simulator build passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
+
+Real-device retry after Charlie wired the iPhone:
+
+```bash
+npm --prefix expo run check:ios-device
+xcrun devicectl list devices
+xcrun xctrace list devices
+security find-identity -v -p codesigning
+SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=00008130-000A001A1178001C' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build
+xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+xcrun devicectl device info ddiServices --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+```
+
+Results:
+
+- `xcrun devicectl list devices` now shows `charlie的iPhone` as `available (paired)`.
+- `xcrun xctrace list devices` shows hardware UDID `00008130-000A001A1178001C`.
+- The Mac still has one valid signing identity: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- `xcodebuild` reached the device but failed before build/install because the developer disk image could not be mounted.
+- `devicectl device info ddiServices` returned `kAMDMobileImageMounterDeviceLocked: The device is locked`.
+- `devicectl device info details` shows Developer Mode enabled, pairing state paired, tunnel connected, and `ddiServicesAvailable: false`.
+- Next action is user-side: unlock the iPhone, keep it awake, and accept any Trust/Developer prompts before retrying the device build/no-screen smoke.

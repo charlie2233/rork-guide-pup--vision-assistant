@@ -28,7 +28,12 @@ Capture 15 to 30 representative scenes from the real navigation use case without
 - `expectedDirection`
 - `expectedHazard`
 - `expectedHazardLevel`
+- `expectedLighting`
+- `expectedSurfaceType`
+- `expectedWalkability`
 - `notes`
+
+Every expected label should be deliberate. The eval harness treats a mismatch for expected direction, hazard level, lighting, surface type, or walkability as an invalid fixture result, even when the provider returns structurally valid JSON.
 
 ## Example naming
 

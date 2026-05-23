@@ -2,7 +2,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const appJson = require("./app.json") as { expo: ExpoConfig };
 
-const DEFAULT_DEV_IOS_BUNDLE_IDENTIFIER = "dev.guidepup.visionassist";
+const DEFAULT_DEV_IOS_BUNDLE_IDENTIFIER = "app.rork.guide-pup-vision-assist";
 const DEFAULT_DEV_ANDROID_PACKAGE = "dev.guidepup.visionassist";
 
 function withDevFallback(value: string | undefined, fallback: string) {

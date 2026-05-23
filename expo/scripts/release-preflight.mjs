@@ -34,6 +34,8 @@ const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-a
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
 const supportPagePath = path.resolve(projectDir, "../site/support/index.html");
+const iosInfoPlistPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/Info.plist");
+const iosPrivacyManifestPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy");
 
 const errors = [];
 const warnings = [];
@@ -380,6 +382,90 @@ function validatePublicSupportPageForStore() {
   );
 }
 
+function hasBooleanFalseForKey(xml, keyName) {
+  const keyIndex = xml.indexOf(`<key>${keyName}</key>`);
+  if (keyIndex === -1) {
+    return false;
+  }
+
+  const nextKeyIndex = xml.indexOf("<key>", keyIndex + keyName.length);
+  const keySection = xml.slice(keyIndex, nextKeyIndex === -1 ? undefined : nextKeyIndex);
+  return keySection.includes("<false/>");
+}
+
+function hasAppFunctionalityPurpose(xml) {
+  return xml.includes("<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>");
+}
+
+function getPrivacyCollectedDataEntry(xml, dataType) {
+  const typeIndex = xml.indexOf(`<string>${dataType}</string>`);
+  if (typeIndex === -1) {
+    return undefined;
+  }
+
+  const entryStart = xml.lastIndexOf("<dict>", typeIndex);
+  const entryEnd = xml.indexOf("</dict>", typeIndex);
+  if (entryStart === -1 || entryEnd === -1) {
+    return undefined;
+  }
+
+  return xml.slice(entryStart, entryEnd + "</dict>".length);
+}
+
+function validateIosPrivacySurface() {
+  const infoPlistXml = readTextFileAbsolute(iosInfoPlistPath);
+  const privacyManifestXml = readTextFileAbsolute(iosPrivacyManifestPath);
+
+  expect(Boolean(infoPlistXml), "Native iOS Info.plist is missing: ios/GuidePupVisionAssistant/Info.plist.");
+  expect(Boolean(privacyManifestXml), "iOS privacy manifest is missing: ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy.");
+
+  if (infoPlistXml) {
+    for (const permissionKey of [
+      "NSLocationAlwaysAndWhenInUseUsageDescription",
+      "NSLocationAlwaysUsageDescription",
+      "NSLocationWhenInUseUsageDescription",
+      "NSPhotoLibraryUsageDescription",
+    ]) {
+      expect(
+        !infoPlistXml.includes(`<key>${permissionKey}</key>`),
+        `Native iOS Info.plist must not include unused ${permissionKey} permission copy for this shipping path.`,
+      );
+    }
+  }
+
+  if (!privacyManifestXml) {
+    return;
+  }
+
+  const expectedCollectedDataTypes = [
+    "NSPrivacyCollectedDataTypePhotosorVideos",
+    "NSPrivacyCollectedDataTypeDeviceID",
+  ];
+  for (const dataType of expectedCollectedDataTypes) {
+    const entry = getPrivacyCollectedDataEntry(privacyManifestXml, dataType);
+    expect(
+      Boolean(entry),
+      `iOS privacy manifest must disclose ${dataType} because the app sends sampled camera frames and anonymous device/session identifiers to the backend.`,
+    );
+    if (!entry) {
+      continue;
+    }
+
+    expect(
+      hasBooleanFalseForKey(entry, "NSPrivacyCollectedDataTypeLinked"),
+      `iOS privacy manifest ${dataType} entry must be marked not linked to the user.`,
+    );
+    expect(
+      hasBooleanFalseForKey(entry, "NSPrivacyCollectedDataTypeTracking"),
+      `iOS privacy manifest ${dataType} entry must be marked not used for tracking.`,
+    );
+    expect(
+      hasAppFunctionalityPurpose(entry),
+      `iOS privacy manifest ${dataType} entry must include App Functionality as a purpose.`,
+    );
+  }
+}
+
 const argv = process.argv.slice(2);
 const selectedTrack = parseTrack(argv);
 if (!validTracks.has(selectedTrack)) {
@@ -441,6 +527,9 @@ const iosInfoPlist = appJson.expo.ios?.infoPlist || {};
 expect(isNonEmptyString(iosInfoPlist.NSCameraUsageDescription), "iOS camera permission copy is missing.");
 expect(isNonEmptyString(iosInfoPlist.NSMicrophoneUsageDescription), "iOS microphone permission copy is missing.");
 expect(isNonEmptyString(iosInfoPlist.NSSpeechRecognitionUsageDescription), "iOS speech-recognition permission copy is missing.");
+if (requiresIos) {
+  validateIosPrivacySurface();
+}
 
 const previewProfile = easJson.build?.preview;
 const testflightProfile = easJson.build?.testflight;

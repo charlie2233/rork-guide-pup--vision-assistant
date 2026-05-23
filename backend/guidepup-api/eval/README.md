@@ -9,7 +9,7 @@ This folder contains a small dev/staging-only eval harness for the vision API.
 - Sends the same compact sampled-frame envelope as the app: session ID, frame ID, timestamp, native path, prior guidance, dimensions, and one image.
 - Includes sanitized frame summary and capture heuristics such as image source, upload size, resize flag, and frame age. It never writes raw images to smoke/eval artifacts.
 - Calls `POST /__debug/provider-benchmark` when the route is enabled.
-- Reports average latency, STOP recall on hazard fixtures, false-forward count, structured-output validity, and provider/model summaries.
+- Reports average latency, STOP recall on hazard fixtures, false-forward count, structured-output validity, expected-label matches, and provider/model summaries.
 
 ## Files
 
@@ -83,7 +83,8 @@ The runner emits:
 - `benchmarkProviders[]` when the benchmark route is enabled
 - `scenarios{}` with per-scenario valid/STOP/false-forward counts
 - `fixtures[]` with per-fixture results, structured-output field validation, and sanitized request-envelope metadata
-- `fixtures[].walkability` and `fixtures[].walkabilityMatches` when an expected walkability label is present
+- `fixtures[].expectedLabels` and `fixtures[].labelMismatches` when expected direction, hazard level, lighting, surface type, or walkability labels are present
+- `fixtures[].*Matches` fields for expected direction, hazard level, lighting, surface type, and walkability labels
 
 ## Fixture guidance
 
@@ -95,4 +96,5 @@ The runner emits:
   - `low-light`
 - Use real local captures for hallway, doorway, stairs, curb, drop-off, and low-light scenes.
 - Do not commit third-party images.
-- If a fixture is not labeled, the harness still runs, but STOP recall and false-forward metrics will be less meaningful.
+- If a fixture is labeled, any mismatch for expected direction, hazard level, lighting, surface type, or walkability makes that fixture invalid even when the JSON shape is valid.
+- If a fixture is not labeled, the harness still runs, but STOP recall, false-forward, and semantic-validity metrics will be less meaningful.

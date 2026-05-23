@@ -20,13 +20,13 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Staging API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
 - Production API base URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
 - Production Worker name: `guidepup-api-production`
-- iOS bundle identifier: `dev.guidepup.visionassist`
+- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
 - Apple Team ID: `SBSJ3MX9GZ`
+- App Store Connect App ID: `6756947790`
 
 ## Unresolved Inputs
 
 - Android application id / package: `TODO_ANDROID_PACKAGE`
-- App Store Connect App ID: `TODO_APP_STORE_CONNECT_APP_ID`
 - Website URL override / custom domain: optional
 - Privacy policy URL: `https://guidepup-site.pages.dev/privacy`
 - Support URL: `https://guidepup-site.pages.dev/support`
@@ -44,9 +44,9 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 
 ## Identifier Evidence
 
-- iOS bundle identifier `dev.guidepup.visionassist` is present in `expo/app.config.ts`, the generated native Xcode project `PRODUCT_BUNDLE_IDENTIFIER`, and the iOS URL schemes in `Info.plist`.
+- App Store Connect App Information was verified in the side-panel browser on 2026-05-23 and shows bundle ID `app.rork.guide-pup-vision-assist`, SKU `EX1766553072106`, Apple ID `6756947790`, and primary category `Navigation`.
+- iOS bundle identifier `app.rork.guide-pup-vision-assist` is present in `expo/app.config.ts`, `expo/app.json`, the native Xcode project `PRODUCT_BUNDLE_IDENTIFIER`, and the iOS URL schemes in `Info.plist`.
 - Apple Team ID `SBSJ3MX9GZ` is present in the local Apple Development signing identity `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
-- App Store Connect was checked in the side-panel browser on 2026-05-23, but it redirected to Apple sign-in. The App Store Connect App ID still requires Apple login / 2FA or a value from Charlie.
 
 ## Final Values To Mirror
 
@@ -62,7 +62,6 @@ When Charlie fills these in, mirror the same value in the matching release docs 
 - Support email
 - Copyright holder
 - Emergency / safety disclaimer copy
-- App Store Connect App ID
 - Production API base URL
 - Production Sentry DSN
 

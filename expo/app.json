@@ -20,7 +20,7 @@
       },
       "buildNumber": "1",
       "supportsTablet": false,
-      "bundleIdentifier": "dev.guidepup.visionassist",
+      "bundleIdentifier": "app.rork.guide-pup-vision-assist",
       "infoPlist": {
         "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers.",
         "NSMicrophoneUsageDescription": "Guide Pup uses the microphone for optional hands-free voice commands such as start, stop, repeat, and spoken settings changes.",

@@ -222,5 +222,33 @@ Results:
 - Live staging and production Workers are still on `gpt-4.1` / prompt `2026-03-31.v1`; they need redeploy and fresh smoke before TestFlight.
 - Production smoke now fails the structured launch gate because the live raw analyze response omits `walkability` and `fallbackReason`.
 - Provider runtime controls are local and dry-run validated, but not launch evidence until staging and production Workers are deployed and fresh smoke artifacts contain the new `/health` runtime fields.
-- Expo/EAS build and submission remain blocked by missing `EXPO_TOKEN` and unresolved iOS bundle ID, Apple Team ID, App Store Connect App ID, and copyright holder.
+- Expo/EAS build and submission remain blocked by missing `EXPO_TOKEN`, unresolved store metadata/support/safety values, missing no-screen evidence, stale production smoke evidence, and copyright holder.
 - The eval harness still lacks real local fixture images; `eval/sample-manifest.json` is a placeholder and is not blind-validation proof.
+
+## Eval label-scoring continuation on 2026-05-23
+
+Read-only audit found that eval manifests already carried expected semantic labels, but the runner only enforced structured output shape and expected walkability. This continuation tightens the quality gate without changing provider routing or iOS control ownership.
+
+Changes:
+
+- `eval/run-eval.mjs` now compares expected direction, hazard level, lighting, surface type, and walkability when labels are present.
+- Fixture summaries now emit `expectedLabels`, `labelMismatches`, and per-field match booleans.
+- Labeled fixture results are invalid when any expected semantic label disagrees, even if the provider returns structurally valid JSON.
+- Eval docs and fixture capture protocol now state that semantic label mismatches fail labeled fixtures.
+
+Validation:
+
+```bash
+node --check backend/guidepup-api/eval/run-eval.mjs
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+git diff --check
+```
+
+Results:
+
+- ESM syntax check passed.
+- Backend typecheck passed.
+- Backend privacy/runtime/prompt tests passed: 9 tests.
+- `git diff --check` passed.
+- No live eval run was claimed, because the repository still lacks private local fixture images and Cloudflare auth/provider redeploy evidence is blocked in this shell.

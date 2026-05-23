@@ -23,6 +23,8 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - Sentry SDK init and privacy scrubbing: `expo/src/lib/sentry.ts`
 - Voice permission copy and bounded commands: `expo/app.json`, `expo/src/lib/voiceCommands.ts`, `expo/modules/guidepup-voice-control`
 - OpenAI-compatible provider default and MiniCPM benchmark-only flag: `backend/guidepup-api/wrangler.jsonc`
+- iOS privacy manifest discloses sampled camera frames as photos/videos and anonymous device/session IDs for app functionality: `expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy`
+- Native iOS Info.plist must not carry unused location or photo-library permission copy for this shipping path: `expo/ios/GuidePupVisionAssistant/Info.plist`
 
 ## Apple privacy answers to prepare
 

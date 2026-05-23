@@ -56,23 +56,23 @@ Last updated: 2026-05-23
 - Store API target: production
 - EAS Metadata config: `expo/store.config.js`
 - Release preflight: track-aware, with preview warning on fallback-only staging smoke and a hard provider-backed gate for `testflight` and `store`
-- iOS bundle identifier: `dev.guidepup.visionassist`
+- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
 - Apple Team ID: `SBSJ3MX9GZ`
-- App Store Connect App ID: unresolved because App Store Connect redirected to Apple sign-in in the side-panel browser on 2026-05-23
+- App Store Connect App ID: `6756947790`
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
   - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
-  - `store`: still blocked by `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 - Latest local validation on 2026-05-23:
-  - `npx expo config --type public` shows `ios.bundleIdentifier: dev.guidepup.visionassist`
+  - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
   - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env
-  - `npm run release:preflight:testflight`: failed on unresolved App Store Connect App ID, copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`
 
@@ -211,18 +211,18 @@ Last updated: 2026-05-23
   - `SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=00008130-000A001A1178001C' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build`
 - The device install path is now blocked by Apple signing account/provisioning, not by device connectivity:
   - `No Account for Team "SBSJ3MX9GZ". Add a new account in Accounts settings or verify that your accounts have valid credentials.`
-  - `No profiles for 'dev.guidepup.visionassist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'dev.guidepup.visionassist'.`
+  - `No profiles for 'dev.guidepup.visionassist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching the old local bundle identifier.`
 - Rechecked EAS auth with `npx --yes eas-cli whoami`; it still returns `Not logged in`, so an EAS installable build link cannot be created from this machine yet.
 
 ## Blockers
 
-- iOS bundle identifier is still unresolved.
-- Apple Team ID and App Store Connect App ID are still unresolved.
+- iOS bundle identifier is resolved to the App Store Connect bundle ID `app.rork.guide-pup-vision-assist`.
+- Apple Team ID is resolved to `SBSJ3MX9GZ`; App Store Connect App ID is resolved to `6756947790`.
 - Store copyright holder is still unresolved.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
 - Real device app install has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
-- The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `dev.guidepup.visionassist`.
+- The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `app.rork.guide-pup-vision-assist`.
 
 ## Actions taken on 2026-05-22
 

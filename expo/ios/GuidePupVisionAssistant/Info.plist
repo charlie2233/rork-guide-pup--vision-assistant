@@ -28,7 +28,7 @@
         <key>CFBundleURLSchemes</key>
         <array>
           <string>guidepup</string>
-          <string>dev.guidepup.visionassist</string>
+          <string>app.rork.guide-pup-vision-assist</string>
         </array>
       </dict>
     </array>
@@ -51,14 +51,6 @@
     <string>Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Guide Pup uses the microphone for optional hands-free voice commands such as start, stop, repeat, and spoken settings changes.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
-    <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your photos</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Guide Pup uses speech recognition for optional hands-free voice commands. Spoken commands are parsed on-device into a bounded control set.</string>
     <key>NSUserActivityTypes</key>
