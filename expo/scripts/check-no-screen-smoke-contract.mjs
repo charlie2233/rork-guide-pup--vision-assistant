@@ -225,6 +225,8 @@ mustInclude(releasePreflight, "Public support page must include the configured s
 mustInclude(releasePreflight, "validateAppReviewMetadataForStore", "App Review metadata preflight gate");
 mustInclude(releasePreflight, "App Review sign-in required / demoRequired", "App Review sign-in required preflight gate");
 mustInclude(releasePreflight, "does not require account sign-in", "App Review no-login notes preflight gate");
+mustInclude(releasePreflight, "validateSentryLaunchDecision", "Sentry launch decision preflight gate");
+mustInclude(releasePreflight, "launchInputs.sentryMode", "Sentry launch mode preflight gate");
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
 mustInclude(liveSmoke, "launchContract", "Live smoke records launch contract");

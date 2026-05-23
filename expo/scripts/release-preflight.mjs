@@ -30,6 +30,7 @@ const appJson = readJson("app.json");
 const easJson = readJson("eas.json");
 const publicUrls = getPublicUrls();
 const validTracks = new Set(["preview", "testflight", "store", "all"]);
+const validSentryModes = new Set(["disabled", "enabled"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
@@ -122,6 +123,57 @@ function isLikelyEmail(value) {
 
 function isLikelyInternationalPhone(value) {
   return isNonEmptyString(value) && /^\+[0-9][0-9\s().-]{6,}$/.test(value);
+}
+
+function getOptionalEnvValue(profile, key) {
+  const value = profile?.env?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function validateSentryLaunchDecision({ previewProfile, testflightProfile, storeProfile }) {
+  const sentryMode = launchInputs.sentryMode;
+  expect(validSentryModes.has(sentryMode), 'launchInputs.sentryMode must be either "disabled" or "enabled".');
+
+  const selectedProfiles = [
+    ["preview", previewProfile, requiresPreview],
+    ["testflight", testflightProfile, requiresTestflight],
+    ["store", storeProfile, requiresStore],
+  ].filter(([, profile, shouldCheck]) => shouldCheck && profile);
+
+  if (sentryMode === "disabled") {
+    expect(
+      !isNonEmptyString(launchInputs.productionSentryDsn),
+      "Production Sentry DSN must stay blank while launchInputs.sentryMode is disabled.",
+    );
+
+    for (const [profileName, profile] of selectedProfiles) {
+      const profileDsn = getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN");
+      expect(
+        !isNonEmptyString(profileDsn),
+        `${profileName} EXPO_PUBLIC_SENTRY_DSN must be blank or omitted while launchInputs.sentryMode is disabled.`,
+      );
+    }
+    return;
+  }
+
+  expect(
+    !isPlaceholderValue(launchInputs.productionSentryDsn),
+    "Production Sentry DSN is unresolved while launchInputs.sentryMode is enabled.",
+  );
+
+  for (const [profileName, profile] of selectedProfiles) {
+    compare(getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN"), launchInputs.productionSentryDsn, `${profileName} Sentry DSN`);
+  }
+
+  if (requiresStoreBackedDistribution) {
+    expect(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is required when launchInputs.sentryMode is enabled for TestFlight/store.");
+    expect(Boolean(process.env.SENTRY_ORG), "SENTRY_ORG is required when launchInputs.sentryMode is enabled for TestFlight/store.");
+    expect(Boolean(process.env.SENTRY_PROJECT), "SENTRY_PROJECT is required when launchInputs.sentryMode is enabled for TestFlight/store.");
+  } else {
+    warn(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is not set in the current shell while launchInputs.sentryMode is enabled.");
+    warn(Boolean(process.env.SENTRY_ORG), "SENTRY_ORG is not set in the current shell while launchInputs.sentryMode is enabled.");
+    warn(Boolean(process.env.SENTRY_PROJECT), "SENTRY_PROJECT is not set in the current shell while launchInputs.sentryMode is enabled.");
+  }
 }
 
 function modelMatchesExpected(value, expected) {
@@ -617,6 +669,12 @@ if (requiresStore) {
   expect(Boolean(storeProfile), "Missing build.store profile.");
 }
 
+validateSentryLaunchDecision({
+  previewProfile,
+  storeProfile,
+  testflightProfile,
+});
+
 if (previewProfile && requiresPreview) {
   compare(previewProfile.distribution, "internal", "preview distribution");
   compare(previewProfile.env?.EXPO_PUBLIC_API_BASE_URL, launchInputs.stagingApiBaseUrl, "preview API base URL");
@@ -728,14 +786,10 @@ for (const requiredEnv of [
   "EXPO_PUBLIC_APP_ENV",
   "EXPO_PUBLIC_RELEASE_TRACK",
   "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS",
+  "EXPO_PUBLIC_SENTRY_DSN",
 ]) {
   expect(envExample.includes(`${requiredEnv}=`), `.env.example is missing ${requiredEnv}.`);
 }
-
-warn(Boolean(process.env.EXPO_PUBLIC_SENTRY_DSN), "EXPO_PUBLIC_SENTRY_DSN is not set in the current shell.");
-warn(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is not set in the current shell.");
-warn(Boolean(process.env.SENTRY_ORG), "SENTRY_ORG is not set in the current shell.");
-warn(Boolean(process.env.SENTRY_PROJECT), "SENTRY_PROJECT is not set in the current shell.");
 
 if (errors.length > 0 || warnings.length > 0) {
   console.log(`Guide Pup release preflight (track: ${selectedTrack})`);

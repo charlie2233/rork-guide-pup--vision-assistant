@@ -23,6 +23,7 @@ const launchInputs = {
     "Guide Pup does not require account sign-in. Start from onboarding, allow camera/microphone/speech permissions, then use Start Guidance or the voice command 'start guidance'. The app uses anonymous device/session bootstrap and speaks conservative guidance or STOP when analysis is unavailable or unclear.",
   productionApiBaseUrl: "https://guidepup-api-production.charliehan-lifepage.workers.dev",
   productionPromptVersion: "2026-05-22.v1",
+  sentryMode: "disabled",
   productionSentryDsn: "",
   productionVisionModel: "gpt-5.5",
   storeBuildImage: "macos-sequoia-15.6-xcode-26.2",

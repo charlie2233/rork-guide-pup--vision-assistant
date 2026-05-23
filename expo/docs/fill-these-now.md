@@ -12,8 +12,8 @@ Charlie still needs to set these values before launch execution can finish:
 - App Review contact last name
 - App Review contact email, as a valid email address
 - App Review contact phone number, including country code, for example `+1 555 010 1234`
-- Optional production Sentry DSN
-- `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
+- Sentry mode change and production DSN if crash diagnostics should be enabled
+- `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` if Sentry mode changes to `enabled`
 - Expo/EAS login or `EXPO_TOKEN`
 - Final Android package name for future cross-platform release validation
 
@@ -27,6 +27,8 @@ Charlie still needs to set these values before launch execution can finish:
   - Evidence: App Store Connect app list and App Information page for `Guide Pup: Vision Assistant`.
 - App Review sign-in requirement: `false`
   - Evidence: Guide Pup has no account sign-in flow; `expo/store.config.js` now sets `apple.review.demoRequired` from `expo/release/launch-inputs.js`.
+- Sentry mode: `disabled`
+  - Evidence: `expo/release/launch-inputs.js` now carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight requires TestFlight/store EAS profiles to keep `EXPO_PUBLIC_SENTRY_DSN` blank while disabled.
 
 ## Backend by environment
 
@@ -45,6 +47,6 @@ Charlie still needs to set these values before launch execution can finish:
 
 - `CLOUDFLARE_API_TOKEN` is not set locally and `npx wrangler whoami` reports `Not logged in`, so deploy and secret verification cannot be refreshed from this shell yet.
 - `EXPO_TOKEN` is not set locally, so EAS build/submit cannot start from this shell yet.
-- `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` are not set locally, so Sentry issue health cannot be queried from this shell yet.
+- Sentry issue health cannot be queried from this shell because Sentry is currently disabled for launch. If Sentry mode changes to `enabled`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` must be set before TestFlight/store preflight can pass.
 
 After updating them, rerun the matching iOS track gate from `expo/`, for example `npm run release:preflight:testflight`.

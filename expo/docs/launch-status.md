@@ -59,20 +59,21 @@ Last updated: 2026-05-23
 - iOS bundle identifier: `app.rork.guide-pup-vision-assist`
 - Apple Team ID: `SBSJ3MX9GZ`
 - App Store Connect App ID: `6756947790`
+- Sentry mode: `disabled`
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
   - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
-  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, and missing no-screen evidence
+  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, and missing no-screen evidence
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 - Latest local validation on 2026-05-23:
   - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
-  - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env
-  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `npm run release:preflight:preview`: passed with warnings for stale staging smoke and missing no-screen evidence
+  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, and missing no-screen evidence
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Strict staging smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Strict production smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
@@ -277,12 +278,12 @@ Last updated: 2026-05-23
 
 ## Actions taken on 2026-05-23 final launch recheck
 
-- Re-ran `npm --prefix expo run release:preflight:preview`; it passed with warnings for stale staging smoke, missing launch-contract/sampled-frame/runtime/structured evidence, missing no-screen evidence, and missing Sentry env.
+- Re-ran `npm --prefix expo run release:preflight:preview`; it passed with warnings for stale staging smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing no-screen evidence.
 - Re-ran `npm --prefix expo run release:preflight:testflight`; it failed on unresolved copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing real-iPhone no-screen evidence.
 - Re-ran `npm --prefix expo run check:ios-device`; it reports `charlie的iPhone` is paired with Developer Mode enabled, but currently CoreDevice state is `unavailable`, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode destination visibility is `no`.
 - Re-ran the staging Worker dry-run; it passed locally and still shows the intended launch values `gpt-5.5`, prompt `2026-05-22.v1`, and bounded runtime controls, but Wrangler auth is missing so nothing was deployed.
 - Re-ran `npx --yes wrangler whoami` and `npx --yes eas-cli whoami`; both returned `Not logged in`.
-- Submission remains blocked. Main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Sentry env, and final store metadata are not complete.
+- Submission remains blocked. Main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Apple provisioning, and final store metadata are not complete.
 
 ## Actions taken on 2026-05-23 App Review metadata gate
 
@@ -290,6 +291,15 @@ Last updated: 2026-05-23
 - Added release-preflight checks for App Review contact first name, last name, email, phone, no demo credentials, and review notes that explicitly state Guide Pup does not require account sign-in.
 - This addresses the local source-of-truth gap for the App Store Connect sign-in-required checkbox, but EAS/App Store auth is still required before the dashboard can be updated.
 - Preview preflight still passes with warnings. TestFlight/store preflight now also fail on unresolved App Review contact fields, as intended.
+
+## Actions taken on 2026-05-23 Sentry launch-mode gate
+
+- Made Sentry an explicit launch decision in `expo/release/launch-inputs.js` with `sentryMode: "disabled"` and a blank production DSN.
+- Tightened release preflight so selected EAS profiles must omit `EXPO_PUBLIC_SENTRY_DSN` while Sentry is disabled.
+- If Sentry mode changes to `enabled`, TestFlight/store preflight now requires the production DSN to match the selected EAS profiles and requires `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` for release upload/health validation.
+- Updated App Privacy, App Review, public site, and launch handoff docs so diagnostics are currently answered as disabled rather than vague optional telemetry.
+- This removes missing Sentry env as a launch blocker for the current disabled-diagnostics launch path; production smoke, real-iPhone no-screen evidence, EAS auth, Apple provisioning, and final store metadata still block submission.
+- Latest validation passed: release-preflight syntax, no-screen contract, preview preflight expected-pass, TestFlight/store preflight expected-fail, Expo typecheck, Expo lint, no-screen evidence tests, smoke-evidence privacy tests, GuideAI conversation-memory test, backend typecheck, backend privacy tests, backend staging dry-run, and Build iOS Apps Release simulator build on `iPhone 16e`.
 
 ## Actions taken on 2026-05-23 no-screen evidence and scene-query gate
 

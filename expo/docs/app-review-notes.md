@@ -18,7 +18,7 @@ Guide Pup is an assistive navigation app for blind and low-vision users. It anal
 - App Review sign-in / demo account required should be set to `No` / `false`.
 - Do not provide demo credentials; there is no account flow in the shipping app.
 - The app is designed to fail safe and return `STOP` when the scene is unclear, the backend is unavailable, or the response is invalid.
-- Crash reporting may be enabled through Sentry in release builds, but the SDK is configured to avoid collecting default PII.
+- Crash reporting is currently disabled in the release source of truth. If Sentry is enabled later, the SDK is configured to avoid collecting default PII and App Privacy answers must be updated.
 
 ## Review Copy
 

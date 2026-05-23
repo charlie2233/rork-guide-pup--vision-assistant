@@ -80,7 +80,7 @@ Results:
 
 - Preview preflight failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
 - TestFlight preflight failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.
-- Both tracks warn that Sentry env values are not set in this shell.
+- Earlier runs warned that Sentry env values were not set in this shell; the later Sentry launch-mode gate makes disabled diagnostics explicit.
 
 Validation during this phase:
 
@@ -249,7 +249,7 @@ Results:
 - Script syntax check passed.
 - Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and stale staging smoke warnings.
 - TestFlight/store preflight now also fail on public support-page readiness: the support page still contains launch-internal placeholder phrases and the configured support email is unresolved.
-- TestFlight/store remain blocked on unresolved Apple identifiers, copyright holder, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and Sentry env warnings.
+- TestFlight/store remain blocked on unresolved Apple identifiers, copyright holder, emergency/safety disclaimer, stale production smoke contract, and missing no-screen evidence.
 
 ## Identifier resolution continuation on 2026-05-23
 
@@ -292,9 +292,9 @@ xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES
 Results:
 
 - Evaluated Expo config now shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`.
-- Preview preflight now passes with warnings only; stale staging smoke, missing no-screen evidence, and missing Sentry env remain warnings for preview.
+- Preview preflight now passes with warnings only; stale staging smoke and missing no-screen evidence remain warnings for preview.
 - TestFlight/store preflight no longer fail on bundle identifier, Apple Team ID, or App Store Connect App ID.
-- TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env.
+- TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, and missing no-screen evidence.
 - Expo typecheck, Expo lint, voice command contract, no-screen contract, no-screen evidence tests, smoke evidence tests, backend typecheck, and backend privacy tests passed.
 - `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` is missing.
 - `check:ios-device` still reports `charlie的iPhone` blocked: paired and Developer Mode enabled, but unavailable to CoreDevice, DDI unavailable, tunnel disconnected, and no USB iPhone present.
@@ -390,7 +390,7 @@ Results:
 - Expo config now evaluates to `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`.
 - `Info.plist` contains camera, microphone, and speech-recognition copy, and no unused location/photo-library permission copy.
 - `PrivacyInfo.xcprivacy` contains `PhotosorVideos` and `DeviceID` collected data entries for app functionality, not linked and not tracking.
-- Preview preflight passes with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env.
+- Preview preflight passes with warnings for stale staging smoke and missing no-screen evidence.
 - TestFlight/store preflights no longer fail on bundle identifier, Apple Team ID, or App Store Connect App ID.
 - TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support page readiness, stale production smoke contract, and missing real-iPhone no-screen evidence.
 - Typecheck, lint, voice-command contract, no-screen smoke contract, no-screen evidence tests, smoke-evidence tests, backend typecheck, backend privacy/runtime/prompt tests, and `git diff --check` passed.
@@ -447,7 +447,7 @@ Results:
 
 - TestFlight preflight no longer fails on public support page placeholder phrases.
 - The support email, copyright holder, and emergency/safety disclaimer remain intentionally unresolved in `expo/release/launch-inputs.js`; those still block TestFlight/store.
-- Production smoke evidence, real-iPhone no-screen evidence, EAS auth, Sentry env, and Apple provisioning remain blockers.
+- Production smoke evidence, real-iPhone no-screen evidence, EAS auth, and Apple provisioning remain blockers.
 
 ## Final readiness recheck on 2026-05-23
 
@@ -464,7 +464,7 @@ npx --yes eas-cli whoami
 
 Results:
 
-- Preview preflight passed with warnings for stale staging smoke (`gpt-4.1` / `2026-03-31.v1`), missing sampled-frame/runtime/structured launch evidence, missing no-screen evidence, and missing Sentry env.
+- Preview preflight passed with warnings for stale staging smoke (`gpt-4.1` / `2026-03-31.v1`), missing sampled-frame/runtime/structured launch evidence, and missing no-screen evidence.
 - TestFlight preflight failed, as intended, on unresolved copyright holder, support email, emergency/safety disclaimer, support-page contact readiness, stale production smoke (`gpt-4.1` / `2026-03-31.v1`), missing sampled-frame/runtime/structured launch evidence, and missing `release/no-screen-smoke.latest.json`.
 - iPhone readiness check returned `BLOCKED`: `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode does not list it as a runnable destination.
 - Staging Worker dry-run passed and shows the local bundle would use `OPENAI_MODEL=gpt-5.5`, `PROMPT_VERSION=2026-05-22.v1`, and bounded runtime controls.
@@ -487,5 +487,47 @@ npm --prefix expo run release:preflight:store
 
 Results:
 
-- Preview preflight still passes with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env.
+- Preview preflight still passes with warnings for stale staging smoke and missing no-screen evidence.
 - TestFlight/store preflight now also fail on unresolved App Review contact first name, last name, email, and phone. This is intentional until the release owner supplies final App Review contact values.
+
+## Sentry launch-mode gate on 2026-05-23
+
+Sentry is now a deliberate release decision instead of an ambiguous optional warning.
+
+Changes:
+
+- Added `sentryMode: "disabled"` to `expo/release/launch-inputs.js` with a blank production DSN.
+- Updated release preflight so selected EAS profiles must omit `EXPO_PUBLIC_SENTRY_DSN` while Sentry mode is disabled.
+- Added the enabled-path gate: if Sentry mode changes to `enabled`, TestFlight/store preflight requires the production DSN to match the selected EAS profiles and requires `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`.
+- Updated App Privacy, App Review, launch handoff, and public site copy so diagnostics are currently answered as disabled.
+
+Expected impact:
+
+- Missing Sentry env vars are no longer a blocker for the current disabled-diagnostics launch path.
+- Production smoke evidence, real-iPhone no-screen evidence, EAS auth, Apple provisioning, and final store metadata still block TestFlight/App Store submission.
+
+Validation:
+
+```bash
+node --check expo/scripts/release-preflight.mjs
+node --check expo/scripts/check-no-screen-smoke-contract.mjs
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run test:smoke-evidence
+npm --prefix expo run test:guideai-conversation-memory
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+Build iOS Apps plugin build_sim, Release, iPhone 16e, Sentry upload disabled for simulator
+```
+
+Results:
+
+- Preview preflight passed with warnings only for stale staging smoke contract and missing real-iPhone no-screen evidence.
+- TestFlight/store preflight failed as intended on unresolved store metadata, App Review contact fields, stale production smoke contract, and missing no-screen evidence.
+- Expo typecheck, lint, no-screen smoke contract, no-screen evidence tests, smoke-evidence privacy tests, GuideAI conversation-memory test, backend typecheck, backend privacy tests, backend staging dry-run, and Build iOS Apps Release simulator build all passed.
