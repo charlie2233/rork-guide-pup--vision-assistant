@@ -13,6 +13,7 @@ This phase improves guidance-reliability evidence without changing the app/backe
 - Release preflight now rejects launch smoke that is provider-backed but missing the structured guidance fields needed for blind-user validation.
 - iOS diagnostics now exports the same non-secret analyze metadata that the app sends to the cloud: session ID, frame ID, native path, source size, prior guidance summary, and structured response fields.
 - The compact frame context now includes sanitized frame summary and capture heuristics so GPT receives explicit sampled-frame provenance without moving camera/session control out of iOS.
+- Backend provider runtime now has bounded launch controls for output tokens, request timeout, retry count, and retry delay; health, smoke artifacts, and release preflight must expose those controls before submission evidence is accepted.
 
 No provider keys, raw images, raw audio, credentials, or signed URLs were logged. Smoke artifacts record `hasImage: true` and image metadata only, not image content.
 
@@ -45,6 +46,12 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 - `expo/src/lib/api.ts` and `expo/src/logic/GuideAI.ts`
   - Make the client reject analyze responses that omit the launch-required structured fields.
   - Preserve explicit safe-stop metadata when local analysis is unavailable.
+- `backend/guidepup-api/src/providers/openai-compatible.ts`, `backend/guidepup-api/src/providers/index.ts`, `backend/guidepup-api/src/routes/health.ts`, and `backend/guidepup-api/wrangler.jsonc`
+  - Add bounded provider runtime controls: `OPENAI_MAX_COMPLETION_TOKENS=700`, `OPENAI_REQUEST_TIMEOUT_MS=12000`, `OPENAI_RETRY_COUNT=1`, and `OPENAI_RETRY_DELAY_MS=250`.
+  - Clamp runtime values to safe ranges and retry only retryable provider failures (`408`, `429`, `5xx`, and request aborts).
+  - Surface the configured values in `/health` provider summary without exposing provider secrets.
+- `backend/guidepup-api/test/provider-runtime-controls.test.mjs`, `expo/scripts/release-preflight.mjs`, and `expo/scripts/check-no-screen-smoke-contract.mjs`
+  - Assert the runtime controls are present in Worker config, health, live smoke evidence, and TestFlight preflight gates.
 
 ## Live smoke evidence
 
@@ -82,6 +89,17 @@ Production result:
 - Missing structured field from live raw response: `fallbackReason`
 
 Important: the stricter smoke harness correctly stops these runs from being treated as launch-valid, even though the analyze endpoint is provider-backed. The live Workers still need deployment of the local `gpt-5.5` / `2026-05-22.v1` structured-output contract.
+
+Runtime-control continuation smoke on 2026-05-23, also written only to `/tmp` artifacts:
+
+- Staging `/health`: request ID `c9bc43c3-0285-41ec-a0d8-56b7822bf0ac`
+- Staging `/v1/device/bootstrap`: request ID `9898d848-47f1-466c-aa6e-0c58ac355ba2`
+- Staging `/v1/vision/analyze`: request ID `841657a1-1efa-49c4-99f2-1b5ca3d80df7`
+- Staging execution path: `provider-backed`, but launch-invalid because the live Worker still reports `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, omits `fallbackReason`, and does not expose the new runtime-control health fields.
+- Production `/health`: request ID `cd19dbc7-ea36-415c-83a5-ef8070e759d5`
+- Production `/v1/device/bootstrap`: request ID `5153558c-7707-4dd2-ba49-c18b0d6a8123`
+- Production `/v1/vision/analyze`: request ID `289ef798-9c70-41db-b1e6-d6886a11711f`
+- Production execution path: `provider-backed`, but launch-invalid for the same stale model, prompt, missing `fallbackReason`, and missing runtime-control health fields.
 
 ## Validation
 
@@ -130,6 +148,8 @@ Results:
 - Latest continuation added sanitized frame summary/capture heuristics, haptic diagnostics, and the local no-screen smoke contract check.
 - Latest validation passed: ESM syntax checks, backend typecheck, Expo typecheck, Expo lint, `check:voice-commands`, `check:no-screen-smoke`, `git diff --check`, Cloudflare staging dry-run bundle validation, scratch staging/production live smoke generation, and Build iOS Apps plugin Release simulator build for `iPhone 16e`.
 - Latest preview/testflight preflight still blocks on unresolved release inputs and stale tracked smoke artifacts; the stale smoke evidence now also reports missing `requestEnvelope.captureHeuristics` and `requestEnvelope.frameSummary`.
+- Runtime-control continuation validation passed: backend privacy/runtime tests, backend typecheck, Worker type regeneration, staging and production Worker dry-run bundle validation, Expo typecheck, Expo lint, voice-command contract, no-screen smoke contract, iOS device readiness check, release preflight preview/TestFlight gates, Build iOS Apps Release simulator build, and `git diff --check`.
+- Runtime-control continuation preflight correctly rejects stale checked-in smoke because it lacks `health.defaultMaxCompletionTokens`, `health.defaultRequestTimeoutMs`, `health.defaultRetryCount`, and `health.defaultRetryDelayMs`.
 
 ## Auth and plugin status
 
@@ -159,5 +179,6 @@ Results:
 - Cloudflare deploy/auth is blocked in this shell: `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 - Live staging and production Workers are still on `gpt-4.1` / prompt `2026-03-31.v1`; they need redeploy and fresh smoke before TestFlight.
 - Production smoke now fails the structured launch gate because the live raw analyze response omits `fallbackReason`.
+- Provider runtime controls are local and dry-run validated, but not launch evidence until staging and production Workers are deployed and fresh smoke artifacts contain the new `/health` runtime fields.
 - Expo/EAS build and submission remain blocked by missing `EXPO_TOKEN` and unresolved iOS bundle ID, Apple Team ID, App Store Connect App ID, and copyright holder.
 - The eval harness still lacks real local fixture images; `eval/sample-manifest.json` is a placeholder and is not blind-validation proof.

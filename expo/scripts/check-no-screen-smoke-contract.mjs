@@ -148,6 +148,9 @@ const releasePreflight = read("../scripts/release-preflight.mjs");
 mustInclude(releasePreflight, "artifact.health?.requestId", "Health request ID preflight gate");
 mustInclude(releasePreflight, "artifact.bootstrap?.requestId", "Bootstrap request ID preflight gate");
 mustInclude(releasePreflight, "artifact.analyze?.requestId", "Analyze request ID preflight gate");
+mustInclude(releasePreflight, "requireHealthField(\"defaultMaxCompletionTokens\"", "Max completion token preflight gate");
+mustInclude(releasePreflight, "requireHealthField(\"defaultRequestTimeoutMs\"", "Provider timeout preflight gate");
+mustInclude(releasePreflight, "requireHealthField(\"defaultRetryCount\"", "Provider retry preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"frameSummary\"", "Frame summary preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"captureHeuristics\"", "Capture heuristics preflight gate");
 
@@ -156,5 +159,8 @@ mustInclude(liveSmoke, "hasImage: true", "Live smoke sends hasImage");
 mustInclude(liveSmoke, "sampledFrame: true", "Live smoke sends sampledFrame");
 mustInclude(liveSmoke, "frameSummary", "Live smoke records frame summary");
 mustInclude(liveSmoke, "captureHeuristics", "Live smoke records capture heuristics");
+mustInclude(liveSmoke, "defaultMaxCompletionTokens", "Live smoke records max completion tokens");
+mustInclude(liveSmoke, "defaultRequestTimeoutMs", "Live smoke records provider timeout");
+mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry count");
 
 console.log("No-screen smoke contract passed. Real iPhone validation is still required for hardware proof.");

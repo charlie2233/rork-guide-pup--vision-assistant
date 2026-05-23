@@ -21,6 +21,8 @@ This phase tightens the cloud-owned vision contract for internal iOS launch read
 - iOS sends sampled-frame metadata from the navigation loop while keeping camera capture and STOP/haptics/VoiceOver control local.
 - Backend log redaction is shared with the Sentry envelope path so `deviceId`, tokens, auth headers, API keys, raw image/base64 fields, and keyless bearer/base64-like snippets are redacted before logging or Sentry reporting, while request ID, route, prompt version, and environment remain usable.
 - Provider non-OK errors no longer carry upstream response-body snippets into app logs or Sentry messages.
+- Backend provider runtime controls are now bounded and surfaced for smoke evidence: max completion tokens default `700` (clamped `128..1200`), request timeout default `12000` ms (clamped `3000..30000`), retry count default `1` (clamped `0..2`), and retry delay default `250` ms (clamped `0..2000`).
+- Provider retry behavior is limited to retryable transport/server failures (`408`, `429`, `5xx`, and request aborts), and release preflight now requires those runtime-control health fields in staging/production smoke artifacts.
 
 ## Live backend evidence
 
@@ -65,6 +67,17 @@ Latest temporary smoke rerun on 2026-05-23, written only to `/tmp` artifacts:
 - Production `/v1/device/bootstrap`: `55944638-d6f7-4102-ae17-9f3c519d4acf`
 - Production `/v1/vision/analyze`: `8c6b03a5-aa3b-4fc1-8826-d0b4ddcd5d2e`
 - Production execution path: `provider-backed`, but launch-invalid for the same stale model/prompt and missing `fallbackReason` contract gap.
+
+Runtime-control continuation smoke on 2026-05-23, written only to `/tmp` artifacts:
+
+- Staging `/health`: `c9bc43c3-0285-41ec-a0d8-56b7822bf0ac`
+- Staging `/v1/device/bootstrap`: `9898d848-47f1-466c-aa6e-0c58ac355ba2`
+- Staging `/v1/vision/analyze`: `841657a1-1efa-49c4-99f2-1b5ca3d80df7`
+- Staging execution path: `provider-backed`, but launch-invalid because live Worker health does not yet expose `defaultMaxCompletionTokens`, `defaultRequestTimeoutMs`, `defaultRetryCount`, or `defaultRetryDelayMs`, and analyze still reports `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, and missing `fallbackReason`.
+- Production `/health`: `cd19dbc7-ea36-415c-83a5-ef8070e759d5`
+- Production `/v1/device/bootstrap`: `5153558c-7707-4dd2-ba49-c18b0d6a8123`
+- Production `/v1/vision/analyze`: `289ef798-9c70-41db-b1e6-d6886a11711f`
+- Production execution path: `provider-backed`, but launch-invalid for the same stale live Worker contract.
 
 ## Auth and provider status
 
@@ -166,6 +179,8 @@ Results:
 - `check:ios-device` intentionally remains blocked: paired and Developer Mode enabled, but DDI services are unavailable, no USB iPhone is present, and the device is still not runnable.
 - Preview/TestFlight preflights intentionally fail on unresolved release inputs and stale checked-in smoke artifacts.
 - Secret verification intentionally fails without `CLOUDFLARE_API_TOKEN`; `wrangler whoami` still reports not logged in.
+- Runtime-control continuation added `backend/guidepup-api/test/provider-runtime-controls.test.mjs`; `npm --prefix backend/guidepup-api run test:privacy` passed with the privacy redaction tests plus provider runtime-control coverage.
+- Runtime-control continuation reran `npm --prefix backend/guidepup-api run types`, `npm --prefix backend/guidepup-api run typecheck`, staging and production Worker dry-runs, Expo typecheck/lint, voice-command and no-screen smoke contracts, iOS device readiness, release preflight preview/TestFlight gates, Build iOS Apps Release simulator build, and `git diff --check`.
 
 ## P0 blockers
 
@@ -173,5 +188,6 @@ Results:
 - Physical device is paired with Developer Mode enabled, but unavailable/offline to Xcode right now.
 - Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` missing and Wrangler is not logged in.
 - New backend structured-output contract and `gpt-5.5` config are local only until staging/prod are deployed and smoked again.
+- New provider runtime controls are local/dry-run validated only until staging/prod are deployed and smoke artifacts include the new health fields.
 - Expo/EAS build is blocked: `EXPO_TOKEN` missing and release inputs are unresolved.
 - Sentry production health could not be queried because Sentry auth/org/project env vars are missing.

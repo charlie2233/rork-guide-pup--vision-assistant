@@ -170,6 +170,53 @@ No new provider-backed live smoke was run in this phase because Cloudflare auth 
 
 Important: live Workers are still provider-backed but have not been redeployed with the local `gpt-5.5` / `2026-05-22.v1` structured-output contract.
 
+## Submission review on 2026-05-23
+
+Decision: do not submit to TestFlight or App Store yet.
+
+Reasoning:
+
+- TestFlight must be first, but TestFlight preflight still fails on unresolved release inputs: iOS bundle identifier, Apple Team ID, App Store Connect App ID, and copyright holder.
+- `EXPO_TOKEN` is missing in this shell, so EAS build/submit cannot be authenticated.
+- Live staging and production Workers are provider-backed, but still stale for the launch contract: `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, missing `fallbackReason`, and missing the new provider runtime-control health fields.
+- Cloudflare deployment remains blocked because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
+- Real iPhone no-screen smoke is still not validated because the paired device is unavailable/offline to Xcode.
+- Sentry issue health remains unverified because Sentry auth/org/project env vars are missing.
+
+Commands rerun for this submission review:
+
+```bash
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run types
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env production
+node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --output-json /tmp/guidepup-smoke-staging-current.json --output-md /tmp/guidepup-smoke-staging-current.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env production --output-json /tmp/guidepup-smoke-production-current.json --output-md /tmp/guidepup-smoke-production-current.md
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:ios-device
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+npm --prefix backend/guidepup-api run verify:secrets:staging
+npm --prefix backend/guidepup-api run verify:secrets:production
+npx --yes wrangler whoami
+git diff --check
+```
+
+Build iOS Apps plugin Release simulator build for `GuidePupVisionAssistant` on `iPhone 16e` also passed during this review with `CODE_SIGNING_ALLOWED=NO`, `ONLY_ACTIVE_ARCH=YES`, and `COMPILER_INDEX_STORE_ENABLE=NO`.
+
+Expected failures in the submission review:
+
+- `release:preflight:preview` fails on unresolved bundle identifier and stale staging smoke warnings.
+- `release:preflight:testflight` and `release:preflight:store` fail on unresolved Apple release inputs plus stale production smoke.
+- `verify:secrets:staging`, `verify:secrets:production`, and `wrangler whoami` fail because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
+
+Browser, Computer Use, ChatGPT Atlas, and App Store Connect were not used to submit because submission would be invalid before these gates pass. WhatsApp escalation was not needed for this review because the blockers are explicit release/auth/device inputs, not an ambiguous login screen.
+
 ## Remaining P0 blockers
 
 - Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.

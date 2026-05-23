@@ -94,6 +94,10 @@ function validateSmokeEvidenceShape(artifact) {
     artifact?.analyze && typeof artifact.analyze === "object" && !Array.isArray(artifact.analyze)
       ? artifact.analyze
       : undefined;
+  const health =
+    artifact?.health && typeof artifact.health === "object" && !Array.isArray(artifact.health)
+      ? artifact.health
+      : undefined;
 
   const requireEnvelopeField = (fieldName, validator) => {
     if (!envelope || !(fieldName in envelope) || envelope[fieldName] === undefined || envelope[fieldName] === null) {
@@ -114,6 +118,17 @@ function validateSmokeEvidenceShape(artifact) {
 
     if (!validator(analyze[fieldName])) {
       invalid.push(`analyze.${fieldName}`);
+    }
+  };
+
+  const requireHealthField = (fieldName, validator) => {
+    if (!health || !(fieldName in health) || health[fieldName] === undefined || health[fieldName] === null) {
+      missing.push(`health.${fieldName}`);
+      return;
+    }
+
+    if (!validator(health[fieldName])) {
+      invalid.push(`health.${fieldName}`);
     }
   };
 
@@ -149,6 +164,11 @@ function validateSmokeEvidenceShape(artifact) {
   requireEnvelopeField("detail", (value) => value === "low" || value === "high");
   requireEnvelopeField("sourceHeight", (value) => Number.isInteger(value) && value > 0);
   requireEnvelopeField("sourceWidth", (value) => Number.isInteger(value) && value > 0);
+
+  requireHealthField("defaultMaxCompletionTokens", (value) => Number.isInteger(value) && value >= 128 && value <= 1200);
+  requireHealthField("defaultRequestTimeoutMs", (value) => Number.isInteger(value) && value >= 3000 && value <= 30000);
+  requireHealthField("defaultRetryCount", (value) => Number.isInteger(value) && value >= 0 && value <= 2);
+  requireHealthField("defaultRetryDelayMs", (value) => Number.isInteger(value) && value >= 0 && value <= 2000);
 
   requireAnalyzeField("structuredOutputValid", (value) => value === true);
   requireAnalyzeField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);

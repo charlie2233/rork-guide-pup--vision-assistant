@@ -1,4 +1,4 @@
-import { createOpenAICompatibleProvider } from "./openai-compatible";
+import { createOpenAICompatibleProvider, getOpenAIProviderRuntimeConfig } from "./openai-compatible";
 import { getBenchmarkProviderNames } from "./config";
 
 export function getVisionProvider(env: Env) {
@@ -6,9 +6,16 @@ export function getVisionProvider(env: Env) {
 }
 
 export function getProviderSummary(env: Env) {
+  const runtimeConfig = getOpenAIProviderRuntimeConfig(env);
+
   return {
-    model: env.OPENAI_MODEL || "gpt-4.1",
+    maxCompletionTokens: runtimeConfig.maxCompletionTokens,
+    model: runtimeConfig.model,
     provider: "openai-compatible",
+    reasoningEffort: runtimeConfig.reasoningEffort,
+    requestTimeoutMs: runtimeConfig.requestTimeoutMs,
+    retryCount: runtimeConfig.retryCount,
+    retryDelayMs: runtimeConfig.retryDelayMs,
   };
 }
 
