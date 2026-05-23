@@ -93,18 +93,23 @@ export interface DiagnosticsAnalyzeEvent {
   direction?: DiagnosticsAnalyzeDirection;
   error?: string;
   fallbackReason?: string;
+  frameId?: string;
   hazardLevel?: DiagnosticsHazardLevel;
   id: string;
   latencyMs?: number;
+  lighting?: DiagnosticsLighting;
   message?: string;
   model?: string;
+  nativePath?: DiagnosticsNavigationExecutionPath;
   obstacle?: boolean;
+  priorGuidanceSummary?: string;
   requestId?: string;
   outcome: DiagnosticsAnalyzeOutcome;
   promptVersion?: string;
   provider?: string;
   safeReason?: string;
   sceneDescription?: string;
+  sessionId?: string;
   sourceHeight?: number;
   sourceWidth?: number;
   surfaceType?: string;
@@ -418,14 +423,19 @@ export function recordAnalyzeEvent(
     direction: input.direction,
     error: sanitizeMessage(input.error, 120),
     fallbackReason: sanitizeMessage(input.fallbackReason, 120),
+    frameId: sanitizeMessage(input.frameId, 80),
     id: input.id || createEventId(),
     latencyMs: input.latencyMs,
+    lighting: input.lighting,
     message: sanitizeMessage(input.message, 160),
+    nativePath: input.nativePath,
+    priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     provider: sanitizeMessage(input.provider, 64),
     requestId: sanitizeMessage(input.requestId, 80),
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
+    sessionId: sanitizeMessage(input.sessionId, 80),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
     timestamp: input.timestamp ?? Date.now(),
   };
@@ -557,9 +567,24 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Model: ${lastAnalyze.model || "Not found in repo"}`);
     lines.push(`- Request ID: ${lastAnalyze.requestId || "Not found in repo"}`);
     lines.push(`- Prompt version: ${lastAnalyze.promptVersion || "Not found in repo"}`);
+    lines.push(`- Session ID: ${lastAnalyze.sessionId || "Not found in repo"}`);
+    lines.push(`- Frame ID: ${lastAnalyze.frameId || "Not found in repo"}`);
+    lines.push(`- Native path: ${lastAnalyze.nativePath || "Not found in repo"}`);
+    lines.push(`- Detail: ${lastAnalyze.detail || "Not found in repo"}`);
+    lines.push(`- Source size: ${
+      typeof lastAnalyze.sourceWidth === "number" && typeof lastAnalyze.sourceHeight === "number"
+        ? `${lastAnalyze.sourceWidth}x${lastAnalyze.sourceHeight}`
+        : "Not found in repo"
+    }`);
+    lines.push(`- Prior guidance summary: ${lastAnalyze.priorGuidanceSummary || "None"}`);
     lines.push(`- Direction: ${lastAnalyze.direction || "Not found in repo"}`);
+    lines.push(`- Obstacle: ${typeof lastAnalyze.obstacle === "boolean" ? String(lastAnalyze.obstacle) : "Not found in repo"}`);
     lines.push(`- Hazard level: ${lastAnalyze.hazardLevel || "Not found in repo"}`);
+    lines.push(`- Lighting: ${lastAnalyze.lighting || "Not found in repo"}`);
+    lines.push(`- Surface type: ${lastAnalyze.surfaceType || "Not found in repo"}`);
+    lines.push(`- Scene description: ${lastAnalyze.sceneDescription || "Not found in repo"}`);
     lines.push(`- Confidence: ${typeof lastAnalyze.confidence === "number" ? `${Math.round(lastAnalyze.confidence * 100)}%` : "Not found in repo"}`);
+    lines.push(`- Fallback reason: ${lastAnalyze.fallbackReason || "None"}`);
     lines.push(`- Message: ${lastAnalyze.message || "Not found in repo"}`);
     lines.push(`- Error: ${lastAnalyze.error || "None"}`);
     lines.push(`- Safe reason: ${lastAnalyze.safeReason || "None"}`);

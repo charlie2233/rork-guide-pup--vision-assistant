@@ -75,6 +75,91 @@ function readSmokeArtifact(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validateSmokeEvidenceShape(artifact) {
+  const missing = [];
+  const invalid = [];
+  const envelope =
+    artifact?.requestEnvelope && typeof artifact.requestEnvelope === "object" && !Array.isArray(artifact.requestEnvelope)
+      ? artifact.requestEnvelope
+      : undefined;
+  const analyze =
+    artifact?.analyze && typeof artifact.analyze === "object" && !Array.isArray(artifact.analyze)
+      ? artifact.analyze
+      : undefined;
+
+  const requireEnvelopeField = (fieldName, validator) => {
+    if (!envelope || !(fieldName in envelope) || envelope[fieldName] === undefined || envelope[fieldName] === null) {
+      missing.push(`requestEnvelope.${fieldName}`);
+      return;
+    }
+
+    if (!validator(envelope[fieldName])) {
+      invalid.push(`requestEnvelope.${fieldName}`);
+    }
+  };
+
+  const requireAnalyzeField = (fieldName, validator) => {
+    if (!analyze || !(fieldName in analyze) || analyze[fieldName] === undefined || analyze[fieldName] === null) {
+      missing.push(`analyze.${fieldName}`);
+      return;
+    }
+
+    if (!validator(analyze[fieldName])) {
+      invalid.push(`analyze.${fieldName}`);
+    }
+  };
+
+  requireEnvelopeField("sampledFrame", (value) => value === true);
+  requireEnvelopeField("hasImage", (value) => value === true);
+  requireEnvelopeField("appVersion", isNonEmptyString);
+  requireEnvelopeField("sessionId", isNonEmptyString);
+  requireEnvelopeField("frameId", isNonEmptyString);
+  requireEnvelopeField("timestampMs", (value) => Number.isInteger(value) && value > 0);
+  requireEnvelopeField("nativePath", (value) => value === "native-core" || value === "js-fallback");
+  requireEnvelopeField("platform", (value) => ["ios", "android", "web", "unknown"].includes(value));
+  requireEnvelopeField("priorGuidance", isNonEmptyString);
+  requireEnvelopeField("detail", (value) => value === "low" || value === "high");
+  requireEnvelopeField("sourceHeight", (value) => Number.isInteger(value) && value > 0);
+  requireEnvelopeField("sourceWidth", (value) => Number.isInteger(value) && value > 0);
+
+  requireAnalyzeField("structuredOutputValid", (value) => value === true);
+  requireAnalyzeField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
+  requireAnalyzeField("direction", (value) => ["turn-left", "turn-right", "forward", "stop"].includes(value));
+  requireAnalyzeField("hazardLevel", (value) => ["none", "low", "medium", "high"].includes(value));
+  requireAnalyzeField("lighting", (value) => ["dark", "dim", "normal", "bright"].includes(value));
+  requireAnalyzeField("message", isNonEmptyString);
+  requireAnalyzeField("model", isNonEmptyString);
+  requireAnalyzeField("obstacle", (value) => typeof value === "boolean");
+  requireAnalyzeField("promptVersion", isNonEmptyString);
+  requireAnalyzeField("provider", isNonEmptyString);
+  requireAnalyzeField("sceneDescription", isNonEmptyString);
+  requireAnalyzeField("surfaceType", isNonEmptyString);
+
+  if (!analyze || !("fallbackReason" in analyze)) {
+    missing.push("analyze.fallbackReason");
+  } else if (analyze.fallbackReason !== null && analyze.fallbackReason !== undefined && !isNonEmptyString(analyze.fallbackReason)) {
+    invalid.push("analyze.fallbackReason");
+  }
+
+  if (Array.isArray(analyze?.structuredOutputMissingFields) && analyze.structuredOutputMissingFields.length > 0) {
+    invalid.push(`analyze.structuredOutputMissingFields:${analyze.structuredOutputMissingFields.join(",")}`);
+  }
+
+  if (Array.isArray(analyze?.structuredOutputInvalidFields) && analyze.structuredOutputInvalidFields.length > 0) {
+    invalid.push(`analyze.structuredOutputInvalidFields:${analyze.structuredOutputInvalidFields.join(",")}`);
+  }
+
+  return {
+    invalid,
+    missing,
+    valid: missing.length === 0 && invalid.length === 0,
+  };
+}
+
 function validateSmokeArtifact(artifact, options) {
   const {
     allowWarning,
@@ -97,12 +182,17 @@ function validateSmokeArtifact(artifact, options) {
   expect(artifact.apiUrl === targetUrl, `${description} smoke artifact must target "${targetUrl}", found "${artifact.apiUrl ?? "undefined"}".`);
   expect(artifact.health?.statusCode === 200, `${description} smoke artifact must show /health 200.`);
   expect(artifact.bootstrap?.statusCode === 200, `${description} smoke artifact must show /v1/device/bootstrap 200.`);
+  const evidenceShape = validateSmokeEvidenceShape(artifact);
+  const evidenceShapeMessage = `${description} smoke artifact must include sampled-frame envelope and structured analyze fields. Missing: ${
+    evidenceShape.missing.join(", ") || "none"
+  }. Invalid: ${evidenceShape.invalid.join(", ") || "none"}.`;
 
   if (requireProviderBacked) {
     expect(
       artifact.providerBacked === true && artifact.analyze?.executionPath === "provider-backed",
       `${description} smoke artifact must show provider-backed analyze. Current execution path is "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
     );
+    expect(evidenceShape.valid, evidenceShapeMessage);
     return;
   }
 
@@ -112,6 +202,8 @@ function validateSmokeArtifact(artifact, options) {
       `${description} smoke artifact shows "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
     );
   }
+
+  warn(evidenceShape.valid, evidenceShapeMessage);
 }
 
 const argv = process.argv.slice(2);

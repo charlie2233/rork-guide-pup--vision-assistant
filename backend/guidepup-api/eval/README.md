@@ -6,8 +6,9 @@ This folder contains a small dev/staging-only eval harness for the vision API.
 
 - Bootstraps an anonymous device session.
 - Calls `POST /v1/vision/analyze` for each fixture.
+- Sends the same compact sampled-frame envelope as the app: session ID, frame ID, timestamp, native path, prior guidance, dimensions, and one image.
 - Calls `POST /__debug/provider-benchmark` when the route is enabled.
-- Reports average latency, STOP recall on hazard fixtures, false-forward count, and provider/model summaries.
+- Reports average latency, STOP recall on hazard fixtures, false-forward count, structured-output validity, and provider/model summaries.
 
 ## Files
 
@@ -46,6 +47,15 @@ Recommended fields:
 - `expectedDirection`
 - `expectedHazard`
 - `expectedHazardLevel`
+- `expectedLighting`
+- `expectedSurfaceType`
+- `frameId`
+- `nativePath`
+- `priorGuidance`
+- `sessionId`
+- `sourceHeight`
+- `sourceWidth`
+- `timestampMs`
 - `detail`
 - `notes`
 
@@ -66,7 +76,7 @@ The runner emits:
 - `analyzeProviders[]` with provider/model and latency summaries
 - `benchmarkProviders[]` when the benchmark route is enabled
 - `scenarios{}` with per-scenario valid/STOP/false-forward counts
-- `fixtures[]` with per-fixture results
+- `fixtures[]` with per-fixture results, structured-output field validation, and sanitized request-envelope metadata
 
 ## Fixture guidance
 

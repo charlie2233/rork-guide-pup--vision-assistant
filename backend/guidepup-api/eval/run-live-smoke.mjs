@@ -8,6 +8,9 @@ const { launchInputs } = require("../../../expo/release/launch-inputs.js");
 
 const VALID_TRACKS = new Set(["staging", "production"]);
 const TEST_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAAK0lEQVR4nO3NMQ0AAAwDoPo33ZpYsgcMkD6JWCwWi8VisVgsFovFYrFYfGcs0K5PemaPnAAAAABJRU5ErkJggg==";
+const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
+const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
+const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright"]);
 
 function parseArgs(argv) {
   const args = {
@@ -95,25 +98,126 @@ function getDeviceIdSuffix(deviceId) {
   return deviceId.length > 8 ? deviceId.slice(-8) : deviceId;
 }
 
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function validateStructuredAnalyzeOutput(responseBody) {
+  const missingFields = [];
+  const invalidFields = [];
+
+  const requireField = (fieldName, validator) => {
+    if (!(fieldName in responseBody) || responseBody[fieldName] === undefined || responseBody[fieldName] === null) {
+      missingFields.push(fieldName);
+      return;
+    }
+
+    if (!validator(responseBody[fieldName])) {
+      invalidFields.push(fieldName);
+    }
+  };
+
+  if (!responseBody || typeof responseBody !== "object" || Array.isArray(responseBody)) {
+    return {
+      invalidFields: ["response"],
+      missingFields,
+      valid: false,
+    };
+  }
+
+  requireField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
+  requireField("direction", (value) => DIRECTION_VALUES.has(value));
+  requireField("hazardLevel", (value) => HAZARD_LEVEL_VALUES.has(value));
+  requireField("latencyMs", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
+  requireField("lighting", (value) => LIGHTING_VALUES.has(value));
+  requireField("message", isNonEmptyString);
+  requireField("model", isNonEmptyString);
+  requireField("obstacle", (value) => typeof value === "boolean");
+  requireField("promptVersion", isNonEmptyString);
+  requireField("provider", isNonEmptyString);
+  requireField("sceneDescription", isNonEmptyString);
+  requireField("surfaceType", isNonEmptyString);
+
+  if (!("fallbackReason" in responseBody)) {
+    missingFields.push("fallbackReason");
+  } else if (
+    responseBody.fallbackReason !== null &&
+    responseBody.fallbackReason !== undefined &&
+    !isNonEmptyString(responseBody.fallbackReason)
+  ) {
+    invalidFields.push("fallbackReason");
+  }
+
+  return {
+    invalidFields,
+    missingFields,
+    valid: missingFields.length === 0 && invalidFields.length === 0,
+  };
+}
+
+function buildAnalyzeRequestPayload(env) {
+  const timestampMs = Date.now();
+  const sessionId = `smoke-${env}-${timestampMs}`;
+
+  return {
+    appVersion: "1.0.0",
+    detail: "low",
+    frameId: `${sessionId}-frame-1`,
+    imageBase64: TEST_IMAGE_BASE64,
+    mimeType: "image/png",
+    nativePath: "js-fallback",
+    platform: "ios",
+    priorGuidance: "Synthetic smoke sample; no previous spoken guidance.",
+    sessionId,
+    sourceHeight: 40,
+    sourceWidth: 40,
+    timestampMs,
+  };
+}
+
+function sanitizeAnalyzeRequestEnvelope(payload) {
+  return {
+    appVersion: payload.appVersion,
+    detail: payload.detail,
+    frameId: payload.frameId,
+    hasImage: true,
+    mimeType: payload.mimeType,
+    nativePath: payload.nativePath,
+    platform: payload.platform,
+    priorGuidance: payload.priorGuidance,
+    sampledFrame: true,
+    sessionId: payload.sessionId,
+    sourceHeight: payload.sourceHeight,
+    sourceWidth: payload.sourceWidth,
+    timestampMs: payload.timestampMs,
+  };
+}
+
 function deriveAnalyzeSummary(result) {
   if (result.response.ok && result.json) {
+    const structuredOutput = validateStructuredAnalyzeOutput(result.json);
     return {
       confidence: result.json.confidence,
       direction: result.json.direction,
       errorCode: undefined,
       errorMessage: undefined,
       executionPath: "provider-backed",
-      fallbackReason: result.json.fallbackReason ?? undefined,
+      fallbackReason: result.json.fallbackReason ?? null,
       hazardLevel: result.json.hazardLevel,
       latencyMs: result.json.latencyMs,
+      lighting: result.json.lighting,
       message: result.json.message,
       model: result.json.model,
+      obstacle: result.json.obstacle,
       promptVersion: result.json.promptVersion,
       provider: result.json.provider,
       requestId: result.requestId,
       roundTripLatencyMs: result.roundTripLatencyMs,
       sceneDescription: result.json.sceneDescription,
       statusCode: result.response.status,
+      structuredOutputInvalidFields: structuredOutput.invalidFields,
+      structuredOutputMissingFields: structuredOutput.missingFields,
+      structuredOutputValid: structuredOutput.valid,
       surfaceType: result.json.surfaceType,
     };
   }
@@ -121,6 +225,13 @@ function deriveAnalyzeSummary(result) {
   const safeResponse = result.json?.safeResponse;
   const errorCode = result.json?.error?.code;
   const errorMessage = result.json?.error?.message;
+  const structuredOutput = safeResponse
+    ? validateStructuredAnalyzeOutput(safeResponse)
+    : {
+        invalidFields: [],
+        missingFields: ["safeResponse"],
+        valid: false,
+      };
 
   return {
     confidence: safeResponse?.confidence,
@@ -131,14 +242,19 @@ function deriveAnalyzeSummary(result) {
     fallbackReason: errorCode,
     hazardLevel: safeResponse?.hazardLevel,
     latencyMs: safeResponse?.latencyMs,
+    lighting: safeResponse?.lighting,
     message: safeResponse?.message,
     model: safeResponse?.model,
+    obstacle: safeResponse?.obstacle,
     promptVersion: safeResponse?.promptVersion,
     provider: safeResponse?.provider,
     requestId: result.requestId,
     roundTripLatencyMs: result.roundTripLatencyMs,
     sceneDescription: safeResponse?.sceneDescription,
     statusCode: result.response.status,
+    structuredOutputInvalidFields: structuredOutput.invalidFields,
+    structuredOutputMissingFields: structuredOutput.missingFields,
+    structuredOutputValid: structuredOutput.valid,
     surfaceType: safeResponse?.surfaceType,
   };
 }
@@ -178,8 +294,31 @@ function toMarkdown(artifact) {
     `  - prompt version: \`${artifact.analyze.promptVersion || "not-found"}\``,
     `  - request latency: \`${artifact.analyze.roundTripLatencyMs}ms\``,
     `  - service latency: \`${typeof artifact.analyze.latencyMs === "number" ? `${artifact.analyze.latencyMs}ms` : "not-found"}\``,
+    `  - structured output valid: \`${artifact.analyze.structuredOutputValid ? "yes" : "no"}\``,
+    `  - structured output missing fields: \`${artifact.analyze.structuredOutputMissingFields?.join(", ") || "none"}\``,
+    `  - structured output invalid fields: \`${artifact.analyze.structuredOutputInvalidFields?.join(", ") || "none"}\``,
+    `  - obstacle: \`${typeof artifact.analyze.obstacle === "boolean" ? String(artifact.analyze.obstacle) : "not-found"}\``,
+    `  - hazard level: \`${artifact.analyze.hazardLevel || "not-found"}\``,
+    `  - confidence: \`${typeof artifact.analyze.confidence === "number" ? artifact.analyze.confidence : "not-found"}\``,
+    `  - lighting: \`${artifact.analyze.lighting || "not-found"}\``,
+    `  - surface type: \`${artifact.analyze.surfaceType || "not-found"}\``,
+    `  - scene description: \`${artifact.analyze.sceneDescription || "not-found"}\``,
     `  - fallback reason: \`${artifact.analyze.fallbackReason || "none"}\``,
     `  - message: \`${artifact.analyze.message || artifact.analyze.errorMessage || "not-found"}\``,
+    "",
+    "## Analyze request envelope",
+    "",
+    `- sampled frame: \`${artifact.requestEnvelope.sampledFrame ? "yes" : "no"}\``,
+    `- image included: \`${artifact.requestEnvelope.hasImage ? "yes" : "no"}\``,
+    `- app version: \`${artifact.requestEnvelope.appVersion}\``,
+    `- session id: \`${artifact.requestEnvelope.sessionId}\``,
+    `- frame id: \`${artifact.requestEnvelope.frameId}\``,
+    `- timestamp ms: \`${artifact.requestEnvelope.timestampMs}\``,
+    `- native path: \`${artifact.requestEnvelope.nativePath}\``,
+    `- platform: \`${artifact.requestEnvelope.platform}\``,
+    `- detail: \`${artifact.requestEnvelope.detail}\``,
+    `- dimensions: \`${artifact.requestEnvelope.sourceWidth}x${artifact.requestEnvelope.sourceHeight}\``,
+    `- prior guidance: \`${artifact.requestEnvelope.priorGuidance}\``,
   ];
 
   return `${lines.join("\n")}\n`;
@@ -219,16 +358,9 @@ async function main() {
   assert(sessionToken, `${args.env} bootstrap did not return a sessionToken.`);
   assert(deviceId, `${args.env} bootstrap did not return a deviceId.`);
 
+  const analyzePayload = buildAnalyzeRequestPayload(args.env);
   const analyze = await fetchJson(`${apiUrl}/v1/vision/analyze`, {
-    body: JSON.stringify({
-      appVersion: "1.0.0",
-      detail: "low",
-      imageBase64: TEST_IMAGE_BASE64,
-      mimeType: "image/png",
-      platform: "ios",
-      sourceHeight: 40,
-      sourceWidth: 40,
-    }),
+    body: JSON.stringify(analyzePayload),
     headers: {
       authorization: `Bearer ${sessionToken}`,
       "content-type": "application/json",
@@ -237,9 +369,10 @@ async function main() {
     method: "POST",
   });
 
+  const analyzeSummary = deriveAnalyzeSummary(analyze);
   const artifact = {
     analyze: {
-      ...deriveAnalyzeSummary(analyze),
+      ...analyzeSummary,
       statusText: analyze.response.statusText || "",
     },
     apiUrl,
@@ -267,7 +400,8 @@ async function main() {
       statusText: health.response.statusText || "",
     },
     operator: args.operator,
-    providerBacked: deriveAnalyzeSummary(analyze).executionPath === "provider-backed",
+    providerBacked: analyzeSummary.executionPath === "provider-backed" && analyzeSummary.structuredOutputValid === true,
+    requestEnvelope: sanitizeAnalyzeRequestEnvelope(analyzePayload),
   };
 
   const outputJsonPath = getOutputPath(args.outputJson);

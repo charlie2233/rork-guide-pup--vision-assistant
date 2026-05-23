@@ -335,7 +335,6 @@ export default function DiagnosticsScreen() {
             value={formatMs(diagnostics.lastAnalyze?.latencyMs)}
           />
           <KeyValue label="Direction" value={diagnostics.lastAnalyze?.direction || "Not found in repo"} />
-          <KeyValue label="Obstacle" value={diagnostics.lastAnalyze?.obstacle ? "true" : "false"} />
           <KeyValue
             label="Hazard"
             value={diagnostics.lastAnalyze?.hazardLevel || "Not found in repo"}
@@ -355,7 +354,32 @@ export default function DiagnosticsScreen() {
             label="Prompt version"
             value={diagnostics.lastAnalyze?.promptVersion || "Not found in repo"}
           />
+          <KeyValue label="Session ID" value={diagnostics.lastAnalyze?.sessionId || "Not found in repo"} />
+          <KeyValue label="Frame ID" value={diagnostics.lastAnalyze?.frameId || "Not found in repo"} />
+          <KeyValue label="Native path" value={diagnostics.lastAnalyze?.nativePath || "Not found in repo"} />
+          <KeyValue
+            label="Source size"
+            value={
+              typeof diagnostics.lastAnalyze?.sourceWidth === "number" &&
+              typeof diagnostics.lastAnalyze?.sourceHeight === "number"
+                ? `${diagnostics.lastAnalyze.sourceWidth}x${diagnostics.lastAnalyze.sourceHeight}`
+                : "Not found in repo"
+            }
+          />
+          <KeyValue label="Prior guidance" value={diagnostics.lastAnalyze?.priorGuidanceSummary || "None"} />
           <KeyValue label="Message" value={diagnostics.lastAnalyze?.message || "Not found in repo"} />
+          <KeyValue
+            label="Obstacle"
+            value={
+              typeof diagnostics.lastAnalyze?.obstacle === "boolean"
+                ? String(diagnostics.lastAnalyze.obstacle)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue label="Lighting" value={diagnostics.lastAnalyze?.lighting || "Not found in repo"} />
+          <KeyValue label="Surface" value={diagnostics.lastAnalyze?.surfaceType || "Not found in repo"} />
+          <KeyValue label="Scene" value={diagnostics.lastAnalyze?.sceneDescription || "Not found in repo"} />
+          <KeyValue label="Fallback reason" value={diagnostics.lastAnalyze?.fallbackReason || "None"} />
           <KeyValue label="Error" value={diagnostics.lastAnalyze?.error || "None"} />
           <KeyValue label="Safe reason" value={diagnostics.lastAnalyze?.safeReason || "None"} />
           {shareError ? <Text style={styles.errorText}>{shareError}</Text> : null}

@@ -23,11 +23,36 @@ Operator:
 - `POST /v1/vision/analyze`
   - status:
   - request id:
+  - execution path:
   - provider:
   - model:
   - prompt version:
-  - result summary:
+  - structured output valid:
+  - structured output missing fields:
+  - direction:
+  - hazard level:
+  - obstacle:
+  - lighting:
+  - surface type:
+  - confidence:
+  - scene description:
+  - fallback reason:
+  - spoken message:
   - notes:
+
+## Analyze request envelope
+
+- sampled frame:
+- image included:
+- app version:
+- session id:
+- frame id:
+- timestamp ms:
+- native path:
+- platform:
+- detail:
+- dimensions:
+- prior guidance:
 
 ## Eval harness
 

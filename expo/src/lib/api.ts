@@ -107,6 +107,18 @@ function safeParseJson(rawText: string) {
   }
 }
 
+function buildAnalyzeTelemetryEnvelope(payload: AnalyzeVisionPayload) {
+  return {
+    detail: payload.detail,
+    frameId: payload.frameId,
+    nativePath: payload.nativePath,
+    priorGuidanceSummary: payload.priorGuidance,
+    sessionId: payload.sessionId,
+    sourceHeight: payload.sourceHeight,
+    sourceWidth: payload.sourceWidth,
+  };
+}
+
 function recordAnalyzeTelemetry(
   outcome:
     | "success"
@@ -119,17 +131,22 @@ function recordAnalyzeTelemetry(
     detail?: "low" | "high";
     direction?: VisionAnalyzeResponse["direction"];
     error?: string;
+    frameId?: string;
     hazardLevel?: VisionAnalyzeResponse["hazardLevel"];
     fallbackReason?: string | null;
     latencyMs?: number;
+    lighting?: VisionAnalyzeResponse["lighting"];
     message?: string;
     model?: string;
+    nativePath?: AnalyzeVisionPayload["nativePath"];
     obstacle?: boolean;
+    priorGuidanceSummary?: string;
     promptVersion?: string;
     requestId?: string;
     provider?: string;
     safeReason?: string;
     sceneDescription?: string;
+    sessionId?: string;
     sourceHeight?: number;
     sourceWidth?: number;
     surfaceType?: string;
@@ -139,14 +156,19 @@ function recordAnalyzeTelemetry(
   recordAnalyzeEvent({
     ...input,
     error: sanitizeMessage(input.error, 120),
+    frameId: sanitizeMessage(input.frameId, 80),
+    lighting: input.lighting,
     message: sanitizeMessage(input.message, 160),
+    nativePath: input.nativePath,
     outcome,
+    priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     requestId: sanitizeMessage(input.requestId, 80),
     provider: sanitizeMessage(input.provider, 64),
     fallbackReason: sanitizeMessage(input.fallbackReason ?? undefined, 120),
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
+    sessionId: sanitizeMessage(input.sessionId, 80),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
   });
 }
@@ -271,6 +293,7 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
 
 export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = true): Promise<VisionAnalyzeResponse> {
   const startedAt = Date.now();
+  const telemetryEnvelope = buildAnalyzeTelemetryEnvelope(payload);
   let analyzeTelemetryRecorded = false;
   let requestId: string | undefined;
 
@@ -292,12 +315,10 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
   } catch (error) {
     const message = getErrorMessage(error);
     recordAnalyzeTelemetry(classifyAnalyzeError(message), {
-      detail: payload.detail,
+      ...telemetryEnvelope,
       error: message,
       latencyMs: Date.now() - startedAt,
       safeReason: "session-bootstrap",
-      sourceHeight: payload.sourceHeight,
-      sourceWidth: payload.sourceWidth,
     });
     analyzeTelemetryRecorded = true;
     addBreadcrumb({
@@ -343,13 +364,11 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
 
     if (response.status === 401 && allowRetry) {
       recordAnalyzeTelemetry("unauthorized", {
-        detail: payload.detail,
+        ...telemetryEnvelope,
         error: "Guide Pup session expired.",
         latencyMs,
         requestId,
         safeReason: "unauthorized",
-        sourceHeight: payload.sourceHeight,
-        sourceWidth: payload.sourceWidth,
       });
       analyzeTelemetryRecorded = true;
       addBreadcrumb({
@@ -371,13 +390,14 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       if (parsedError.success && parsedError.data.safeResponse) {
         const safeResponse = parsedError.data.safeResponse;
         recordAnalyzeTelemetry("safe-response", {
+          ...telemetryEnvelope,
           confidence: safeResponse.confidence,
-          detail: payload.detail,
           direction: safeResponse.direction,
           error: parsedError.data.error.message,
           fallbackReason: safeResponse.fallbackReason,
           hazardLevel: safeResponse.hazardLevel,
           latencyMs,
+          lighting: safeResponse.lighting,
           message: safeResponse.message,
           model: safeResponse.model,
           obstacle: safeResponse.obstacle,
@@ -386,8 +406,6 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
           provider: safeResponse.provider,
           safeReason: parsedError.data.error.code,
           sceneDescription: safeResponse.sceneDescription,
-          sourceHeight: payload.sourceHeight,
-          sourceWidth: payload.sourceWidth,
           surfaceType: safeResponse.surfaceType,
         });
         analyzeTelemetryRecorded = true;
@@ -413,13 +431,11 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       const message = parsedError.success ? parsedError.data.error.message : `Guide Pup API request failed (${response.status}).`;
       const outcome = response.status === 408 || response.status === 504 ? "timeout" : "failure";
       recordAnalyzeTelemetry(outcome, {
-        detail: payload.detail,
+        ...telemetryEnvelope,
         error: message,
         latencyMs,
         requestId,
         safeReason: parsedError.success ? parsedError.data.error.code : `http-${response.status}`,
-        sourceHeight: payload.sourceHeight,
-        sourceWidth: payload.sourceWidth,
       });
       analyzeTelemetryRecorded = true;
       addBreadcrumb({
@@ -440,13 +456,11 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
     if (!parsedResponse.success) {
       const message = "Guide Pup API returned an invalid response.";
       recordAnalyzeTelemetry("invalid-response", {
-        detail: payload.detail,
+        ...telemetryEnvelope,
         error: message,
         latencyMs,
         requestId,
         safeReason: "invalid-json",
-        sourceHeight: payload.sourceHeight,
-        sourceWidth: payload.sourceWidth,
       });
       analyzeTelemetryRecorded = true;
       addBreadcrumb({
@@ -463,11 +477,12 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
 
     const result = parsedResponse.data;
     recordAnalyzeTelemetry("success", {
+      ...telemetryEnvelope,
       confidence: result.confidence,
-      detail: payload.detail,
       direction: result.direction,
       hazardLevel: result.hazardLevel,
       latencyMs,
+      lighting: result.lighting,
       message: result.message,
       model: result.model,
       obstacle: result.obstacle,
@@ -477,8 +492,6 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       safeReason: result.direction === "stop" ? "direction-stop" : result.obstacle ? "obstacle-detected" : undefined,
       fallbackReason: result.fallbackReason,
       sceneDescription: result.sceneDescription,
-      sourceHeight: payload.sourceHeight,
-      sourceWidth: payload.sourceWidth,
       surfaceType: result.surfaceType,
     });
     analyzeTelemetryRecorded = true;
@@ -505,13 +518,11 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
 
     if (!analyzeTelemetryRecorded) {
       recordAnalyzeTelemetry(outcome, {
-        detail: payload.detail,
+        ...telemetryEnvelope,
         error: message,
         latencyMs: Date.now() - startedAt,
         requestId,
         safeReason: outcome === "timeout" ? "timeout" : undefined,
-        sourceHeight: payload.sourceHeight,
-        sourceWidth: payload.sourceWidth,
       });
     }
     addBreadcrumb({
