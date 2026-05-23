@@ -42,6 +42,7 @@ export default function HomeScreen() {
       lastError: state.lastError ?? undefined,
       listening: state.listening,
       microphonePermission: state.microphonePermission,
+      speaking: state.speaking,
       speechPermission: state.speechPermission,
     });
   }, []);
@@ -95,6 +96,7 @@ export default function HomeScreen() {
           lastError: state.lastError ?? undefined,
           listening: state.listening,
           microphonePermission: state.microphonePermission,
+          speaking: state.speaking,
           speechPermission: state.speechPermission,
         });
       }
@@ -188,7 +190,9 @@ export default function HomeScreen() {
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastRecognizedAt: Date.now(),
         lastRecognizedCommand: intent ?? conversationIntent ?? "unsupported",
+        lastRecognizedCommandPhase: "final",
       });
 
       if (conversationIntent === "what-do-you-see") {
@@ -301,6 +305,7 @@ export default function HomeScreen() {
         lastError: state.lastError ?? undefined,
         listening: state.listening,
         microphonePermission: state.microphonePermission,
+        speaking: state.speaking,
         speechPermission: state.speechPermission,
       });
     });

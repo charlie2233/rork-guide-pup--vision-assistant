@@ -45,6 +45,14 @@ function formatMs(value?: number) {
   return `${Math.round(value)}ms`;
 }
 
+function formatTimestamp(value?: number) {
+  if (typeof value !== "number") {
+    return "Not found in repo";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
 export default function DiagnosticsScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
@@ -55,6 +63,10 @@ export default function DiagnosticsScreen() {
   const [healthMessage, setHealthMessage] = useState<string>("No health check has run yet.");
 
   const report = useMemo(() => buildDiagnosticsReport(diagnostics), [diagnostics]);
+  const voiceInvariantPass =
+    diagnostics.voice.unexpectedSpeechListeningOverlapCount === 0
+    && (!diagnostics.voice.speechListeningOverlapActive
+      || diagnostics.voice.lastSpeechListeningOverlapReason === "stop-barge-in");
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -179,7 +191,7 @@ export default function DiagnosticsScreen() {
         </InfoCard>
 
         <InfoCard
-          tone={diagnostics.voice.lastError ? "warning" : "neutral"}
+          tone={diagnostics.voice.lastError || !voiceInvariantPass ? "warning" : "neutral"}
           title="Voice control"
         >
           <KeyValue
@@ -203,8 +215,48 @@ export default function DiagnosticsScreen() {
             value={diagnostics.voice.listening ? "yes" : "no"}
           />
           <KeyValue
+            label="Speaking active"
+            value={diagnostics.voice.speaking ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Speech/listening invariant"
+            value={voiceInvariantPass ? "PASS" : "FAIL"}
+          />
+          <KeyValue
+            label="Overlap active"
+            value={diagnostics.voice.speechListeningOverlapActive ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Overlap count"
+            value={`${diagnostics.voice.speechListeningOverlapCount}`}
+          />
+          <KeyValue
+            label="Unexpected overlap count"
+            value={`${diagnostics.voice.unexpectedSpeechListeningOverlapCount}`}
+          />
+          <KeyValue
+            label="Last overlap reason"
+            value={diagnostics.voice.lastSpeechListeningOverlapReason || "None"}
+          />
+          <KeyValue
+            label="Last overlap time"
+            value={formatTimestamp(diagnostics.voice.lastSpeechListeningOverlapAt)}
+          />
+          <KeyValue
             label="Last recognized command"
             value={diagnostics.voice.lastRecognizedCommand || "None"}
+          />
+          <KeyValue
+            label="Last recognition phase"
+            value={diagnostics.voice.lastRecognizedCommandPhase || "None"}
+          />
+          <KeyValue
+            label="Last recognition time"
+            value={formatTimestamp(diagnostics.voice.lastRecognizedAt)}
+          />
+          <KeyValue
+            label="Last voice state time"
+            value={formatTimestamp(diagnostics.voice.lastVoiceStateChangedAt)}
           />
           <KeyValue
             label="Last voice-module error"

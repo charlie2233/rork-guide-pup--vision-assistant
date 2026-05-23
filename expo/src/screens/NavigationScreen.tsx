@@ -153,6 +153,7 @@ export default function NavigationScreen() {
       lastError: state.lastError ?? undefined,
       listening: state.listening,
       microphonePermission: state.microphonePermission,
+      speaking: state.speaking,
       speechPermission: state.speechPermission,
     });
   }, []);
@@ -204,6 +205,7 @@ export default function NavigationScreen() {
           lastError: state.lastError ?? undefined,
           listening: state.listening,
           microphonePermission: state.microphonePermission,
+          speaking: state.speaking,
           speechPermission: state.speechPermission,
         });
       }
@@ -542,6 +544,19 @@ export default function NavigationScreen() {
       const failureClass = classifyAnalyzeError(errorMessage);
       const sceneQueryFallback = "I could not describe the scene right now. Guidance settings are unchanged.";
 
+      if (!guidingRef.current) {
+        void refreshNavigationCoreState({
+          lastError: errorMessage,
+          lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
+          sessionActive: false,
+        });
+        void captureAppError(error, {
+          screen: "NavigationScreen",
+          stage: mode === "scene-query" ? "analyzeCurrentFrame.sceneQuery.stopped" : "analyzeCurrentFrame.stopped",
+        });
+        return;
+      }
+
       if (mode === "scene-query") {
         if (!isSpeakingRef.current) {
           lastSpokenMessageRef.current = sceneQueryFallback;
@@ -629,7 +644,9 @@ export default function NavigationScreen() {
           speakCommandResponse("Guidance paused. Say start guidance to resume.");
           recordVoiceSnapshot({
             executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+            lastRecognizedAt: nowMs,
             lastRecognizedCommand: "stop-guidance-partial",
+            lastRecognizedCommandPhase: "partial",
           });
         }
         return;
@@ -650,7 +667,9 @@ export default function NavigationScreen() {
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
+        lastRecognizedAt: nowMs,
         lastRecognizedCommand: intent ?? conversationIntent ?? "unsupported",
+        lastRecognizedCommandPhase: "final",
       });
 
       if (conversationIntent === "what-do-you-see") {
@@ -788,6 +807,7 @@ export default function NavigationScreen() {
         lastError: state.lastError ?? undefined,
         listening: state.listening,
         microphonePermission: state.microphonePermission,
+        speaking: state.speaking,
         speechPermission: state.speechPermission,
       });
     });

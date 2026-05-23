@@ -60,6 +60,7 @@ async function refreshDiagnosticsSnapshots() {
       lastError: voiceState.lastError ?? undefined,
       listening: voiceState.listening,
       microphonePermission: voiceState.microphonePermission,
+      speaking: voiceState.speaking,
       speechPermission: voiceState.speechPermission,
     });
   }

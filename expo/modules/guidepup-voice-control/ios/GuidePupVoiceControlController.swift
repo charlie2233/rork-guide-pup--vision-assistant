@@ -16,6 +16,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   private var listening = false
   private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
   private var recognitionTask: SFSpeechRecognitionTask?
+  private var activeSpeechUtterance: AVSpeechUtterance?
   private var speechContinuation: CheckedContinuation<Void, Error>?
   private var speechRecognizer: SFSpeechRecognizer?
   private var speaking = false
@@ -107,16 +108,13 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
       DispatchQueue.main.async {
         if let pendingContinuation = self.speechContinuation {
           self.speechContinuation = nil
+          self.activeSpeechUtterance = nil
           pendingContinuation.resume(returning: ())
         }
 
         if interrupt && self.speechSynthesizer.isSpeaking {
           self.speechSynthesizer.stopSpeaking(at: .immediate)
         }
-
-        self.speechContinuation = continuation
-        self.speaking = true
-        self.sendStateChanged()
 
         let utterance = AVSpeechUtterance(string: trimmed)
         if let localeIdentifier, let voice = AVSpeechSynthesisVoice(language: localeIdentifier) {
@@ -127,6 +125,10 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
           utterance.rate = Float(normalizedRate) * AVSpeechUtteranceDefaultSpeechRate
         }
 
+        self.speechContinuation = continuation
+        self.activeSpeechUtterance = utterance
+        self.speaking = true
+        self.sendStateChanged()
         self.speechSynthesizer.speak(utterance)
       }
     }
@@ -139,6 +141,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
           self.speechSynthesizer.stopSpeaking(at: .immediate)
         } else if let pendingContinuation = self.speechContinuation {
           self.speechContinuation = nil
+          self.activeSpeechUtterance = nil
           pendingContinuation.resume(returning: ())
         }
         self.speaking = false
@@ -163,11 +166,11 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   }
 
   func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-    completeSpeech()
+    completeSpeech(for: utterance)
   }
 
   func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-    completeSpeech()
+    completeSpeech(for: utterance)
   }
 
   private func startListeningSession(
@@ -277,7 +280,12 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
     }
   }
 
-  private func completeSpeech() {
+  private func completeSpeech(for utterance: AVSpeechUtterance) {
+    guard activeSpeechUtterance === utterance else {
+      return
+    }
+
+    activeSpeechUtterance = nil
     speaking = false
     sendStateChanged()
 

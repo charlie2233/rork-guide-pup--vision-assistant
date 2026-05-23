@@ -27,6 +27,10 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Microphone, speech-recognition, and camera permission denial paths now speak short no-screen fallbacks instead of silently returning.
 - `what do you see` no longer reuses stale scene text; if a guidance analysis is already running, it speaks a deterministic "already analyzing" response instead of promising a scene query that cannot start.
 - Placeholder SOS copy now says the shortcut is not connected in this build instead of claiming emergency services are active.
+- Diagnostics now record speaking state, voice-state timestamps, recognition phase/timestamps, speech/listening overlap counters, unexpected-overlap counters, the last overlap reason, and a PASS/FAIL invariant for no-screen smoke evidence.
+- The voice announcer records `speaking: true` only after pausing the command session when normal speech should not keep the mic open; guidance speech that intentionally keeps recognition active is marked as `stop-barge-in` overlap evidence.
+- Navigation suppresses stale backend-failure speech/announcements if an analyze request fails after the user has already stopped guidance.
+- The native iOS voice controller now associates delegate callbacks with the active `AVSpeechUtterance`, so a canceled old utterance cannot finish the newest speech continuation or flip `speaking` false too early.
 
 ## Voice command coverage
 
@@ -67,9 +71,13 @@ git fetch --all --prune
 git pull --ff-only
 npm --prefix expo run typecheck
 npm --prefix expo run lint
+npm --prefix backend/guidepup-api run typecheck
 git diff --check
 xcodebuildmcp session_show_defaults
 xcodebuildmcp build_sim --extraArgs -quiet CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npx wrangler whoami
 xcrun devicectl list devices
 xcrun xctrace list devices
 xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
@@ -87,6 +95,11 @@ Results:
 - Build iOS Apps plugin compile failed in the Sentry upload phase: `sentry-cli` required an org slug and did not see `SENTRY_DISABLE_AUTO_UPLOAD=true` inside its build script environment.
 - Release simulator shell build for `iPhone 16e` passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 - After the duplicate-command, permission-fallback, scene-query, and SOS continuation, Expo typecheck, Expo lint, backend typecheck, `git diff --check`, and the Build iOS Apps plugin Release simulator build passed. Preview/TestFlight preflight intentionally remain blocked by unresolved launch inputs and stale live Worker smoke contract.
+- On the 2026-05-23 continuation, Expo typecheck, Expo lint, backend typecheck, and `git diff --check` passed after the diagnostics/native-voice hardening patch.
+- Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e` with `SENTRY_DISABLE_AUTO_UPLOAD=true`; warnings were limited to existing React Native/Hermes globals, duplicate `-lc++`, run-script dependency warnings, and the existing `AVSpeechSynthesizer` Sendable warning.
+- Preview preflight intentionally failed because the iOS bundle identifier is still `TODO_IOS_BUNDLE_IDENTIFIER`; it also warned that staging smoke evidence is still on `gpt-4.1` / `2026-03-31.v1` and lacks the sampled-frame envelope and newer structured fields.
+- TestFlight preflight intentionally failed because the bundle identifier, Apple Team ID, App Store Connect app ID, and copyright holder are unresolved, and production smoke evidence is still on `gpt-4.1` / `2026-03-31.v1` with missing sampled-frame envelope and newer structured fields.
+- `npx wrangler whoami` failed with `Not logged in`, so no Cloudflare deploy or live provider smoke could be run.
 
 ## Backend and request IDs
 

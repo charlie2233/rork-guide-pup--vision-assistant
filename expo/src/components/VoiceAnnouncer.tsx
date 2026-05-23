@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 
+import { recordVoiceSnapshot } from "@/src/lib/diagnostics";
 import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
@@ -35,16 +36,25 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const sessionId = sessionRef.current + 1;
     sessionRef.current = sessionId;
 
-    setIsSpeaking(true);
-
     void (async () => {
       const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
       const shouldResumeListening = Boolean(voiceState?.listening);
       const shouldPauseListening = shouldResumeListening && !speechOptions?.keepListeningDuringSpeech;
 
       if (shouldPauseListening) {
-        await GuidePupVoiceControl.stopCommandSession().catch(() => undefined);
+        const stoppedState = await GuidePupVoiceControl.stopCommandSession().catch(() => null);
+        recordVoiceSnapshot({
+          listening: stoppedState?.listening ?? false,
+          speaking: stoppedState?.speaking ?? false,
+        });
       }
+
+      setIsSpeaking(true);
+      recordVoiceSnapshot({
+        listening: shouldPauseListening ? false : voiceState?.listening,
+        speaking: true,
+        speechListeningOverlapReason: speechOptions?.keepListeningDuringSpeech ? "stop-barge-in" : undefined,
+      });
 
       await GuidePupVoiceControl.speak(combinedMessage, {
         interrupt: true,
@@ -53,13 +63,22 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       }).catch(() => undefined);
 
       if (shouldPauseListening && sessionRef.current === sessionId) {
-        await GuidePupVoiceControl.startCommandSession({
+        const resumedState = await GuidePupVoiceControl.startCommandSession({
           partialResults: true,
-        }).catch(() => undefined);
+        }).catch(() => null);
+        if (resumedState) {
+          recordVoiceSnapshot({
+            listening: resumedState.listening,
+            speaking: resumedState.speaking,
+          });
+        }
       }
     })().finally(() => {
       if (sessionRef.current === sessionId) {
         setIsSpeaking(false);
+        recordVoiceSnapshot({
+          speaking: false,
+        });
       }
     });
   }, [getSpeechRateValue]);
@@ -93,6 +112,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     void GuidePupVoiceControl.stopSpeaking();
     sessionRef.current += 1; // invalidate any in-flight callbacks
     setIsSpeaking(false);
+    recordVoiceSnapshot({
+      speaking: false,
+    });
   }, []);
 
   return (

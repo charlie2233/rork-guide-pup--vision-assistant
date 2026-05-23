@@ -17,6 +17,8 @@ export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright" | "unknow
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
 export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
+export type DiagnosticsVoiceRecognitionPhase = "partial" | "final";
+export type DiagnosticsSpeechListeningOverlapReason = "stop-barge-in" | "unexpected";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -80,10 +82,19 @@ export interface DiagnosticsVoiceSnapshot {
   available: boolean;
   executionPath: DiagnosticsVoiceExecutionPath;
   lastError?: string;
+  lastRecognizedAt?: number;
   lastRecognizedCommand?: string;
+  lastRecognizedCommandPhase?: DiagnosticsVoiceRecognitionPhase;
+  lastSpeechListeningOverlapAt?: number;
+  lastSpeechListeningOverlapReason?: DiagnosticsSpeechListeningOverlapReason;
+  lastVoiceStateChangedAt?: number;
   listening: boolean;
   microphonePermission?: string;
+  speaking: boolean;
+  speechListeningOverlapActive: boolean;
+  speechListeningOverlapCount: number;
   speechPermission?: string;
+  unexpectedSpeechListeningOverlapCount: number;
   updatedAt: number;
 }
 
@@ -168,6 +179,10 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
     available: false,
     executionPath: "js-fallback",
     listening: false,
+    speaking: false,
+    speechListeningOverlapActive: false,
+    speechListeningOverlapCount: 0,
+    unexpectedSpeechListeningOverlapCount: 0,
     updatedAt: Date.now(),
   },
 });
@@ -387,14 +402,31 @@ export function recordVoiceSnapshot(input: {
   available?: boolean;
   executionPath?: DiagnosticsVoiceExecutionPath;
   lastError?: string | null;
+  lastRecognizedAt?: number;
   lastRecognizedCommand?: string | null;
+  lastRecognizedCommandPhase?: DiagnosticsVoiceRecognitionPhase;
+  speechListeningOverlapReason?: DiagnosticsSpeechListeningOverlapReason;
+  lastVoiceStateChangedAt?: number;
   listening?: boolean;
   microphonePermission?: string;
+  speaking?: boolean;
   speechPermission?: string;
 }) {
-  updateSnapshot((current) => ({
-    ...current,
-    voice: {
+  const now = Date.now();
+  const hasVoiceStateChange = input.listening !== undefined || input.speaking !== undefined;
+
+  updateSnapshot((current) => {
+    const nextListening = input.listening ?? current.voice.listening;
+    const nextSpeaking = input.speaking ?? current.voice.speaking;
+    const nextOverlapActive = nextListening && nextSpeaking;
+    const isNewOverlap = nextOverlapActive && !current.voice.speechListeningOverlapActive;
+    const nextOverlapReason: DiagnosticsSpeechListeningOverlapReason | undefined = isNewOverlap
+      ? input.speechListeningOverlapReason ?? "unexpected"
+      : current.voice.lastSpeechListeningOverlapReason;
+
+    return {
+      ...current,
+      voice: {
       ...current.voice,
       available: input.available ?? current.voice.available,
       executionPath: input.executionPath ?? current.voice.executionPath,
@@ -403,12 +435,29 @@ export function recordVoiceSnapshot(input: {
         input.lastRecognizedCommand === undefined
           ? current.voice.lastRecognizedCommand
           : sanitizeMessage(input.lastRecognizedCommand ?? undefined, 80),
-      listening: input.listening ?? current.voice.listening,
+      lastRecognizedAt:
+        input.lastRecognizedCommandPhase !== undefined || input.lastRecognizedAt !== undefined
+          ? input.lastRecognizedAt ?? now
+          : current.voice.lastRecognizedAt,
+      lastRecognizedCommandPhase: input.lastRecognizedCommandPhase ?? current.voice.lastRecognizedCommandPhase,
+      lastSpeechListeningOverlapAt: isNewOverlap ? now : current.voice.lastSpeechListeningOverlapAt,
+      lastSpeechListeningOverlapReason: nextOverlapReason,
+      lastVoiceStateChangedAt:
+        input.lastVoiceStateChangedAt ?? (hasVoiceStateChange ? now : current.voice.lastVoiceStateChangedAt),
+      listening: nextListening,
       microphonePermission: input.microphonePermission ?? current.voice.microphonePermission,
+      speaking: nextSpeaking,
+      speechListeningOverlapActive: nextOverlapActive,
+      speechListeningOverlapCount:
+        current.voice.speechListeningOverlapCount + (isNewOverlap ? 1 : 0),
       speechPermission: input.speechPermission ?? current.voice.speechPermission,
-      updatedAt: Date.now(),
+      unexpectedSpeechListeningOverlapCount:
+        current.voice.unexpectedSpeechListeningOverlapCount
+        + (isNewOverlap && nextOverlapReason === "unexpected" ? 1 : 0),
+      updatedAt: now,
     },
-  }));
+    };
+  });
 }
 
 export function recordAnalyzeEvent(
@@ -520,7 +569,42 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Microphone permission: ${input.voice.microphonePermission || "Not found in repo"}`);
   lines.push(`- Speech recognition permission: ${input.voice.speechPermission || "Not found in repo"}`);
   lines.push(`- Listening active: ${input.voice.listening ? "yes" : "no"}`);
+  lines.push(`- Speaking active: ${input.voice.speaking ? "yes" : "no"}`);
+  lines.push(`- Speech/listening overlap active: ${input.voice.speechListeningOverlapActive ? "yes" : "no"}`);
+  lines.push(`- Speech/listening overlap count: ${input.voice.speechListeningOverlapCount}`);
+  lines.push(`- Unexpected speech/listening overlap count: ${input.voice.unexpectedSpeechListeningOverlapCount}`);
+  lines.push(`- Last speech/listening overlap reason: ${input.voice.lastSpeechListeningOverlapReason || "None"}`);
+  lines.push(
+    `- Last speech/listening overlap timestamp: ${
+      typeof input.voice.lastSpeechListeningOverlapAt === "number"
+        ? new Date(input.voice.lastSpeechListeningOverlapAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(
+    `- Speech/listening invariant: ${
+      input.voice.unexpectedSpeechListeningOverlapCount === 0
+      && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
+        ? "PASS"
+        : "FAIL"
+    }`,
+  );
   lines.push(`- Last recognized command: ${input.voice.lastRecognizedCommand || "None"}`);
+  lines.push(`- Last recognition phase: ${input.voice.lastRecognizedCommandPhase || "None"}`);
+  lines.push(
+    `- Last recognition timestamp: ${
+      typeof input.voice.lastRecognizedAt === "number"
+        ? new Date(input.voice.lastRecognizedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(
+    `- Last voice state timestamp: ${
+      typeof input.voice.lastVoiceStateChangedAt === "number"
+        ? new Date(input.voice.lastVoiceStateChangedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
   lines.push(`- Last voice-module error: ${input.voice.lastError || "None"}`);
   lines.push("");
   lines.push("## Guidance loop");
