@@ -43,6 +43,8 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - JS fallback capture now waits for `onCameraReady`, records `onMountError`, and labels both direct fallback failures and native-to-JS retry failures as camera-frame failures instead of backend/provider failures.
 - App diagnostics now export sanitized sampled-frame evidence: app version, frame timestamp, sampled-frame boolean, has-image boolean, platform, native path, source size, request ID, provider/model, and structured analyze fields without raw image/base64 data.
 - The backend analyze request schema accepts `sampledFrame` and `hasImage` booleans so cloud request envelopes can preserve the same sanitized evidence fields.
+- Added an executable no-screen smoke contract check covering deterministic voice commands, the separate scene-query conversation lane, STOP cut-through, settings persistence hooks, VoiceOver/native-path diagnostics, haptic diagnostics, and smoke-evidence gates.
+- Haptic attempts now record sanitized diagnostics for type, outcome, execution path, and success/failure counts; physical haptic feedback still requires real-iPhone validation.
 
 ## Voice command coverage
 
@@ -121,6 +123,7 @@ Results:
 - Final validation for that continuation passed: Expo typecheck, Expo lint, backend typecheck, `check:voice-commands`, script syntax check, `git diff --check`, and Build iOS Apps plugin Release simulator build for `iPhone 16e`.
 - Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and warns on stale staging smoke/Sentry env vars. TestFlight preflight still fails on unresolved bundle/team/App Store/copyright inputs plus stale production smoke evidence.
 - `wrangler whoami` still reports `Not logged in`; local shell still lacks Cloudflare, OpenAI, Expo, Sentry, and Hugging Face env tokens.
+- New no-screen contract validation command: `npm --prefix expo run check:no-screen-smoke`. It is local/static only and does not replace the real iPhone smoke.
 
 ## Backend and request IDs
 

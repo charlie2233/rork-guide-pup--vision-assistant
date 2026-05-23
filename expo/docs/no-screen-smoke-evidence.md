@@ -30,6 +30,8 @@ Run this exact sequence from a clean install or reset app state:
 - Diagnostics voice section shows `Speech/listening invariant: PASS` and `Unexpected speech/listening overlap count: 0`.
 - Intentional overlap, if present, is marked as `stop-barge-in`.
 - Last analyze event includes request ID, provider, model, prompt version, structured-output fields, sampled-frame envelope, and native path: `native-core` or `js-fallback`.
+- Last analyze event includes sanitized frame summary and capture heuristics: image source, frame age, upload size, and resize flag. It must not include raw image data.
+- Haptics diagnostics show the last attempted haptic type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm physical feedback.
 - Camera fallback failures, if any, are labeled as camera-frame failures rather than backend failures.
 - VoiceOver and haptic confirmations are usable without screen reading.
 - No raw images, raw audio, credentials, provider keys, or signed URLs are present in logs, screenshots, diagnostics, or notes.

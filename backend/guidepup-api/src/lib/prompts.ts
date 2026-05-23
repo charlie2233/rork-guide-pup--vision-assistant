@@ -1,10 +1,23 @@
 const DEFAULT_PROMPT_VERSION = "2026-05-22.v1";
 
 type VisionPromptInput = {
+  appVersion?: string;
+  captureHeuristics?: {
+    captureLatencyMs?: number;
+    frameAgeMs?: number;
+    imageSource?: "uri" | "base64" | "unknown";
+    resizedForUpload?: boolean;
+    uploadedHeight?: number;
+    uploadedWidth?: number;
+  };
   detail?: "low" | "high";
   frameId?: string;
+  frameSummary?: string;
+  hasImage?: boolean;
   nativePath?: "native-core" | "js-fallback";
+  platform?: "ios" | "android" | "web" | "unknown";
   priorGuidance?: string;
+  sampledFrame?: boolean;
   sessionId?: string;
   sourceHeight?: number;
   sourceWidth?: number;
@@ -130,10 +143,16 @@ function buildCompactFrameContext(input?: VisionPromptInput) {
   }
 
   return JSON.stringify({
+    appVersion: input.appVersion,
+    captureHeuristics: input.captureHeuristics,
     detail: input.detail,
     frameId: input.frameId,
+    frameSummary: input.frameSummary,
+    hasImage: input.hasImage,
     nativePath: input.nativePath,
+    platform: input.platform,
     priorGuidance: input.priorGuidance,
+    sampledFrame: input.sampledFrame,
     sessionId: input.sessionId,
     sourceHeight: input.sourceHeight,
     sourceWidth: input.sourceWidth,

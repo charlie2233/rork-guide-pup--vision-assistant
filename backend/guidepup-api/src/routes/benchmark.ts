@@ -75,11 +75,19 @@ export async function handleBenchmark(request: Request, env: Env, requestId: str
     for (let sampleIndex = 0; sampleIndex < body.samples; sampleIndex += 1) {
       try {
         const providerResult = await provider.analyze({
+          appVersion: body.appVersion,
+          captureHeuristics: body.captureHeuristics,
           detail: body.detail,
           frameId: `benchmark-${sampleIndex + 1}`,
+          frameSummary: body.frameSummary,
+          hasImage: body.hasImage,
           imageBase64: body.imageBase64,
           mimeType: body.mimeType,
+          nativePath: body.nativePath,
+          platform: body.platform,
           promptVersion,
+          priorGuidance: body.priorGuidance,
+          sampledFrame: body.sampledFrame,
           sessionId: `benchmark-${requestId}`,
           sourceHeight: body.sourceHeight,
           sourceWidth: body.sourceWidth,

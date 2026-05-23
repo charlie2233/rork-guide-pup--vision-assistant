@@ -105,13 +105,19 @@ export async function handleAnalyze(
 
   try {
     const providerResult = await provider.analyze({
+      appVersion: body.appVersion,
+      captureHeuristics: body.captureHeuristics,
       detail: body.detail,
       frameId: body.frameId,
+      frameSummary: body.frameSummary,
+      hasImage: body.hasImage,
       imageBase64: body.imageBase64,
       mimeType: body.mimeType,
       nativePath: body.nativePath,
+      platform: body.platform,
       promptVersion,
       priorGuidance: body.priorGuidance,
+      sampledFrame: body.sampledFrame,
       sessionId: body.sessionId,
       sourceHeight: body.sourceHeight,
       sourceWidth: body.sourceWidth,

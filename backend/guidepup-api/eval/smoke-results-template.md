@@ -47,11 +47,13 @@ Operator:
 - app version:
 - session id:
 - frame id:
+- frame summary:
 - timestamp ms:
 - native path:
 - platform:
 - detail:
 - dimensions:
+- capture heuristics:
 - prior guidance:
 
 ## Eval harness

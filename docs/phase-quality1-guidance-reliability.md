@@ -12,6 +12,7 @@ This phase improves guidance-reliability evidence without changing the app/backe
 - Cloud smoke and eval now prove the sampled-frame request envelope instead of only proving that `/v1/vision/analyze` returned JSON.
 - Release preflight now rejects launch smoke that is provider-backed but missing the structured guidance fields needed for blind-user validation.
 - iOS diagnostics now exports the same non-secret analyze metadata that the app sends to the cloud: session ID, frame ID, native path, source size, prior guidance summary, and structured response fields.
+- The compact frame context now includes sanitized frame summary and capture heuristics so GPT receives explicit sampled-frame provenance without moving camera/session control out of iOS.
 
 No provider keys, raw images, raw audio, credentials, or signed URLs were logged. Smoke artifacts record `hasImage: true` and image metadata only, not image content.
 
@@ -19,6 +20,7 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 
 - `backend/guidepup-api/eval/run-live-smoke.mjs`
   - Sends `sessionId`, `frameId`, `timestampMs`, `nativePath`, `priorGuidance`, source dimensions, app version, platform, and one sampled image.
+  - Sends `hasImage`, `sampledFrame`, sanitized `frameSummary`, and `captureHeuristics` in the actual analyze POST body, not just the artifact.
   - Adds structured output validation for `direction`, `hazardLevel`, `obstacle`, `message`, `sceneDescription`, `surfaceType`, `lighting`, `confidence`, `provider`, `model`, `promptVersion`, and `fallbackReason`.
   - Writes a sanitized request envelope to JSON and markdown smoke artifacts.
 - `backend/guidepup-api/eval/run-eval.mjs`
@@ -27,10 +29,12 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 - `backend/guidepup-api/eval/manifest.schema.mjs`
   - Adds optional fixture metadata for frame/session/native-path/source-size/prior-guidance and expected lighting/surface labels.
 - `expo/scripts/release-preflight.mjs`
-  - Requires production/TestFlight smoke artifacts to include provider-backed analyze, sampled-frame envelope evidence, and the full structured field set.
+  - Requires production/TestFlight smoke artifacts to include provider-backed analyze, request IDs for health/bootstrap/analyze, sampled-frame envelope evidence, sanitized frame summary/capture heuristics, and the full structured field set.
   - Preview smoke reports the same evidence gap as a warning unless strict preview provider mode is requested.
 - `expo/src/lib/api.ts`, `expo/src/lib/diagnostics.ts`, and `expo/src/screens/DiagnosticsScreen.tsx`
-  - Preserve and display sanitized analyze metadata plus `lighting`, `surfaceType`, `sceneDescription`, `obstacle`, and `fallbackReason`.
+  - Preserve and display sanitized analyze metadata plus `lighting`, `surfaceType`, `sceneDescription`, `obstacle`, `fallbackReason`, frame summary, and capture heuristics.
+- `expo/src/native/GuidePupNavigationCore.ts`
+  - Records sanitized haptic attempt/outcome diagnostics for blind-validation evidence without claiming physical feedback.
 - `backend/guidepup-api/eval/README.md` and `smoke-results-template.md`
   - Document the new evidence fields and eval manifest metadata.
 - `backend/guidepup-api/src/schemas/vision.ts`, `backend/guidepup-api/src/lib/normalize.ts`, and `backend/guidepup-api/src/lib/prompts.ts`
@@ -47,33 +51,33 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 Commands were run to scratch files under `/tmp` so stale tracked `latest` artifacts were not overwritten:
 
 ```bash
-node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --output-json /tmp/guidepup-smoke-staging.json --output-md /tmp/guidepup-smoke-staging.md
-node backend/guidepup-api/eval/run-live-smoke.mjs --env production --output-json /tmp/guidepup-smoke-production.json --output-md /tmp/guidepup-smoke-production.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --output-json /tmp/guidepup-smoke-staging-current.json --output-md /tmp/guidepup-smoke-staging-current.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env production --output-json /tmp/guidepup-smoke-production-current.json --output-md /tmp/guidepup-smoke-production-current.md
 ```
 
 Staging result:
 
 - API: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
-- `/health`: `200 OK`, request ID `e3d5709e-7b55-4799-a10d-0ad25a5515dc`
-- `/v1/device/bootstrap`: `200 OK`, request ID `1b3a258f-4941-44f7-b2e0-2dee969e0424`
-- `/v1/vision/analyze`: `200 OK`, request ID `6f034a67-4186-4daa-a8ab-c2d35364fd93`
+- `/health`: `200 OK`, request ID `c4fa58f0-b068-4e6e-9dff-c1f4ecb8b7f0`
+- `/v1/device/bootstrap`: `200 OK`, request ID `2f73ea4d-04cb-410d-8b3b-ddc41d938f80`
+- `/v1/vision/analyze`: `200 OK`, request ID `93b8509d-9113-4a65-a06d-9756a4c7b020`
 - Execution path: `provider-backed`
 - Provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
 - Prompt version: `2026-03-31.v1`
-- Envelope evidence: present (`sampledFrame: true`, `hasImage: true`, session ID, frame ID, timestamp, `nativePath: js-fallback`, `40x40` source size)
+- Envelope evidence: present (`sampledFrame: true`, `hasImage: true`, session ID, frame ID, timestamp, `nativePath: js-fallback`, `40x40` source size, frame summary, capture heuristics)
 - Structured output validity: `false`
 - Missing structured field from live raw response: `fallbackReason`
 
 Production result:
 
 - API: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
-- `/health`: `200 OK`, request ID `5ec8f47a-02f6-46a6-a6f6-2c0e8d16c63c`
-- `/v1/device/bootstrap`: `200 OK`, request ID `b2c48b9c-66ba-45f8-957a-8b650c655b6b`
-- `/v1/vision/analyze`: `200 OK`, request ID `61565dd0-502c-4edf-8349-a8543a10a954`
+- `/health`: `200 OK`, request ID `703749f5-7315-405c-93a1-b18d34b84f7c`
+- `/v1/device/bootstrap`: `200 OK`, request ID `70ca681e-cfc5-4449-aa0a-d534fd51989d`
+- `/v1/vision/analyze`: `200 OK`, request ID `47f9986b-59f2-4c89-9e89-8a62ba26ddeb`
 - Execution path: `provider-backed`
 - Provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
 - Prompt version: `2026-03-31.v1`
-- Envelope evidence: present (`sampledFrame: true`, `hasImage: true`, session ID, frame ID, timestamp, `nativePath: js-fallback`, `40x40` source size)
+- Envelope evidence: present (`sampledFrame: true`, `hasImage: true`, session ID, frame ID, timestamp, `nativePath: js-fallback`, `40x40` source size, frame summary, capture heuristics)
 - Structured output validity: `false`
 - Missing structured field from live raw response: `fallbackReason`
 
@@ -87,10 +91,14 @@ Commands run:
 node --check backend/guidepup-api/eval/run-live-smoke.mjs
 node --check backend/guidepup-api/eval/run-eval.mjs
 node --check backend/guidepup-api/eval/manifest.schema.mjs
+node --check expo/scripts/check-no-screen-smoke-contract.mjs
 node --check expo/scripts/release-preflight.mjs
 npm --prefix backend/guidepup-api run typecheck
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:voice-commands
 npm --prefix expo run typecheck
 npm --prefix expo run lint
+npx wrangler deploy --dry-run --env staging
 git diff --check
 npm --prefix expo run release:preflight:preview
 npm --prefix expo run release:preflight:testflight
@@ -119,6 +127,9 @@ Results:
 - Build iOS Apps plugin defaults were empty in this tool session, so the workspace, scheme, and `iPhone 16e` simulator were discovered and set explicitly.
 - Build iOS Apps plugin `build_sim` hit the 120 second tool timeout. The underlying `xcodebuild` process was allowed to finish before running a shell fallback.
 - Release simulator shell build for `iPhone 16e` passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
+- Latest continuation added sanitized frame summary/capture heuristics, haptic diagnostics, and the local no-screen smoke contract check.
+- Latest validation passed: ESM syntax checks, backend typecheck, Expo typecheck, Expo lint, `check:voice-commands`, `check:no-screen-smoke`, `git diff --check`, Cloudflare staging dry-run bundle validation, scratch staging/production live smoke generation, and Build iOS Apps plugin Release simulator build for `iPhone 16e`.
+- Latest preview/testflight preflight still blocks on unresolved release inputs and stale tracked smoke artifacts; the stale smoke evidence now also reports missing `requestEnvelope.captureHeuristics` and `requestEnvelope.frameSummary`.
 
 ## Auth and plugin status
 
@@ -135,7 +146,7 @@ mcp__codex_apps__hugging_face._hf_whoami
 Results:
 
 - GitHub CLI is authenticated as `charlie2233`.
-- GitHub connector confirms PR #4 is open, draft, mergeable, and still points at `codex/guidepup-credentialed-launch`; PR head at inspection time was `52e28d2`.
+- GitHub connector confirms PR #4 is open, draft, mergeable, and still points at `codex/guidepup-credentialed-launch`; PR head before this continuation was `efa5e34`.
 - Hugging Face connector is authenticated as `Chargers`; MiniCPM remains experimental and was not moved into production guidance.
 - `CLOUDFLARE_API_TOKEN`, local `OPENAI_API_KEY`, `EXPO_TOKEN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `HUGGINGFACE_HUB_TOKEN`, and `HF_TOKEN` are missing in this shell.
 - `npx --yes wrangler whoami` failed with `Failed to fetch auth token` / `Not logged in`.

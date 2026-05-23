@@ -5,6 +5,14 @@ export const HazardLevelSchema = z.enum(["none", "low", "medium", "high"]);
 export const LightingSchema = z.enum(["dark", "dim", "normal", "bright", "unknown"]);
 export const PositionSchema = z.enum(["left", "center", "right"]);
 export const DistanceSchema = z.enum(["very-close", "close", "medium", "far"]);
+export const CaptureHeuristicsSchema = z.object({
+  captureLatencyMs: z.number().min(0).max(60000).optional(),
+  frameAgeMs: z.number().min(0).max(60000).optional(),
+  imageSource: z.enum(["uri", "base64", "unknown"]).optional(),
+  resizedForUpload: z.boolean().optional(),
+  uploadedHeight: z.number().int().positive().optional(),
+  uploadedWidth: z.number().int().positive().optional(),
+});
 
 export const ObstacleSchema = z.object({
   confidence: z.number().min(0).max(1).default(0.5),
@@ -15,7 +23,9 @@ export const ObstacleSchema = z.object({
 
 export const AnalyzeVisionRequestSchema = z.object({
   appVersion: z.string().max(64).optional(),
+  captureHeuristics: CaptureHeuristicsSchema.optional(),
   frameId: z.string().min(1).max(80).optional(),
+  frameSummary: z.string().trim().min(1).max(280).optional(),
   detail: z.enum(["low", "high"]).default("low"),
   hasImage: z.boolean().optional(),
   locale: z.string().max(32).optional(),

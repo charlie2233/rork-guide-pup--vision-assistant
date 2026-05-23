@@ -303,6 +303,20 @@ export default function DiagnosticsScreen() {
         </InfoCard>
 
         <InfoCard
+          tone={diagnostics.haptics.lastOutcome === "failure" ? "warning" : "neutral"}
+          title="Haptics"
+        >
+          <KeyValue label="Last type" value={diagnostics.haptics.lastType || "None"} />
+          <KeyValue label="Last outcome" value={diagnostics.haptics.lastOutcome} />
+          <KeyValue label="Last execution path" value={diagnostics.haptics.lastExecutionPath || "Not found in repo"} />
+          <KeyValue label="Last attempted" value={formatTimestamp(diagnostics.haptics.lastAttemptedAt)} />
+          <KeyValue label="Last completed" value={formatTimestamp(diagnostics.haptics.lastCompletedAt)} />
+          <KeyValue label="Success count" value={`${diagnostics.haptics.successCount}`} />
+          <KeyValue label="Failure count" value={`${diagnostics.haptics.failureCount}`} />
+          <KeyValue label="Last error" value={diagnostics.haptics.lastError || "None"} />
+        </InfoCard>
+
+        <InfoCard
           tone={diagnostics.lastHealthCheck?.ok ? "neutral" : "warning"}
           title="Backend health"
           action={
@@ -409,6 +423,7 @@ export default function DiagnosticsScreen() {
           <KeyValue label="App version" value={diagnostics.lastAnalyze?.appVersion || "Not found in repo"} />
           <KeyValue label="Session ID" value={diagnostics.lastAnalyze?.sessionId || "Not found in repo"} />
           <KeyValue label="Frame ID" value={diagnostics.lastAnalyze?.frameId || "Not found in repo"} />
+          <KeyValue label="Frame summary" value={diagnostics.lastAnalyze?.frameSummary || "Not found in repo"} />
           <KeyValue label="Frame time" value={formatTimestamp(diagnostics.lastAnalyze?.frameTimestampMs)} />
           <KeyValue
             label="Sampled frame"
@@ -428,6 +443,35 @@ export default function DiagnosticsScreen() {
           />
           <KeyValue label="Native path" value={diagnostics.lastAnalyze?.nativePath || "Not found in repo"} />
           <KeyValue label="Platform" value={diagnostics.lastAnalyze?.platform || "Not found in repo"} />
+          <KeyValue
+            label="Capture latency"
+            value={formatMs(diagnostics.lastAnalyze?.captureHeuristics?.captureLatencyMs)}
+          />
+          <KeyValue
+            label="Frame age"
+            value={formatMs(diagnostics.lastAnalyze?.captureHeuristics?.frameAgeMs)}
+          />
+          <KeyValue
+            label="Image source"
+            value={diagnostics.lastAnalyze?.captureHeuristics?.imageSource || "Not found in repo"}
+          />
+          <KeyValue
+            label="Resized upload"
+            value={
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.resizedForUpload === "boolean"
+                ? String(diagnostics.lastAnalyze.captureHeuristics.resizedForUpload)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue
+            label="Uploaded size"
+            value={
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.uploadedWidth === "number" &&
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.uploadedHeight === "number"
+                ? `${diagnostics.lastAnalyze.captureHeuristics.uploadedWidth}x${diagnostics.lastAnalyze.captureHeuristics.uploadedHeight}`
+                : "Not found in repo"
+            }
+          />
           <KeyValue
             label="Source size"
             value={

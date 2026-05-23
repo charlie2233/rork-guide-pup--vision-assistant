@@ -19,6 +19,7 @@
     "release:preflight:store": "node scripts/release-preflight.mjs --track store",
     "release:preflight:all": "node scripts/release-preflight.mjs --track all",
     "check:voice-commands": "node scripts/check-voice-commands.mjs",
+    "check:no-screen-smoke": "node scripts/check-no-screen-smoke-contract.mjs",
     "build:internal:ios": "npx eas-cli build --profile preview --platform ios",
     "build:preview:ios": "npx eas-cli build --profile preview --platform ios",
     "build:testflight:ios": "npx eas-cli build --profile testflight --platform ios",

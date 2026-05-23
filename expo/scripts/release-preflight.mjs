@@ -117,11 +117,31 @@ function validateSmokeEvidenceShape(artifact) {
     }
   };
 
+  const isCaptureHeuristics = (value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return false;
+    }
+
+    return (
+      ["uri", "base64", "unknown"].includes(value.imageSource) &&
+      typeof value.resizedForUpload === "boolean" &&
+      Number.isInteger(value.uploadedHeight) &&
+      value.uploadedHeight > 0 &&
+      Number.isInteger(value.uploadedWidth) &&
+      value.uploadedWidth > 0 &&
+      typeof value.frameAgeMs === "number" &&
+      Number.isFinite(value.frameAgeMs) &&
+      value.frameAgeMs >= 0
+    );
+  };
+
   requireEnvelopeField("sampledFrame", (value) => value === true);
   requireEnvelopeField("hasImage", (value) => value === true);
   requireEnvelopeField("appVersion", isNonEmptyString);
+  requireEnvelopeField("captureHeuristics", isCaptureHeuristics);
   requireEnvelopeField("sessionId", isNonEmptyString);
   requireEnvelopeField("frameId", isNonEmptyString);
+  requireEnvelopeField("frameSummary", isNonEmptyString);
   requireEnvelopeField("timestampMs", (value) => Number.isInteger(value) && value > 0);
   requireEnvelopeField("nativePath", (value) => value === "native-core" || value === "js-fallback");
   requireEnvelopeField("platform", (value) => ["ios", "android", "web", "unknown"].includes(value));
@@ -187,7 +207,10 @@ function validateSmokeArtifact(artifact, options) {
 
   expect(artifact.apiUrl === targetUrl, `${description} smoke artifact must target "${targetUrl}", found "${artifact.apiUrl ?? "undefined"}".`);
   expect(artifact.health?.statusCode === 200, `${description} smoke artifact must show /health 200.`);
+  expect(isNonEmptyString(artifact.health?.requestId), `${description} smoke artifact must include /health request ID.`);
   expect(artifact.bootstrap?.statusCode === 200, `${description} smoke artifact must show /v1/device/bootstrap 200.`);
+  expect(isNonEmptyString(artifact.bootstrap?.requestId), `${description} smoke artifact must include /v1/device/bootstrap request ID.`);
+  expect(isNonEmptyString(artifact.analyze?.requestId), `${description} smoke artifact must include /v1/vision/analyze request ID.`);
 
   const modelMatches =
     !expectedVisionModel ||

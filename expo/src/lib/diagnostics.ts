@@ -19,6 +19,7 @@ export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
 export type DiagnosticsVoiceRecognitionPhase = "partial" | "final";
 export type DiagnosticsSpeechListeningOverlapReason = "stop-barge-in" | "unexpected";
+export type DiagnosticsHapticOutcome = "none" | "success" | "failure";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -67,6 +68,15 @@ export interface DiagnosticsHealthSnapshot {
   latencyMs?: number;
 }
 
+export interface DiagnosticsCaptureHeuristics {
+  captureLatencyMs?: number;
+  frameAgeMs?: number;
+  imageSource?: "uri" | "base64" | "unknown";
+  resizedForUpload?: boolean;
+  uploadedHeight?: number;
+  uploadedWidth?: number;
+}
+
 export interface DiagnosticsNavigationLoopSnapshot {
   available: boolean;
   executionPath: DiagnosticsNavigationExecutionPath;
@@ -76,6 +86,18 @@ export interface DiagnosticsNavigationLoopSnapshot {
   sessionActive: boolean;
   updatedAt: number;
   voiceOverRunning?: boolean;
+}
+
+export interface DiagnosticsHapticSnapshot {
+  failureCount: number;
+  lastAttemptedAt?: number;
+  lastCompletedAt?: number;
+  lastError?: string;
+  lastExecutionPath?: DiagnosticsNavigationExecutionPath;
+  lastOutcome: DiagnosticsHapticOutcome;
+  lastType?: string;
+  successCount: number;
+  updatedAt: number;
 }
 
 export interface DiagnosticsVoiceSnapshot {
@@ -100,12 +122,14 @@ export interface DiagnosticsVoiceSnapshot {
 
 export interface DiagnosticsAnalyzeEvent {
   appVersion?: string;
+  captureHeuristics?: DiagnosticsCaptureHeuristics;
   confidence?: number;
   detail?: "low" | "high";
   direction?: DiagnosticsAnalyzeDirection;
   error?: string;
   fallbackReason?: string;
   frameId?: string;
+  frameSummary?: string;
   frameTimestampMs?: number;
   hazardLevel?: DiagnosticsHazardLevel;
   hasImage?: boolean;
@@ -134,6 +158,7 @@ export interface DiagnosticsAnalyzeEvent {
 
 export interface DiagnosticsSnapshot {
   cameraPermission: DiagnosticsCameraPermissionSnapshot | null;
+  haptics: DiagnosticsHapticSnapshot;
   lastAnalyze: DiagnosticsAnalyzeEvent | null;
   lastHealthCheck: DiagnosticsHealthSnapshot | null;
   navigationLoop: DiagnosticsNavigationLoopSnapshot;
@@ -165,6 +190,12 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
 
 const createInitialSnapshot = (): DiagnosticsSnapshot => ({
   cameraPermission: null,
+  haptics: {
+    failureCount: 0,
+    lastOutcome: "none",
+    successCount: 0,
+    updatedAt: Date.now(),
+  },
   lastAnalyze: null,
   lastHealthCheck: null,
   navigationLoop: {
@@ -232,6 +263,23 @@ export function sanitizeMessage(value?: string, maxLength = 160) {
   }
 
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
+}
+
+function sanitizeCaptureHeuristics(input?: DiagnosticsCaptureHeuristics) {
+  if (!input) {
+    return undefined;
+  }
+
+  const heuristics: DiagnosticsCaptureHeuristics = {
+    captureLatencyMs: typeof input.captureLatencyMs === "number" ? input.captureLatencyMs : undefined,
+    frameAgeMs: typeof input.frameAgeMs === "number" ? input.frameAgeMs : undefined,
+    imageSource: input.imageSource,
+    resizedForUpload: typeof input.resizedForUpload === "boolean" ? input.resizedForUpload : undefined,
+    uploadedHeight: typeof input.uploadedHeight === "number" ? input.uploadedHeight : undefined,
+    uploadedWidth: typeof input.uploadedWidth === "number" ? input.uploadedWidth : undefined,
+  };
+
+  return Object.values(heuristics).some((value) => value !== undefined) ? heuristics : undefined;
 }
 
 export function classifyAnalyzeError(errorMessage?: string) {
@@ -403,6 +451,34 @@ export function recordNavigationLoopSnapshot(input: {
   }));
 }
 
+export function recordHapticSnapshot(input: {
+  error?: string;
+  executionPath?: DiagnosticsNavigationExecutionPath;
+  outcome?: Exclude<DiagnosticsHapticOutcome, "none">;
+  type: string;
+}) {
+  const now = Date.now();
+  updateSnapshot((current) => {
+    const outcome = input.outcome ?? "none";
+    const isCompletion = Boolean(input.outcome);
+
+    return {
+      ...current,
+      haptics: {
+        failureCount: current.haptics.failureCount + (input.outcome === "failure" ? 1 : 0),
+        lastAttemptedAt: isCompletion ? current.haptics.lastAttemptedAt : now,
+        lastCompletedAt: isCompletion ? now : current.haptics.lastCompletedAt,
+        lastError: sanitizeMessage(input.error, 120),
+        lastExecutionPath: input.executionPath ?? current.haptics.lastExecutionPath,
+        lastOutcome: outcome,
+        lastType: sanitizeMessage(input.type, 40),
+        successCount: current.haptics.successCount + (input.outcome === "success" ? 1 : 0),
+        updatedAt: now,
+      },
+    };
+  });
+}
+
 export function recordVoiceSnapshot(input: {
   available?: boolean;
   executionPath?: DiagnosticsVoiceExecutionPath;
@@ -474,11 +550,13 @@ export function recordAnalyzeEvent(
   const event: DiagnosticsAnalyzeEvent = {
     ...input,
     appVersion: sanitizeMessage(input.appVersion, 64),
+    captureHeuristics: sanitizeCaptureHeuristics(input.captureHeuristics),
     confidence: input.confidence,
     direction: input.direction,
     error: sanitizeMessage(input.error, 120),
     fallbackReason: sanitizeMessage(input.fallbackReason, 120),
     frameId: sanitizeMessage(input.frameId, 80),
+    frameSummary: sanitizeMessage(input.frameSummary, 280),
     frameTimestampMs: input.frameTimestampMs,
     id: input.id || createEventId(),
     hasImage: input.hasImage,
@@ -638,6 +716,28 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   );
   lines.push(`- Last native/core error: ${input.navigationLoop.lastError || "None"}`);
   lines.push("");
+  lines.push("## Haptics");
+  lines.push(`- Last type: ${input.haptics.lastType || "None"}`);
+  lines.push(`- Last outcome: ${input.haptics.lastOutcome}`);
+  lines.push(`- Last execution path: ${input.haptics.lastExecutionPath || "Not found in repo"}`);
+  lines.push(
+    `- Last attempted at: ${
+      typeof input.haptics.lastAttemptedAt === "number"
+        ? new Date(input.haptics.lastAttemptedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(
+    `- Last completed at: ${
+      typeof input.haptics.lastCompletedAt === "number"
+        ? new Date(input.haptics.lastCompletedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(`- Success count: ${input.haptics.successCount}`);
+  lines.push(`- Failure count: ${input.haptics.failureCount}`);
+  lines.push(`- Last error: ${input.haptics.lastError || "None"}`);
+  lines.push("");
   lines.push("## Backend health");
   if (lastHealthCheck) {
     lines.push(`- OK: ${lastHealthCheck.ok ? "yes" : "no"}`);
@@ -664,6 +764,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- App version: ${lastAnalyze.appVersion || "Not found in repo"}`);
     lines.push(`- Session ID: ${lastAnalyze.sessionId || "Not found in repo"}`);
     lines.push(`- Frame ID: ${lastAnalyze.frameId || "Not found in repo"}`);
+    lines.push(`- Frame summary: ${lastAnalyze.frameSummary || "Not found in repo"}`);
     lines.push(`- Frame timestamp: ${
       typeof lastAnalyze.frameTimestampMs === "number"
         ? new Date(lastAnalyze.frameTimestampMs).toISOString()
@@ -674,6 +775,27 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Native path: ${lastAnalyze.nativePath || "Not found in repo"}`);
     lines.push(`- Platform: ${lastAnalyze.platform || "Not found in repo"}`);
     lines.push(`- Detail: ${lastAnalyze.detail || "Not found in repo"}`);
+    lines.push(`- Capture latency: ${
+      typeof lastAnalyze.captureHeuristics?.captureLatencyMs === "number"
+        ? `${Math.round(lastAnalyze.captureHeuristics.captureLatencyMs)}ms`
+        : "Not found in repo"
+    }`);
+    lines.push(`- Frame age: ${
+      typeof lastAnalyze.captureHeuristics?.frameAgeMs === "number"
+        ? `${Math.round(lastAnalyze.captureHeuristics.frameAgeMs)}ms`
+        : "Not found in repo"
+    }`);
+    lines.push(`- Image source: ${lastAnalyze.captureHeuristics?.imageSource || "Not found in repo"}`);
+    lines.push(`- Resized for upload: ${
+      typeof lastAnalyze.captureHeuristics?.resizedForUpload === "boolean"
+        ? String(lastAnalyze.captureHeuristics.resizedForUpload)
+        : "Not found in repo"
+    }`);
+    lines.push(`- Uploaded size: ${
+      typeof lastAnalyze.captureHeuristics?.uploadedWidth === "number" && typeof lastAnalyze.captureHeuristics?.uploadedHeight === "number"
+        ? `${lastAnalyze.captureHeuristics.uploadedWidth}x${lastAnalyze.captureHeuristics.uploadedHeight}`
+        : "Not found in repo"
+    }`);
     lines.push(`- Source size: ${
       typeof lastAnalyze.sourceWidth === "number" && typeof lastAnalyze.sourceHeight === "number"
         ? `${lastAnalyze.sourceWidth}x${lastAnalyze.sourceHeight}`

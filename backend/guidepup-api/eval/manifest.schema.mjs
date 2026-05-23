@@ -9,12 +9,21 @@ export const EvalScenarioSchema = z.enum([
 ]);
 
 export const EvalFixtureSchema = z.object({
+  captureHeuristics: z.object({
+    captureLatencyMs: z.number().min(0).max(60000).optional(),
+    frameAgeMs: z.number().min(0).max(60000).optional(),
+    imageSource: z.enum(["uri", "base64", "unknown"]).optional(),
+    resizedForUpload: z.boolean().optional(),
+    uploadedHeight: z.number().int().positive().optional(),
+    uploadedWidth: z.number().int().positive().optional(),
+  }).optional(),
   expectedDirection: z.enum(["turn-left", "turn-right", "forward", "stop"]).optional(),
   expectedHazard: z.boolean().default(false),
   expectedHazardLevel: z.enum(["none", "low", "medium", "high"]).optional(),
   expectedLighting: z.enum(["dark", "dim", "normal", "bright", "unknown"]).optional(),
   expectedSurfaceType: z.string().min(1).max(80).optional(),
   frameId: z.string().min(1).max(80).optional(),
+  frameSummary: z.string().min(1).max(280).optional(),
   id: z.string().min(1).max(64),
   imageBase64: z.string().min(16).optional(),
   imagePath: z.string().min(1).optional(),

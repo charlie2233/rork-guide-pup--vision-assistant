@@ -55,10 +55,21 @@ export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema> & {
 
 type GuidePupClientPlatform = "ios" | "android" | "web" | "unknown";
 
+export type GuidePupCaptureHeuristics = {
+  captureLatencyMs?: number;
+  frameAgeMs?: number;
+  imageSource?: "uri" | "base64" | "unknown";
+  resizedForUpload?: boolean;
+  uploadedHeight?: number;
+  uploadedWidth?: number;
+};
+
 export type AnalyzeVisionPayload = {
   appVersion?: string;
+  captureHeuristics?: GuidePupCaptureHeuristics;
   detail?: "low" | "high";
   frameId?: string;
+  frameSummary?: string;
   hasImage?: boolean;
   imageBase64: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
@@ -120,8 +131,10 @@ function safeParseJson(rawText: string) {
 function buildAnalyzeTelemetryEnvelope(payload: AnalyzeVisionPayload) {
   return {
     appVersion: payload.appVersion || getAppVersion(),
+    captureHeuristics: payload.captureHeuristics,
     detail: payload.detail,
     frameId: payload.frameId,
+    frameSummary: payload.frameSummary,
     frameTimestampMs: payload.timestampMs,
     hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
     nativePath: payload.nativePath,
@@ -144,10 +157,12 @@ function recordAnalyzeTelemetry(
     | "unauthorized",
   input: {
     appVersion?: string;
+    captureHeuristics?: GuidePupCaptureHeuristics;
     detail?: "low" | "high";
     direction?: VisionAnalyzeResponse["direction"];
     error?: string;
     frameId?: string;
+    frameSummary?: string;
     frameTimestampMs?: number;
     hazardLevel?: VisionAnalyzeResponse["hazardLevel"];
     hasImage?: boolean;
@@ -176,8 +191,10 @@ function recordAnalyzeTelemetry(
   recordAnalyzeEvent({
     ...input,
     appVersion: sanitizeMessage(input.appVersion, 64),
+    captureHeuristics: input.captureHeuristics,
     error: sanitizeMessage(input.error, 120),
     frameId: sanitizeMessage(input.frameId, 80),
+    frameSummary: sanitizeMessage(input.frameSummary, 280),
     frameTimestampMs: input.frameTimestampMs,
     hasImage: input.hasImage,
     lighting: input.lighting,
@@ -368,8 +385,10 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       },
       body: JSON.stringify({
         appVersion: payload.appVersion || getAppVersion(),
+        captureHeuristics: payload.captureHeuristics,
         detail: payload.detail || "low",
         frameId: payload.frameId,
+        frameSummary: payload.frameSummary,
         hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
         imageBase64: payload.imageBase64,
         mimeType: payload.mimeType,

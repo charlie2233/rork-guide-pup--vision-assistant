@@ -1,7 +1,11 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { Platform } from "react-native";
 
-import { analyzeVision, type VisionAnalyzeResponse } from "@/src/lib/api";
+import {
+  analyzeVision,
+  type GuidePupCaptureHeuristics,
+  type VisionAnalyzeResponse,
+} from "@/src/lib/api";
 import { recordAnalyzeEvent } from "@/src/lib/diagnostics";
 import { captureAppError } from "@/src/lib/sentry";
 
@@ -33,7 +37,41 @@ export interface AnalyzeFrameOptions {
   sessionId?: string;
 }
 
-async function preprocessFrame(input: AnalyzeFrameInput) {
+type PreparedFrame = {
+  base64: string;
+  height?: number;
+  mimeType: "image/jpeg";
+  resizedForUpload: boolean;
+  width?: number;
+};
+
+function buildCaptureHeuristics(frame: AnalyzeFrameInput, prepared?: PreparedFrame): GuidePupCaptureHeuristics {
+  const frameAgeMs = frame.timestampMs ? Math.max(0, Date.now() - frame.timestampMs) : undefined;
+
+  return {
+    captureLatencyMs: frame.captureLatencyMs,
+    frameAgeMs,
+    imageSource: frame.uri ? "uri" : frame.base64 ? "base64" : "unknown",
+    resizedForUpload: prepared?.resizedForUpload,
+    uploadedHeight: prepared?.height,
+    uploadedWidth: prepared?.width,
+  };
+}
+
+function buildFrameSummary(frame: AnalyzeFrameInput, heuristics: GuidePupCaptureHeuristics) {
+  const sourcePath = frame.source || "unknown";
+  const sourceSize = frame.width && frame.height ? `${frame.width}x${frame.height}` : "unknown-size";
+  const uploadedSize = heuristics.uploadedWidth && heuristics.uploadedHeight
+    ? `${heuristics.uploadedWidth}x${heuristics.uploadedHeight}`
+    : "unknown-upload-size";
+  const captureLatency = typeof heuristics.captureLatencyMs === "number"
+    ? `${Math.round(heuristics.captureLatencyMs)}ms-capture`
+    : "unknown-capture-latency";
+
+  return `Sampled ${sourcePath} frame, source ${sourceSize}, upload ${uploadedSize}, ${captureLatency}.`;
+}
+
+async function preprocessFrame(input: AnalyzeFrameInput): Promise<PreparedFrame> {
   if (input.uri) {
     const shouldResize = Boolean(input.width && input.width > MAX_UPLOAD_WIDTH);
     const manipulated = await ImageManipulator.manipulateAsync(
@@ -54,6 +92,7 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
       base64: manipulated.base64,
       height: manipulated.height,
       mimeType: "image/jpeg" as const,
+      resizedForUpload: shouldResize,
       width: manipulated.width,
     };
   }
@@ -63,6 +102,7 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
       base64: input.base64,
       height: input.height,
       mimeType: "image/jpeg" as const,
+      resizedForUpload: false,
       width: input.width,
     };
   }
@@ -76,10 +116,14 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
 
   try {
     const prepared = await preprocessFrame(frame);
+    const captureHeuristics = buildCaptureHeuristics(frame, prepared);
+    const frameSummary = buildFrameSummary(frame, captureHeuristics);
 
     const analysis = await analyzeVision({
+      captureHeuristics,
       detail,
       frameId: options?.frameId,
+      frameSummary,
       hasImage: true,
       imageBase64: prepared.base64,
       mimeType: prepared.mimeType,
@@ -99,11 +143,14 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const captureHeuristics = buildCaptureHeuristics(frame);
     recordAnalyzeEvent({
+      captureHeuristics,
       detail,
       error: errorMessage,
+      frameSummary: buildFrameSummary(frame, captureHeuristics),
       frameTimestampMs: frame.timestampMs,
-      hasImage: Boolean(frame.base64),
+      hasImage: Boolean(frame.uri || frame.base64),
       latencyMs: Date.now() - timestamp,
       nativePath: frame.source,
       outcome: "preprocess-failure",

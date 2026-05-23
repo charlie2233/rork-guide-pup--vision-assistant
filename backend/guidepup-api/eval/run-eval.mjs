@@ -142,14 +142,30 @@ function validateStructuredAnalyzeOutput(responseBody) {
 function buildFixtureRequestEnvelope(fixture, session, index) {
   const timestampMs = fixture.timestampMs ?? Date.now();
   const sessionId = fixture.sessionId || `eval-${getDeviceIdSuffix(session.deviceId)}`;
+  const sourceSize = fixture.sourceWidth && fixture.sourceHeight
+    ? `${fixture.sourceWidth}x${fixture.sourceHeight}`
+    : "unknown-size";
+  const frameSummary =
+    fixture.frameSummary ||
+    `Eval sampled ${fixture.nativePath || "js-fallback"} frame for ${fixture.scenario}, source ${sourceSize}.`;
 
   return {
     appVersion: "eval-harness",
+    captureHeuristics: fixture.captureHeuristics || {
+      frameAgeMs: Math.max(0, Date.now() - timestampMs),
+      imageSource: fixture.imagePath ? "uri" : fixture.imageBase64 ? "base64" : "unknown",
+      resizedForUpload: false,
+      uploadedHeight: fixture.sourceHeight,
+      uploadedWidth: fixture.sourceWidth,
+    },
     detail: fixture.detail,
     frameId: fixture.frameId || `${sessionId}-${fixture.id}-${index + 1}`,
+    frameSummary,
+    hasImage: Boolean(fixture.imagePath || fixture.imageBase64),
     nativePath: fixture.nativePath || "js-fallback",
     platform: "ios",
     priorGuidance: fixture.priorGuidance || `Eval fixture ${fixture.id}; no previous spoken guidance.`,
+    sampledFrame: true,
     sessionId,
     sourceHeight: fixture.sourceHeight,
     sourceWidth: fixture.sourceWidth,
@@ -160,12 +176,15 @@ function buildFixtureRequestEnvelope(fixture, session, index) {
 function sanitizeRequestEnvelope(envelope) {
   return {
     appVersion: envelope.appVersion,
+    captureHeuristics: envelope.captureHeuristics,
     detail: envelope.detail,
     frameId: envelope.frameId,
+    frameSummary: envelope.frameSummary,
+    hasImage: envelope.hasImage,
     nativePath: envelope.nativePath,
     platform: envelope.platform,
     priorGuidance: envelope.priorGuidance,
-    sampledFrame: true,
+    sampledFrame: envelope.sampledFrame,
     sessionId: envelope.sessionId,
     sourceHeight: envelope.sourceHeight,
     sourceWidth: envelope.sourceWidth,

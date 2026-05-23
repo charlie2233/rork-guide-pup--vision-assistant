@@ -16,7 +16,7 @@ This phase tightens the cloud-owned vision contract for internal iOS launch read
 
 - Backend OpenAI-compatible provider now requests strict JSON Schema Structured Outputs instead of loose JSON object mode.
 - Backend default model config is prepared for `gpt-5.5`, low reasoning effort, and prompt version `2026-05-22.v1`.
-- Analyze request accepts compact frame context: `sessionId`, `frameId`, `timestampMs`, `priorGuidance`, `nativePath`, source size, and detail level.
+- Analyze request accepts compact frame context: `sessionId`, `frameId`, `timestampMs`, `priorGuidance`, `nativePath`, source size, detail level, sanitized `frameSummary`, `captureHeuristics`, `sampledFrame`, and `hasImage`.
 - Analyze response now carries `fallbackReason` for safe fallback and safety-override cases.
 - iOS sends sampled-frame metadata from the navigation loop while keeping camera capture and STOP/haptics/VoiceOver control local.
 

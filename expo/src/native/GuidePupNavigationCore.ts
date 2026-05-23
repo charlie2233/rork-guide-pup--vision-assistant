@@ -3,6 +3,7 @@ import type { CameraView } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { AccessibilityInfo, Platform } from "react-native";
 
+import { recordHapticSnapshot } from "@/src/lib/diagnostics";
 import type { AnalyzeFrameInput } from "@/src/logic/VisionAI";
 
 export type GuidePupNavigationCoreExecutionPath = "native-core" | "js-fallback";
@@ -151,16 +152,7 @@ async function announce(message: string) {
   }
 }
 
-async function playHaptic(type: GuidePupNavigationCoreHapticType) {
-  if (nativeModule) {
-    try {
-      await nativeModule.playHaptic(type);
-      return;
-    } catch {
-      // Fall through to the JS haptics fallback if the native bridge rejects.
-    }
-  }
-
+async function playFallbackHaptic(type: GuidePupNavigationCoreHapticType) {
   if (type === "stop" || type === "error") {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     return;
@@ -182,6 +174,33 @@ async function playHaptic(type: GuidePupNavigationCoreHapticType) {
   }
 
   await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+}
+
+async function playHaptic(type: GuidePupNavigationCoreHapticType) {
+  recordHapticSnapshot({ type });
+
+  if (nativeModule) {
+    try {
+      await nativeModule.playHaptic(type);
+      recordHapticSnapshot({ executionPath: "native-core", outcome: "success", type });
+      return;
+    } catch {
+      // Fall through to the JS haptics fallback if the native bridge rejects.
+    }
+  }
+
+  try {
+    await playFallbackHaptic(type);
+    recordHapticSnapshot({ executionPath: "js-fallback", outcome: "success", type });
+  } catch (error) {
+    recordHapticSnapshot({
+      error: error instanceof Error ? error.message : "Haptic feedback failed.",
+      executionPath: "js-fallback",
+      outcome: "failure",
+      type,
+    });
+    throw error;
+  }
 }
 
 async function getState(): Promise<GuidePupNavigationCoreState> {
