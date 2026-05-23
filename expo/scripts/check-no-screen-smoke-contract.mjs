@@ -202,6 +202,8 @@ mustInclude(releasePreflight, "Public support page must include the configured s
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
 mustInclude(liveSmoke, "launchContract", "Live smoke records launch contract");
+mustInclude(liveSmoke, "requireLaunchContract", "Live smoke can fail on launch-invalid evidence");
+mustInclude(liveSmoke, "validateLaunchReadinessArtifact", "Live smoke validates launch readiness before success");
 mustInclude(liveSmoke, "hasImage: true", "Live smoke sends hasImage");
 mustInclude(liveSmoke, "sampledFrame: true", "Live smoke sends sampledFrame");
 mustInclude(liveSmoke, "frameSummary", "Live smoke records frame summary");

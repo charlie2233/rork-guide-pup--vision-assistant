@@ -27,7 +27,14 @@ From `backend/guidepup-api/`:
 npm run eval -- --manifest eval/sample-manifest.json
 npm run eval:json -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.json
 npm run eval:markdown -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.md
+npm run smoke:staging
+npm run smoke:production
 ```
+
+The smoke scripts write the latest JSON and Markdown artifacts before returning. They now also require the launch
+contract by default: provider-backed analyze, the configured launch model and prompt version, bounded runtime controls,
+sampled-frame envelope proof, and structured analyze output. A stale Worker can still leave useful request IDs in the
+artifact, but the command exits nonzero until the evidence is launch-valid.
 
 Override the API target if needed:
 

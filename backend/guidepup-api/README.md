@@ -126,6 +126,10 @@ npm run smoke:production
 ```
 
 Each command writes both a machine-readable JSON artifact and a markdown summary under `eval/`. The Expo release gate reads the latest production artifact and hard-fails `testflight` and `store` if analyze is still fallback-only.
+The npm smoke commands also fail if the artifact is not launch-valid: provider-backed analyze, the configured launch
+model and prompt version, bounded runtime controls, sampled-frame envelope proof, and structured output must all be
+present. Even on failure, the artifacts are written so request IDs and missing fields can be reviewed without treating
+the run as shippable.
 
 ## Benchmarking
 

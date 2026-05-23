@@ -218,3 +218,31 @@ Results:
 - New provider runtime controls are local/dry-run validated only until staging/prod are deployed and smoke artifacts include the new health fields.
 - Expo/EAS build is blocked: `EXPO_TOKEN` missing and release inputs are unresolved.
 - Sentry production health could not be queried because Sentry auth/org/project env vars are missing.
+
+## 2026-05-23 strict smoke command continuation
+
+The reusable npm smoke commands now behave as launch gates instead of just evidence writers. They still write JSON and
+Markdown artifacts first, but `--require-launch-contract` makes the command exit nonzero when provider-backed execution,
+the configured launch model, prompt version, runtime controls, sampled-frame envelope, or structured-output contract is
+not launch-valid.
+
+Changes:
+
+- Added `--require-launch-contract`, `--expected-model`, and `--expected-prompt-version` to `backend/guidepup-api/eval/run-live-smoke.mjs`.
+- Updated `npm run smoke:staging` and `npm run smoke:production` to use strict launch-contract mode by default.
+- Updated backend eval docs and no-screen smoke contract checks so this strict smoke behavior stays covered.
+
+Validation:
+
+```bash
+node --check backend/guidepup-api/eval/run-live-smoke.mjs
+npm --prefix expo run check:no-screen-smoke
+node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --require-launch-contract --output-json /tmp/guidepup-strict-smoke-staging.json --output-md /tmp/guidepup-strict-smoke-staging.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env production --require-launch-contract --output-json /tmp/guidepup-strict-smoke-production.json --output-md /tmp/guidepup-strict-smoke-production.md
+```
+
+Results:
+
+- Staging strict smoke wrote `/tmp/guidepup-strict-smoke-staging.json` and `/tmp/guidepup-strict-smoke-staging.md`, then exited nonzero as intended. Request IDs: `/health` `d8e0a68d-74d8-4214-bad4-8288dfe885b7`, `/v1/device/bootstrap` `f0e42eec-5732-4288-af55-d0dd34f28bc1`, `/v1/vision/analyze` `fec32c44-691c-4e9a-92fc-2b891316fd65`.
+- Production strict smoke wrote `/tmp/guidepup-strict-smoke-production.json` and `/tmp/guidepup-strict-smoke-production.md`, then exited nonzero as intended. Request IDs: `/health` `6b849601-987f-4ab2-b9af-682533fb67e7`, `/v1/device/bootstrap` `658e9b09-49d6-4272-a62c-ef377dec94b2`, `/v1/vision/analyze` `4e436b40-8cb4-424d-9bcc-7cac46b72660`.
+- Both strict smoke runs are provider-backed but launch-invalid because the live Workers still report `gpt-4.1` / `2026-03-31.v1`, lack runtime-control health fields, and omit `walkability` and `fallbackReason`.

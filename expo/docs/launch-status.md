@@ -74,7 +74,16 @@ Last updated: 2026-05-23
   - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env
   - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
+  - Strict staging smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
+  - Strict production smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`
+
+## Strict smoke command update on 2026-05-23
+
+- `npm --prefix backend/guidepup-api run smoke:staging` and `smoke:production` now write evidence first, then fail if the smoke artifact is not launch-valid.
+- Fresh strict staging request IDs: `/health` `d8e0a68d-74d8-4214-bad4-8288dfe885b7`, `/v1/device/bootstrap` `f0e42eec-5732-4288-af55-d0dd34f28bc1`, `/v1/vision/analyze` `fec32c44-691c-4e9a-92fc-2b891316fd65`.
+- Fresh strict production request IDs: `/health` `6b849601-987f-4ab2-b9af-682533fb67e7`, `/v1/device/bootstrap` `658e9b09-49d6-4272-a62c-ef377dec94b2`, `/v1/vision/analyze` `4e436b40-8cb4-424d-9bcc-7cac46b72660`.
+- Both strict runs remained provider-backed but launch-invalid on stale `gpt-4.1` / `2026-03-31.v1`, missing runtime-control health fields, and missing structured `walkability` / `fallbackReason`.
 
 ## Public site copy update on 2026-05-23
 

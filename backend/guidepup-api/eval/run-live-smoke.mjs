@@ -16,9 +16,12 @@ const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
 function parseArgs(argv) {
   const args = {
     env: undefined,
+    expectedModel: launchInputs.productionVisionModel,
+    expectedPromptVersion: launchInputs.productionPromptVersion,
     outputJson: undefined,
     outputMd: undefined,
     operator: "Codex",
+    requireLaunchContract: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -41,6 +44,20 @@ function parseArgs(argv) {
     if (arg === "--operator") {
       args.operator = argv[index + 1];
       index += 1;
+      continue;
+    }
+    if (arg === "--expected-model") {
+      args.expectedModel = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--expected-prompt-version") {
+      args.expectedPromptVersion = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--require-launch-contract") {
+      args.requireLaunchContract = true;
       continue;
     }
   }
@@ -101,6 +118,10 @@ function getDeviceIdSuffix(deviceId) {
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function modelMatchesExpected(value, expected) {
+  return typeof value === "string" && (value === expected || value.startsWith(`${expected}-`));
 }
 
 function validateStructuredAnalyzeOutput(responseBody) {
@@ -267,6 +288,46 @@ function buildLaunchContract({ analyzeSummary, healthJson, requestEnvelope }) {
     structuredOutputValid,
     valid: runtimeControlsPresent && sampledFrameEnvelopeValid && structuredOutputValid,
   };
+}
+
+function validateLaunchReadinessArtifact(artifact, { expectedModel, expectedPromptVersion }) {
+  const issues = [];
+
+  if (artifact.providerBacked !== true || artifact.analyze.executionPath !== "provider-backed") {
+    issues.push(`analyze execution path is "${artifact.analyze.executionPath || "missing"}", not provider-backed`);
+  }
+
+  if (!artifact.launchContract.valid) {
+    issues.push("launch contract is not valid");
+  }
+
+  if (expectedModel) {
+    if (!modelMatchesExpected(artifact.health.defaultModel, expectedModel)) {
+      issues.push(`health model is "${artifact.health.defaultModel || "missing"}", expected "${expectedModel}"`);
+    }
+    if (!modelMatchesExpected(artifact.analyze.model, expectedModel)) {
+      issues.push(`analyze model is "${artifact.analyze.model || "missing"}", expected "${expectedModel}"`);
+    }
+  }
+
+  if (expectedPromptVersion) {
+    if (artifact.health.promptVersion !== expectedPromptVersion) {
+      issues.push(`health prompt version is "${artifact.health.promptVersion || "missing"}", expected "${expectedPromptVersion}"`);
+    }
+    if (artifact.analyze.promptVersion !== expectedPromptVersion) {
+      issues.push(`analyze prompt version is "${artifact.analyze.promptVersion || "missing"}", expected "${expectedPromptVersion}"`);
+    }
+  }
+
+  if (Array.isArray(artifact.analyze.structuredOutputMissingFields) && artifact.analyze.structuredOutputMissingFields.length > 0) {
+    issues.push(`structured output missing fields: ${artifact.analyze.structuredOutputMissingFields.join(", ")}`);
+  }
+
+  if (Array.isArray(artifact.analyze.structuredOutputInvalidFields) && artifact.analyze.structuredOutputInvalidFields.length > 0) {
+    issues.push(`structured output invalid fields: ${artifact.analyze.structuredOutputInvalidFields.join(", ")}`);
+  }
+
+  return issues;
 }
 
 function deriveAnalyzeSummary(result) {
@@ -524,6 +585,21 @@ async function main() {
   }
 
   process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
+
+  if (args.requireLaunchContract) {
+    const issues = validateLaunchReadinessArtifact(artifact, {
+      expectedModel: args.expectedModel,
+      expectedPromptVersion: args.expectedPromptVersion,
+    });
+
+    if (issues.length > 0) {
+      console.error(`${args.env} smoke evidence was written, but it is not launch-valid:`);
+      for (const issue of issues) {
+        console.error(`- ${issue}`);
+      }
+      process.exit(1);
+    }
+  }
 }
 
 main().catch((error) => {
