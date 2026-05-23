@@ -9,8 +9,7 @@ export type GuidePupVoiceCommandIntent =
   | "less-detail"
   | "haptics-on"
   | "haptics-off"
-  | "status"
-  | "what-do-you-see";
+  | "status";
 
 const commandMatchers: Array<[GuidePupVoiceCommandIntent, RegExp[]]> = [
   [
@@ -82,12 +81,6 @@ const commandMatchers: Array<[GuidePupVoiceCommandIntent, RegExp[]]> = [
       /\b(status|current status|current settings|how am i set up)\b/,
     ],
   ],
-  [
-    "what-do-you-see",
-    [
-      /\b(what do you see|what'?s around me|describe the scene|what is in front of me)\b/,
-    ],
-  ],
 ];
 
 export function normalizeVoiceTranscript(value: string) {
@@ -130,10 +123,11 @@ export function isStopBargeInCommand(transcript: string) {
   return stopBargeInCommands.has(normalizeVoiceTranscript(transcript));
 }
 
-export function buildVoiceHelpPrompt(isGuiding: boolean) {
+export function buildVoiceHelpPrompt(isGuiding: boolean, options: { conversationLaneEnabled: boolean }) {
   if (isGuiding) {
+    const sceneQueryPrompt = options.conversationLaneEnabled ? ", or what do you see" : "";
     return [
-      "You can say stop guidance, repeat, status, slower speech, faster speech, more detail, less detail, haptics on, haptics off, or what do you see.",
+      `You can say stop guidance, repeat, status, slower speech, faster speech, more detail, less detail, haptics on, haptics off${sceneQueryPrompt}.`,
       "Guide Pup only accepts this bounded command list for safety.",
     ].join(" ");
   }

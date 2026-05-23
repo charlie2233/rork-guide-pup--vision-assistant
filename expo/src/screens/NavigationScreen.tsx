@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useVoice } from "@/src/components/VoiceAnnouncer";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
-import { getConversationLaneState } from "@/src/lib/voiceConversation";
+import { canAnswerWhatDoYouSee, parseConversationPrompt } from "@/src/lib/voiceConversation";
 import { buildVoiceHelpPrompt, isStopBargeInCommand, parseVoiceCommand } from "@/src/lib/voiceCommands";
 import {
   buildVoiceStatusSummary,
@@ -377,7 +377,7 @@ export default function NavigationScreen() {
   }, [speakCommandResponse]);
 
   const analyzeCurrentFrame = useCallback(async (mode: "guidance" | "scene-query" = "guidance") => {
-    if (analyzingRef.current || (!guidingRef.current && mode === "guidance")) {
+    if (analyzingRef.current || !guidingRef.current) {
       return;
     }
 
@@ -399,12 +399,14 @@ export default function NavigationScreen() {
           captureError instanceof Error ? captureError.message : "Guide Pup could not capture a frame.";
 
         if (navigationCorePath === "native-core" && cameraRef.current) {
-          setNavigationCorePath("js-fallback");
-          await refreshNavigationCoreState({
-            executionPath: "js-fallback",
-            lastError: captureErrorMessage,
-            sessionActive: true,
-          });
+          if (mode === "guidance") {
+            setNavigationCorePath("js-fallback");
+            await refreshNavigationCoreState({
+              executionPath: "js-fallback",
+              lastError: captureErrorMessage,
+              sessionActive: true,
+            });
+          }
 
           frame = await GuidePupNavigationCore.captureFrame({
             cameraRef: cameraRef.current,
@@ -413,24 +415,30 @@ export default function NavigationScreen() {
             maxDimension: 768,
           });
         } else if (navigationCorePath === "native-core") {
-          setNavigationCorePath("js-fallback");
-          await refreshNavigationCoreState({
-            executionPath: "js-fallback",
-            lastError: captureErrorMessage,
-            sessionActive: true,
-          });
+          if (mode === "guidance") {
+            setNavigationCorePath("js-fallback");
+            await refreshNavigationCoreState({
+              executionPath: "js-fallback",
+              lastError: captureErrorMessage,
+              sessionActive: true,
+            });
+          } else if (!isSpeakingRef.current) {
+            speakCommandResponse("I could not describe the scene right now. Guidance settings are unchanged.");
+          }
           return;
         } else {
           throw captureError;
         }
       }
 
-      await refreshNavigationCoreState({
-        executionPath: frame.executionPath,
-        lastCaptureLatencyMs: frame.captureLatencyMs,
-        lastError: null,
-        sessionActive: true,
-      });
+      if (mode === "guidance") {
+        await refreshNavigationCoreState({
+          executionPath: frame.executionPath,
+          lastCaptureLatencyMs: frame.captureLatencyMs,
+          lastError: null,
+          sessionActive: true,
+        });
+      }
 
       const result = await GuideAI.analyzeWithVision(frame, {
         detail: settings.descriptionMode === "detailed" ? "high" : "low",
@@ -439,24 +447,26 @@ export default function NavigationScreen() {
         sessionId: guidanceSessionIdRef.current,
       });
 
-      if ((!guidingRef.current && mode === "guidance") || !result) {
+      if (!guidingRef.current || !result) {
         return;
       }
 
-      setDirection(result);
+      if (mode === "guidance") {
+        setDirection(result);
 
-      if (result.direction === "stop" || result.obstacle) {
-        setGuidanceStatus({
-          detail: result.message || "Guide Pup stopped guidance until the path is clear.",
-          tone: "warning",
-          title: "Safe STOP active",
-        });
-      } else {
-        setGuidanceStatus({
-          detail: result.message || "Analyzing surroundings.",
-          tone: "neutral",
-          title: "Guidance active",
-        });
+        if (result.direction === "stop" || result.obstacle) {
+          setGuidanceStatus({
+            detail: result.message || "Guide Pup stopped guidance until the path is clear.",
+            tone: "warning",
+            title: "Safe STOP active",
+          });
+        } else {
+          setGuidanceStatus({
+            detail: result.message || "Analyzing surroundings.",
+            tone: "neutral",
+            title: "Guidance active",
+          });
+        }
       }
 
       const spokenGuidance = mode === "scene-query"
@@ -492,16 +502,32 @@ export default function NavigationScreen() {
         void GuidePupNavigationCore.announce(result.message);
       }
 
-      await refreshNavigationCoreState({
-        executionPath: frame.executionPath,
-        lastCaptureLatencyMs: frame.captureLatencyMs,
-        lastError: null,
-        lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
-        sessionActive: true,
-      });
+      if (mode === "guidance") {
+        await refreshNavigationCoreState({
+          executionPath: frame.executionPath,
+          lastCaptureLatencyMs: frame.captureLatencyMs,
+          lastError: null,
+          lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
+          sessionActive: true,
+        });
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       const failureClass = classifyAnalyzeError(errorMessage);
+      const sceneQueryFallback = "I could not describe the scene right now. Guidance settings are unchanged.";
+
+      if (mode === "scene-query") {
+        if (!isSpeakingRef.current) {
+          lastSpokenMessageRef.current = sceneQueryFallback;
+          speakCommandResponse(sceneQueryFallback);
+        }
+        void captureAppError(error, {
+          screen: "NavigationScreen",
+          stage: "analyzeCurrentFrame.sceneQuery",
+        });
+        return;
+      }
+
       const fallbackMessage =
         failureClass === "timeout"
           ? "Guide Pup timed out and switched to a safe stop. Hold still and retry in a moment."
@@ -542,7 +568,13 @@ export default function NavigationScreen() {
     } finally {
       analyzingRef.current = false;
     }
-  }, [settings.descriptionMode, settings.hapticsEnabled, speakCommandResponse]);
+  }, [
+    navigationCorePath,
+    refreshNavigationCoreState,
+    settings.descriptionMode,
+    settings.hapticsEnabled,
+    speakCommandResponse,
+  ]);
 
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
@@ -552,6 +584,7 @@ export default function NavigationScreen() {
       }
 
       const intent = parseVoiceCommand(normalizedTranscript);
+      const conversationIntent = intent ? null : parseConversationPrompt(normalizedTranscript);
       const recentlyHandledStop = Date.now() - lastStopHandledAtRef.current < 2000;
 
       if (!isFinal) {
@@ -584,8 +617,30 @@ export default function NavigationScreen() {
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
-        lastRecognizedCommand: intent ?? "unsupported",
+        lastRecognizedCommand: intent ?? conversationIntent ?? "unsupported",
       });
+
+      if (conversationIntent === "what-do-you-see") {
+        if (!guidingRef.current) {
+          speakCommandResponse("Start guidance first, then ask what do you see.");
+          return;
+        }
+        if (!permission?.granted) {
+          speakCommandResponse("Camera access is required before I can describe the scene.");
+          return;
+        }
+        if (!canAnswerWhatDoYouSee()) {
+          speakCommandResponse("The experimental conversation lane is not enabled right now.");
+          return;
+        }
+        if (direction?.sceneDescription) {
+          speakCommandResponse(direction.sceneDescription);
+          return;
+        }
+        speakCommandResponse("Analyzing the scene now.");
+        void analyzeCurrentFrame("scene-query");
+        return;
+      }
 
       if (!intent) {
         speakCommandResponse("That command is not supported. Say help for the supported commands.");
@@ -616,7 +671,11 @@ export default function NavigationScreen() {
           speakCommandResponse(lastSpokenMessageRef.current);
           return;
         case "help":
-          speakCommandResponse(buildVoiceHelpPrompt(guidingRef.current));
+          speakCommandResponse(
+            buildVoiceHelpPrompt(guidingRef.current, {
+              conversationLaneEnabled: guidingRef.current && permission?.granted === true && canAnswerWhatDoYouSee(),
+            }),
+          );
           return;
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
@@ -678,26 +737,14 @@ export default function NavigationScreen() {
         case "status":
           speakCommandResponse(
             buildVoiceStatusSummary({
+              cameraReady: permission?.granted === true,
+              conversationLaneEnabled: guidingRef.current && permission?.granted === true && canAnswerWhatDoYouSee(),
               isGuiding: guidingRef.current,
               settings,
+              voiceControlAvailable: GuidePupVoiceControl.isNativeModuleAvailable(),
             }),
           );
           return;
-        case "what-do-you-see":
-          if (!permission?.granted) {
-            speakCommandResponse("Camera access is required before I can describe the scene.");
-            return;
-          }
-          if (!getConversationLaneState().supportedPrompts.includes("what do you see")) {
-            speakCommandResponse("The experimental conversation lane is not enabled right now.");
-            return;
-          }
-          if (direction?.sceneDescription) {
-            speakCommandResponse(direction.sceneDescription);
-            return;
-          }
-          speakCommandResponse("Analyzing the scene now.");
-          void analyzeCurrentFrame("scene-query");
       }
     });
 

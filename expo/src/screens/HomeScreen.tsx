@@ -5,6 +5,7 @@ import { useSettings } from '@/src/providers/SettingsProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGuidePupRouter } from '@/src/lib/router';
 import { recordVoiceSnapshot } from '@/src/lib/diagnostics';
+import { parseConversationPrompt } from '@/src/lib/voiceConversation';
 import { buildVoiceHelpPrompt, parseVoiceCommand } from '@/src/lib/voiceCommands';
 import { buildVoiceStatusSummary, describeHaptics, describeSpeechRate, fasterSpeechRate, slowerSpeechRate } from '@/src/lib/voiceSettings';
 import { GuidePupNavigationCore } from '@/src/native/GuidePupNavigationCore';
@@ -161,11 +162,17 @@ export default function HomeScreen() {
 
       lastHandledTranscriptRef.current = normalizedTranscript;
       const intent = parseVoiceCommand(normalizedTranscript);
+      const conversationIntent = intent ? null : parseConversationPrompt(normalizedTranscript);
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
-        lastRecognizedCommand: intent ?? "unsupported",
+        lastRecognizedCommand: intent ?? conversationIntent ?? "unsupported",
       });
+
+      if (conversationIntent === "what-do-you-see") {
+        void speakVoiceResponse("Start guidance first, then ask what do you see.", "stop");
+        return;
+      }
 
       if (!intent) {
         void speakVoiceResponse("That command is not supported here. Say help for the available commands.", "stop");
@@ -184,7 +191,12 @@ export default function HomeScreen() {
           void speakVoiceResponse(lastSpokenMessageRef.current, null);
           return;
         case "help":
-          void speakVoiceResponse(buildVoiceHelpPrompt(false), null);
+          void speakVoiceResponse(
+            buildVoiceHelpPrompt(false, {
+              conversationLaneEnabled: false,
+            }),
+            null,
+          );
           return;
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
@@ -249,14 +261,13 @@ export default function HomeScreen() {
         case "status":
           void speakVoiceResponse(
             buildVoiceStatusSummary({
+              conversationLaneEnabled: false,
               isGuiding: false,
               settings,
+              voiceControlAvailable: GuidePupVoiceControl.isNativeModuleAvailable(),
             }),
             null,
           );
-          return;
-        case "what-do-you-see":
-          void speakVoiceResponse("Start guidance first, then ask what do you see.", "stop");
           return;
       }
     });

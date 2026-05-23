@@ -46,13 +46,30 @@ export function describeHaptics(enabled: boolean) {
 }
 
 export function buildVoiceStatusSummary(input: {
+  cameraReady?: boolean;
+  conversationLaneEnabled?: boolean;
   isGuiding: boolean;
   settings: Settings;
+  voiceControlAvailable?: boolean;
 }) {
-  return [
+  const lines = [
     `Guidance is ${input.isGuiding ? "active" : "paused"}.`,
     `Speech rate is ${describeSpeechRate(input.settings.speechRate)}.`,
     `Detail level is ${describeDetailLevel(input.settings.descriptionMode)}.`,
     `Haptics are ${describeHaptics(input.settings.hapticsEnabled)}.`,
-  ].join(" ");
+  ];
+
+  if (typeof input.cameraReady === "boolean") {
+    lines.push(`Camera is ${input.cameraReady ? "ready" : "not ready"}.`);
+  }
+
+  if (typeof input.voiceControlAvailable === "boolean") {
+    lines.push(`Voice input is ${input.voiceControlAvailable ? "native" : "using fallback controls"}.`);
+  }
+
+  if (typeof input.conversationLaneEnabled === "boolean") {
+    lines.push(`Scene question is ${input.conversationLaneEnabled ? "available" : "unavailable here"}.`);
+  }
+
+  return lines.join(" ");
 }

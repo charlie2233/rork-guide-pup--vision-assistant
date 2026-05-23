@@ -3,6 +3,7 @@
 Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `f7eb562`
+Conversation-lane continuation start: `55622a1`
 
 ## Scope
 
@@ -17,6 +18,11 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Guidance speech can keep listening for STOP only when the spoken guidance is non-stop, non-obstacle, and does not itself contain "stop" or "pause."
 - Bare `continue` no longer starts guidance, which avoids self-triggering from guidance like "continue forward." `continue guidance` remains supported.
 - Duplicate transcript guards are reset when command sessions restart or guidance pauses, so a later repeated STOP is not ignored forever.
+- The `what do you see` scene-query lane is now explicitly enabled in `voiceConversation.ts`, parsed separately from the deterministic command lane, and gated by `canAnswerWhatDoYouSee()`.
+- Home gives a deterministic "start guidance first" response for scene questions, while Navigation only answers scene questions when guidance is active and camera permission is granted.
+- Navigation help only advertises `what do you see` when guidance, camera access, and the scene-query lane are all available.
+- Voice status now reports camera readiness, native/fallback voice input availability, and whether the scene question is available in the current context.
+- Scene-query aliases stay bounded to a conversation-lane trigger; they can request a scene answer but cannot mutate settings, guidance status, direction UI, navigation-core diagnostics, STOP behavior, haptics, VoiceOver, or camera/session timing.
 
 ## Voice command coverage
 
@@ -33,9 +39,20 @@ Implemented command intents remain bounded and deterministic:
 - `less detail`
 - `haptics on`
 - `haptics off`
-- `what do you see`
 
 Command lane changes still do not allow an LLM to change settings, navigation, STOP behavior, haptics, VoiceOver, or camera/session timing.
+
+## Conversation-lane coverage
+
+Implemented conversation prompts remain bounded and isolated from command execution:
+
+- `what do you see`
+- `what's around me`
+- `what is around me`
+- `describe the scene`
+- `what is in front of me`
+
+The scene-query conversation lane is only entered after camera permission is present and guidance is active; otherwise the app speaks a deterministic fallback message. A scene query may speak the backend scene description from a sampled frame, but it does not update navigation direction, guidance status, haptics, VoiceOver announcements, or native/JS navigation-core state.
 
 ## Validation run
 
@@ -47,6 +64,8 @@ git pull --ff-only
 npm --prefix expo run typecheck
 npm --prefix expo run lint
 git diff --check
+xcodebuildmcp session_show_defaults
+xcodebuildmcp build_sim --extraArgs -quiet CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
 xcrun devicectl list devices
 xcrun xctrace list devices
 xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
@@ -59,8 +78,9 @@ Results:
 - Expo typecheck: passed.
 - Expo lint: passed.
 - `git diff --check`: passed.
+- After the conversation-lane continuation, Expo typecheck, Expo lint, and `git diff --check` were rerun and passed.
 - Build iOS Apps plugin session defaults resolved workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, configuration `Release`, simulator `iPhone 16e`.
-- Build iOS Apps plugin compile timed out after 120 seconds without a final status; the underlying `xcodebuild` process was allowed to finish before running a fallback.
+- Build iOS Apps plugin compile failed in the Sentry upload phase: `sentry-cli` required an org slug and did not see `SENTRY_DISABLE_AUTO_UPLOAD=true` inside its build script environment.
 - Release simulator shell build for `iPhone 16e` passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 
 ## Backend and request IDs
