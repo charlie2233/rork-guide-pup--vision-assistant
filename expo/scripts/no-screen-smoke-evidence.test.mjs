@@ -84,7 +84,7 @@ function buildValidArtifact(overrides = {}) {
       nativeCore: {
         captureHeuristics: {
           frameAgeMs: 0,
-          imageSource: "uri",
+          imageSource: "base64",
           resizedForUpload: true,
           uploadedHeight: 480,
           uploadedWidth: 640,
@@ -292,6 +292,65 @@ test("no-screen smoke evidence rejects STOP recognized after speech ended", () =
 
   assert.equal(result.valid, false);
   assert.match(result.invalid.join(","), /stopBargeIn\.recognizedDuringSpeech/);
+});
+
+test("no-screen smoke evidence rejects settings persistence without real state changes", () => {
+  const artifact = buildValidArtifact();
+  artifact.settingsPersistence.afterVoiceChange = { ...artifact.settingsPersistence.before };
+  artifact.settingsPersistence.afterRelaunch = { ...artifact.settingsPersistence.before };
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /settingsPersistence\.afterVoiceChange\.differsFromBefore/);
+});
+
+test("no-screen smoke evidence rejects settings that do not survive relaunch", () => {
+  const artifact = buildValidArtifact();
+  artifact.settingsPersistence.afterRelaunch = {
+    descriptionMode: "short",
+    hapticsEnabled: true,
+    speechRate: "normal",
+  };
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /settingsPersistence\.afterRelaunch\.matchesAfterVoiceChange/);
+});
+
+test("no-screen smoke evidence rejects settings that are not restored after validation", () => {
+  const artifact = buildValidArtifact();
+  artifact.settingsPersistence.afterRestore = { ...artifact.settingsPersistence.afterVoiceChange };
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /settingsPersistence\.afterRestore\.matchesBefore/);
+});
+
+test("no-screen smoke evidence rejects incomplete camera capture heuristics", () => {
+  const artifact = buildValidArtifact();
+  artifact.cameraPaths.nativeCore.captureHeuristics = {};
+  artifact.cameraPaths.jsFallback.captureHeuristics = {};
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.missing.join(","), /cameraPaths\.nativeCore\.captureHeuristics\.imageSource/);
+  assert.match(result.missing.join(","), /cameraPaths\.jsFallback\.captureHeuristics\.uploadedWidth/);
+});
+
+test("no-screen smoke evidence rejects camera heuristic upload dimensions that do not match the path", () => {
+  const artifact = buildValidArtifact();
+  artifact.cameraPaths.nativeCore.captureHeuristics.uploadedHeight = 1;
+  artifact.cameraPaths.jsFallback.captureHeuristics.uploadedWidth = 1;
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /cameraPaths\.nativeCore\.captureHeuristics\.uploadedHeightMatchesPath/);
+  assert.match(result.invalid.join(","), /cameraPaths\.jsFallback\.captureHeuristics\.uploadedWidthMatchesPath/);
 });
 
 test("no-screen smoke evidence rejects raw media and full identifiers", () => {

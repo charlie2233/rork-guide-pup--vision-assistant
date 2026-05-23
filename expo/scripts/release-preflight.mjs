@@ -33,6 +33,7 @@ const validTracks = new Set(["preview", "testflight", "store", "all"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
+const supportPagePath = path.resolve(projectDir, "../site/support/index.html");
 
 const errors = [];
 const warnings = [];
@@ -81,6 +82,14 @@ function readSmokeArtifact(filePath) {
   }
 
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readTextFileAbsolute(filePath) {
+  if (!fileExistsAbsolute(filePath)) {
+    return undefined;
+  }
+
+  return fs.readFileSync(filePath, "utf8");
 }
 
 function isNonEmptyString(value) {
@@ -346,6 +355,31 @@ function validateNoScreenSmokeEvidence(artifact, options) {
   expect(result.valid, message);
 }
 
+function validatePublicSupportPageForStore() {
+  const supportHtml = readTextFileAbsolute(supportPagePath);
+  if (!supportHtml) {
+    return;
+  }
+
+  const lowerSupportHtml = supportHtml.toLowerCase();
+  for (const phrase of ["launch rehearsal", "before submitting", "todo_", "finalized during launch"]) {
+    expect(
+      !lowerSupportHtml.includes(phrase),
+      `Public support page must not contain launch-internal placeholder phrase "${phrase}".`,
+    );
+  }
+
+  if (isPlaceholderValue(launchInputs.supportEmail)) {
+    expect(false, "Public support page cannot be App Store-ready until support email is resolved.");
+    return;
+  }
+
+  expect(
+    supportHtml.includes(launchInputs.supportEmail),
+    "Public support page must include the configured support email from launch-inputs.js.",
+  );
+}
+
 const argv = process.argv.slice(2);
 const selectedTrack = parseTrack(argv);
 if (!validTracks.has(selectedTrack)) {
@@ -394,6 +428,10 @@ expect(Boolean(publicUrls.safetyUrl), "Safety URL is unresolved.");
 expect(fileExistsAbsolute(path.resolve(projectDir, "../site/privacy/index.html")), "Public privacy page is missing: site/privacy/index.html.");
 expect(fileExistsAbsolute(path.resolve(projectDir, "../site/support/index.html")), "Public support page is missing: site/support/index.html.");
 expect(fileExistsAbsolute(path.resolve(projectDir, "../site/safety/index.html")), "Public safety page is missing: site/safety/index.html.");
+
+if (requiresStoreBackedDistribution) {
+  validatePublicSupportPageForStore();
+}
 
 compare(appJson.expo.name, launchInputs.appName, "App name");
 compare(appJson.expo.slug, launchInputs.slug, "App slug");

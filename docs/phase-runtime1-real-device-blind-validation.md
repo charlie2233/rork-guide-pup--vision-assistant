@@ -100,3 +100,31 @@ Results:
 4. Run the exact no-screen sequence, export diagnostics afterward, use the Diagnostics screen no-screen JSON draft, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
 5. Run `npm --prefix expo run check:no-screen-evidence` before TestFlight preflight.
 6. Attach only sanitized diagnostics and backend smoke request IDs; do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
+
+## Evidence gate tightening on 2026-05-23
+
+Read-only blind-validation review found that the no-screen evidence schema could accept weak settings and camera proof. The gate now rejects artifacts where:
+
+- `settingsPersistence.afterVoiceChange` is identical to `before`.
+- `settingsPersistence.afterRelaunch` differs from the voice-changed settings.
+- `settingsPersistence.afterRestore` differs from `before`.
+- `cameraPaths.nativeCore.captureHeuristics` or `cameraPaths.jsFallback.captureHeuristics` is missing `imageSource`, `frameAgeMs`, `resizedForUpload`, `uploadedHeight`, or `uploadedWidth`.
+- Capture heuristic uploaded dimensions do not match the corresponding camera path uploaded dimensions.
+
+Validation:
+
+```bash
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run check:ios-device
+```
+
+Results:
+
+- `test:no-screen-evidence` passed 13 schema tests, including new negative tests for fake settings persistence, missing camera heuristics, and mismatched upload dimensions.
+- `check:no-screen-smoke` passed the static voice/no-screen contract.
+- `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` does not exist.
+- `check:ios-device` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, DDI services are unavailable, the tunnel is disconnected, and no USB iPhone is present.
+
+This remains schema/static validation only; it does not replace a real iPhone no-screen run.

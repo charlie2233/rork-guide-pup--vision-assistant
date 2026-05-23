@@ -197,6 +197,8 @@ mustInclude(releasePreflight, "requireEnvelopeField(\"frameSummary\"", "Frame su
 mustInclude(releasePreflight, "requireEnvelopeField(\"captureHeuristics\"", "Capture heuristics preflight gate");
 mustInclude(releasePreflight, "requireAnalyzeField(\"walkability\"", "Walkability preflight gate");
 mustInclude(releasePreflight, "requireLaunchContractField(\"valid\"", "Launch contract preflight gate");
+mustInclude(releasePreflight, "validatePublicSupportPageForStore", "Public support page App Store preflight gate");
+mustInclude(releasePreflight, "Public support page must include the configured support email", "Public support contact preflight gate");
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
 mustInclude(liveSmoke, "launchContract", "Live smoke records launch contract");
@@ -218,6 +220,10 @@ mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedCommand", "No-screen 
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedDuringSpeech", "No-screen evidence STOP during-speech proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedPhase", "No-screen evidence STOP recognition phase proof");
 mustInclude(noScreenEvidenceSchema, "settingsPersistence.nonDefaultSettingSurvivedRelaunch", "No-screen evidence settings persistence proof");
+mustInclude(noScreenEvidenceSchema, "settingsPersistence.afterVoiceChange.differsFromBefore", "No-screen evidence settings change proof");
+mustInclude(noScreenEvidenceSchema, "settingsPersistence.afterRelaunch.matchesAfterVoiceChange", "No-screen evidence settings relaunch proof");
+mustInclude(noScreenEvidenceSchema, "captureHeuristics.uploadedHeightMatchesPath", "No-screen evidence capture heuristic upload-height proof");
+mustInclude(noScreenEvidenceSchema, "captureHeuristics.uploadedWidthMatchesPath", "No-screen evidence capture heuristic upload-width proof");
 mustInclude(noScreenEvidenceSchema, "nativeCore", "No-screen evidence native-core camera proof");
 mustInclude(noScreenEvidenceSchema, "jsFallback", "No-screen evidence JS fallback camera proof");
 mustInclude(noScreenEvidenceSchema, "backendSmoke.walkability", "No-screen evidence walkability proof");

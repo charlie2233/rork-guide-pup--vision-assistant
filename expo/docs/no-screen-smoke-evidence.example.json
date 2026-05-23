@@ -85,7 +85,7 @@
       "uploadedHeight": 480,
       "uploadedWidth": 640,
       "captureHeuristics": {
-        "imageSource": "uri",
+        "imageSource": "base64",
         "frameAgeMs": 0,
         "resizedForUpload": true,
         "uploadedHeight": 480,

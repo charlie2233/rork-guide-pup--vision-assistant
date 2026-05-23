@@ -64,6 +64,25 @@ function getPathValue(source, fieldPath) {
   }, source);
 }
 
+function settingsSnapshotsEqual(left, right) {
+  return (
+    left?.speechRate === right?.speechRate &&
+    left?.descriptionMode === right?.descriptionMode &&
+    left?.hapticsEnabled === right?.hapticsEnabled
+  );
+}
+
+function isCompleteSettingsSnapshot(value) {
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    ["slow", "normal", "fast"].includes(value.speechRate) &&
+    ["short", "detailed"].includes(value.descriptionMode) &&
+    typeof value.hapticsEnabled === "boolean"
+  );
+}
+
 export function readNoScreenSmokeEvidenceArtifact(projectDir, relativePath = NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH) {
   const artifactPath = path.resolve(projectDir, relativePath);
   if (!fs.existsSync(artifactPath)) {
@@ -205,6 +224,26 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
     requireField(`settingsPersistence.${snapshot}.hapticsEnabled`, (value) => typeof value === "boolean");
   }
 
+  const settingsBefore = artifact.settingsPersistence?.before;
+  const settingsAfterVoiceChange = artifact.settingsPersistence?.afterVoiceChange;
+  const settingsAfterRelaunch = artifact.settingsPersistence?.afterRelaunch;
+  const settingsAfterRestore = artifact.settingsPersistence?.afterRestore;
+  if (isCompleteSettingsSnapshot(settingsBefore) && isCompleteSettingsSnapshot(settingsAfterVoiceChange)) {
+    if (settingsSnapshotsEqual(settingsBefore, settingsAfterVoiceChange)) {
+      invalid.push("settingsPersistence.afterVoiceChange.differsFromBefore");
+    }
+  }
+  if (isCompleteSettingsSnapshot(settingsAfterVoiceChange) && isCompleteSettingsSnapshot(settingsAfterRelaunch)) {
+    if (!settingsSnapshotsEqual(settingsAfterVoiceChange, settingsAfterRelaunch)) {
+      invalid.push("settingsPersistence.afterRelaunch.matchesAfterVoiceChange");
+    }
+  }
+  if (isCompleteSettingsSnapshot(settingsBefore) && isCompleteSettingsSnapshot(settingsAfterRestore)) {
+    if (!settingsSnapshotsEqual(settingsBefore, settingsAfterRestore)) {
+      invalid.push("settingsPersistence.afterRestore.matchesBefore");
+    }
+  }
+
   for (const [pathName, expectedNativePath] of [
     ["nativeCore", "native-core"],
     ["jsFallback", "js-fallback"],
@@ -221,6 +260,22 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
     requireField(`${prefix}.uploadedHeight`, (value) => Number.isInteger(value) && value > 0);
     requireField(`${prefix}.uploadedWidth`, (value) => Number.isInteger(value) && value > 0);
     requireField(`${prefix}.captureHeuristics`, (value) => value && typeof value === "object" && !Array.isArray(value));
+    requireField(`${prefix}.captureHeuristics.imageSource`, (value) => ["uri", "base64", "unknown"].includes(value));
+    requireField(`${prefix}.captureHeuristics.frameAgeMs`, (value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
+    requireField(`${prefix}.captureHeuristics.resizedForUpload`, (value) => typeof value === "boolean");
+    requireField(`${prefix}.captureHeuristics.uploadedHeight`, (value) => Number.isInteger(value) && value > 0);
+    requireField(`${prefix}.captureHeuristics.uploadedWidth`, (value) => Number.isInteger(value) && value > 0);
+
+    const uploadedHeight = getPathValue(artifact, `${prefix}.uploadedHeight`);
+    const uploadedWidth = getPathValue(artifact, `${prefix}.uploadedWidth`);
+    const heuristicsHeight = getPathValue(artifact, `${prefix}.captureHeuristics.uploadedHeight`);
+    const heuristicsWidth = getPathValue(artifact, `${prefix}.captureHeuristics.uploadedWidth`);
+    if (Number.isInteger(uploadedHeight) && Number.isInteger(heuristicsHeight) && uploadedHeight !== heuristicsHeight) {
+      invalid.push(`${prefix}.captureHeuristics.uploadedHeightMatchesPath`);
+    }
+    if (Number.isInteger(uploadedWidth) && Number.isInteger(heuristicsWidth) && uploadedWidth !== heuristicsWidth) {
+      invalid.push(`${prefix}.captureHeuristics.uploadedWidthMatchesPath`);
+    }
   }
 
   const sequence = Array.isArray(artifact.sequence) ? artifact.sequence : undefined;

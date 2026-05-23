@@ -40,6 +40,8 @@ Run this exact sequence from a clean install or reset app state:
 - STOP barge-in evidence must show `recognizedCommand: stop-guidance-partial`, `recognizedPhase: partial`, and `recognizedDuringSpeech: true`; merely keeping the microphone open during speech is not enough.
 - Last analyze event includes request ID, provider, model, prompt version, structured-output fields including `walkability`, sampled-frame envelope, and native path: `native-core` or `js-fallback`.
 - Last analyze event includes sanitized frame summary and capture heuristics: image source, frame age, upload size, and resize flag. It must not include raw image data.
+- Camera path evidence must include the same uploaded dimensions at the path level and inside `captureHeuristics`, for both `native-core` and `js-fallback`.
+- Settings evidence must show a non-default voice-command change, prove the same values survived relaunch, and prove defaults were restored after validation.
 - Haptics diagnostics show the last attempted haptic type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm physical feedback.
 - Audio-cue diagnostics show the last attempted cue type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm that a cue was audible and did not mask speech or STOP handling.
 - Camera fallback failures, if any, are labeled as camera-frame failures rather than backend failures.

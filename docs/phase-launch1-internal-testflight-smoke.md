@@ -233,6 +233,7 @@ Changes:
 - `release-preflight` now verifies public privacy, support, and safety pages exist in `site/`.
 - `release-preflight` now checks iOS camera, microphone, and speech-recognition permission strings are present.
 - TestFlight/store preflight now hard-block on unresolved `TODO_SUPPORT_EMAIL` and `TODO_EMERGENCY_SAFETY_DISCLAIMER`, so builds cannot silently ship fallback support/safety copy when final public launch copy is still missing.
+- TestFlight/store preflight now also inspects `site/support/index.html` and blocks launch-internal placeholder phrases or a support page that does not include the configured support email from `expo/release/launch-inputs.js`.
 
 Validation:
 
@@ -247,7 +248,8 @@ Results:
 
 - Script syntax check passed.
 - Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and stale staging smoke warnings.
-- TestFlight/store preflight now also fail on unresolved support email and emergency/safety disclaimer, alongside the existing Apple identifier, smoke, no-screen evidence, and Sentry blockers.
+- TestFlight/store preflight now also fail on public support-page readiness: the support page still contains launch-internal placeholder phrases and the configured support email is unresolved.
+- TestFlight/store remain blocked on unresolved Apple identifiers, copyright holder, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and Sentry env warnings.
 
 ## Smoke evidence privacy continuation
 
