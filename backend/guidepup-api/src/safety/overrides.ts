@@ -2,6 +2,7 @@ import { type VisionAnalyzeResponse, VisionAnalyzeResponseSchema } from "../sche
 
 type SafetyContext = {
   confidence: number;
+  lighting?: "dark" | "dim" | "normal" | "bright" | "unknown";
   safetyTags: string[];
   walkability?: "clear" | "caution" | "uncertain";
 };
@@ -29,6 +30,10 @@ export function applySafetyOverrides(response: VisionAnalyzeResponse, context: S
 
   if (context.walkability === "uncertain") {
     return stopWithMessage(response, "Stop. Walkability is uncertain.", "uncertain-walkability");
+  }
+
+  if (context.lighting === "dark" || context.lighting === "unknown") {
+    return stopWithMessage(response, "Stop. Visibility is too low.", "low-visibility");
   }
 
   if (context.safetyTags.some((tag) => ["stairs", "curb", "drop-off", "uncertain-walkability"].includes(tag))) {

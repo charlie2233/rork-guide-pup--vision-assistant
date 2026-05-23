@@ -171,6 +171,7 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
 
   return applySafetyOverrides(normalized, {
     confidence,
+    lighting: raw.lighting,
     safetyTags,
     walkability: raw.walkability,
   });

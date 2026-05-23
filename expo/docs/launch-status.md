@@ -275,6 +275,15 @@ Last updated: 2026-05-23
 - Re-ran `npm run release:preflight:preview`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
 - Re-ran `npm run release:preflight:testflight`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.
 
+## Actions taken on 2026-05-23 final launch recheck
+
+- Re-ran `npm --prefix expo run release:preflight:preview`; it passed with warnings for stale staging smoke, missing launch-contract/sampled-frame/runtime/structured evidence, missing no-screen evidence, and missing Sentry env.
+- Re-ran `npm --prefix expo run release:preflight:testflight`; it failed on unresolved copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing real-iPhone no-screen evidence.
+- Re-ran `npm --prefix expo run check:ios-device`; it reports `charlie的iPhone` is paired with Developer Mode enabled, but currently CoreDevice state is `unavailable`, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode destination visibility is `no`.
+- Re-ran the staging Worker dry-run; it passed locally and still shows the intended launch values `gpt-5.5`, prompt `2026-05-22.v1`, and bounded runtime controls, but Wrangler auth is missing so nothing was deployed.
+- Re-ran `npx --yes wrangler whoami` and `npx --yes eas-cli whoami`; both returned `Not logged in`.
+- Submission remains blocked. Main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Sentry env, and final store metadata are not complete.
+
 ## Actions taken on 2026-05-22
 
 - Hardened the Xcode simulator validation path after the Build iOS Apps plugin reached the native build but failed in Sentry upload before app validation.

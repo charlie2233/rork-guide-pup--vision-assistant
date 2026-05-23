@@ -17,6 +17,9 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
   private var recognitionTask: SFSpeechRecognitionTask?
   private var activeSpeechUtterance: AVSpeechUtterance?
+  private var activeLocaleIdentifier: String?
+  private var activePartialResults = false
+  private var restartingAfterFinal = false
   private var speechContinuation: CheckedContinuation<Void, Error>?
   private var speechRecognizer: SFSpeechRecognizer?
   private var speaking = false
@@ -179,6 +182,8 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   ) throws {
     stopListeningSession(resetError: false)
     lastTranscript = nil
+    activeLocaleIdentifier = localeIdentifier
+    activePartialResults = partialResults
 
     let locale = Locale(identifier: localeIdentifier ?? Locale.current.identifier)
     guard let recognizer = SFSpeechRecognizer(locale: locale) else {
@@ -245,11 +250,36 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
       }
 
       if result?.isFinal == true {
-        self.sendStateChanged()
+        DispatchQueue.main.async {
+          self.restartListeningAfterFinalIfNeeded()
+        }
       }
     }
 
     setListening(true)
+  }
+
+  private func restartListeningAfterFinalIfNeeded() {
+    guard listening, !restartingAfterFinal else {
+      sendStateChanged()
+      return
+    }
+
+    restartingAfterFinal = true
+    let localeIdentifier = activeLocaleIdentifier
+    let partialResults = activePartialResults
+    do {
+      try startListeningSession(
+        localeIdentifier: localeIdentifier,
+        partialResults: partialResults
+      )
+      clearError()
+    } catch {
+      recordError(error.localizedDescription)
+      stopListeningSession(resetError: false)
+    }
+    restartingAfterFinal = false
+    sendStateChanged()
   }
 
   private func stopListeningSession(resetError: Bool) {
@@ -274,6 +304,10 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
 
     speechRecognizer = nil
     setListening(false)
+    if !restartingAfterFinal {
+      activeLocaleIdentifier = nil
+      activePartialResults = false
+    }
 
     if resetError {
       clearError()

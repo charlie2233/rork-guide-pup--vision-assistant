@@ -448,3 +448,24 @@ Results:
 - TestFlight preflight no longer fails on public support page placeholder phrases.
 - The support email, copyright holder, and emergency/safety disclaimer remain intentionally unresolved in `expo/release/launch-inputs.js`; those still block TestFlight/store.
 - Production smoke evidence, real-iPhone no-screen evidence, EAS auth, Sentry env, and Apple provisioning remain blockers.
+
+## Final readiness recheck on 2026-05-23
+
+Commands:
+
+```bash
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run check:ios-device
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npx --yes wrangler whoami
+npx --yes eas-cli whoami
+```
+
+Results:
+
+- Preview preflight passed with warnings for stale staging smoke (`gpt-4.1` / `2026-03-31.v1`), missing sampled-frame/runtime/structured launch evidence, missing no-screen evidence, and missing Sentry env.
+- TestFlight preflight failed, as intended, on unresolved copyright holder, support email, emergency/safety disclaimer, support-page contact readiness, stale production smoke (`gpt-4.1` / `2026-03-31.v1`), missing sampled-frame/runtime/structured launch evidence, and missing `release/no-screen-smoke.latest.json`.
+- iPhone readiness check returned `BLOCKED`: `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode does not list it as a runnable destination.
+- Staging Worker dry-run passed and shows the local bundle would use `OPENAI_MODEL=gpt-5.5`, `PROMPT_VERSION=2026-05-22.v1`, and bounded runtime controls.
+- Wrangler and EAS both returned `Not logged in`; no deploy, build upload, TestFlight submission, or App Store submission was attempted.

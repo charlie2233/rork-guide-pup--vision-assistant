@@ -29,6 +29,7 @@ export default function HomeScreen() {
   } = useSettings();
   const lastHandledTranscriptRef = useRef<GuidePupHandledTranscript | null>(null);
   const lastSpokenMessageRef = useRef("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
+  const hasAnnouncedReadyPromptRef = useRef(false);
   const isMountedRef = useRef(true);
   const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -158,6 +159,37 @@ export default function HomeScreen() {
     }, 600);
   }, [settings.hapticsEnabled, settings.speechRate, startVoiceSession]);
 
+  const speakVoiceResponseRef = useRef(speakVoiceResponse);
+
+  useEffect(() => {
+    speakVoiceResponseRef.current = speakVoiceResponse;
+  }, [speakVoiceResponse]);
+
+  const startGuidanceFromHome = useCallback(() => {
+    lastHandledTranscriptRef.current = null;
+    lastSpokenMessageRef.current = "Guidance started. Analyzing your surroundings.";
+    if (resumeListeningTimerRef.current) {
+      clearTimeout(resumeListeningTimerRef.current);
+      resumeListeningTimerRef.current = null;
+    }
+
+    void GuidePupVoiceControl.stopCommandSession().then((state) => {
+      recordVoiceSnapshot({
+        listening: state.listening,
+        speaking: state.speaking,
+      });
+    }).catch(() => {
+      recordVoiceSnapshot({
+        listening: false,
+      });
+    });
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("success");
+    }
+    void GuidePupNavigationCore.playAudioCue("success");
+    router.push('/navigation' as never);
+  }, [router, settings.hapticsEnabled]);
+
   useEffect(() => {
     isMountedRef.current = true;
 
@@ -177,22 +209,19 @@ export default function HomeScreen() {
     }
 
     if (!settings.hasCompletedOnboarding) {
+      hasAnnouncedReadyPromptRef.current = false;
       router.replace('/onboarding' as never);
       return;
     }
 
-    void speakVoiceResponse(
-      "Guide Pup is ready. Say start guidance to begin, or say help for commands.",
-      null,
-    );
-
-    return () => {
-      if (resumeListeningTimerRef.current) {
-        clearTimeout(resumeListeningTimerRef.current);
-      }
-      void GuidePupVoiceControl.stopCommandSession();
-    };
-  }, [isReady, router, settings.hasCompletedOnboarding, speakVoiceResponse]);
+    if (!hasAnnouncedReadyPromptRef.current) {
+      hasAnnouncedReadyPromptRef.current = true;
+      void speakVoiceResponseRef.current(
+        "Guide Pup is ready. Say start guidance to begin, or say help for commands.",
+        null,
+      );
+    }
+  }, [isReady, router, settings.hasCompletedOnboarding]);
 
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
@@ -232,13 +261,7 @@ export default function HomeScreen() {
 
       switch (intent) {
         case "start-guidance":
-          void speakVoiceResponse(
-            "Guidance starting. Say stop guidance any time to pause.",
-            "success",
-            undefined,
-            { resumeListening: false },
-          );
-          router.push('/navigation' as never);
+          startGuidanceFromHome();
           return;
         case "stop-guidance":
           void speakVoiceResponse("Guidance is not running yet. Say start guidance when you are ready.", "stop");
@@ -350,6 +373,7 @@ export default function HomeScreen() {
     router,
     settings,
     speakVoiceResponse,
+    startGuidanceFromHome,
     syncVoiceState,
     updateDescriptionMode,
     updateHapticsEnabled,
@@ -357,12 +381,7 @@ export default function HomeScreen() {
   ]);
 
   const handlePress = () => {
-    if (settings.hapticsEnabled) {
-      void GuidePupNavigationCore.playHaptic("success");
-    }
-    void GuidePupNavigationCore.playAudioCue("success");
-    speak("Guidance started.");
-    router.push('/navigation' as never);
+    startGuidanceFromHome();
   };
 
   const handleLongPress = () => {

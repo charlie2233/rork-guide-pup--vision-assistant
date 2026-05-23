@@ -38,6 +38,11 @@ function mustInclude(source, pattern, label) {
   assert.equal(found, true, `${label} is missing`);
 }
 
+function mustNotInclude(source, pattern, label) {
+  const found = pattern instanceof RegExp ? pattern.test(source) : source.includes(pattern);
+  assert.equal(found, false, `${label} must not be present`);
+}
+
 const voiceCommands = loadTsModule("../src/lib/voiceCommands.ts");
 const voiceConversation = loadTsModule("../src/lib/voiceConversation.ts");
 
@@ -118,8 +123,12 @@ mustInclude(navigationScreen, "updateHapticsEnabled", "Spoken haptics setting pa
 
 const homeScreen = read("../src/screens/HomeScreen.tsx");
 mustInclude(homeScreen, "isMountedRef", "Home voice-session mounted guard");
-mustInclude(homeScreen, "resumeListening: false", "Home start-guidance does not restart Home listening after navigation");
+mustInclude(homeScreen, "hasAnnouncedReadyPromptRef", "Home ready prompt one-shot guard");
+mustInclude(homeScreen, "speakVoiceResponseRef", "Home ready prompt is not coupled to settings-change effect cleanup");
+mustInclude(homeScreen, "startGuidanceFromHome", "Home guidance handoff helper");
+mustInclude(homeScreen, "lastSpokenMessageRef.current = \"Guidance started. Analyzing your surroundings.\"", "Home handoff seeds Navigation repeat text");
 mustInclude(homeScreen, "if (isMountedRef.current)", "Home stale voice-session restart guard");
+mustNotInclude(homeScreen, "Guidance starting. Say stop guidance any time to pause.", "Home must not speak overlapping start prompt during Navigation handoff");
 
 const settingsProvider = read("../src/providers/SettingsProvider.tsx");
 mustInclude(settingsProvider, "AsyncStorage.getItem", "Settings persistence load");
@@ -155,6 +164,12 @@ mustInclude(navigationCore, "recordHapticSnapshot", "Haptic path records diagnos
 mustInclude(navigationCore, "AccessibilityInfo.announceForAccessibility", "VoiceOver announcement fallback");
 mustInclude(navigationCore, "source: \"native-core\"", "Native camera capture source");
 mustInclude(navigationCore, "source: \"js-fallback\"", "JS camera fallback source");
+
+const voiceController = read("../modules/guidepup-voice-control/ios/GuidePupVoiceControlController.swift");
+mustInclude(voiceController, "activeLocaleIdentifier", "Native voice controller keeps active locale for final-result renewal");
+mustInclude(voiceController, "activePartialResults", "Native voice controller preserves partial-result option for STOP renewal");
+mustInclude(voiceController, "restartListeningAfterFinalIfNeeded", "Native voice controller renews recognition after final commands");
+mustInclude(voiceController, "result?.isFinal == true", "Native voice controller observes final recognition results");
 
 const diagnosticsScreen = read("../src/screens/DiagnosticsScreen.tsx");
 mustInclude(diagnosticsScreen, "Speech/listening invariant", "Diagnostics screen overlap invariant");

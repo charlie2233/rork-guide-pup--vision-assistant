@@ -49,6 +49,8 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Conversation-lane scene prompts now use exact normalized candidates with wake/polite wrappers and the same negation posture as the command lane. Negated or ambient speech such as "do not describe the scene" and "the phrase what do you see is printed here" no longer triggers `what-do-you-see`.
 - Conversation-lane scene analysis now opts out of `GuideAI` navigation smoothing memory, so `what do you see` answers and failures cannot silently bias the next guidance direction.
 - Home voice responses now guard command-session restarts by component mount state, and the spoken `start guidance` path does not restart Home listening after routing into Navigation.
+- Home now treats `start guidance` as a deterministic handoff: it stops the Home command session, plays success haptic/audio cues, routes to Navigation, and lets Navigation speak the single guidance-start prompt. Settings changes on Home no longer retrigger the cold prompt or stop/restart listening through the ready-prompt effect.
+- The native iOS speech controller now renews its recognition task after final commands while preserving the active locale and partial-result setting, so the multi-command no-screen smoke sequence is not dependent on one finalized `SFSpeechRecognitionTask` continuing to emit results.
 
 ## Voice command coverage
 
@@ -214,3 +216,30 @@ Results:
 - Build iOS Apps plugin `build_sim` hit the 120 second tool timeout; the explicit Release simulator `xcodebuild` fallback passed for `GuidePupVisionAssistant` on `iPhone 16e` with `SENTRY_DISABLE_AUTO_UPLOAD=true`, `CODE_SIGNING_ALLOWED=NO`, `ONLY_ACTIVE_ARCH=YES`, and `COMPILER_INDEX_STORE_ENABLE=NO`. Warnings were limited to existing third-party/native warnings, Sentry config warnings, and bundle globals.
 - Preview preflight passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env vars. TestFlight preflight still failed on unresolved store metadata, stale production smoke, and missing real-iPhone no-screen evidence.
 - Physical iPhone readiness remains blocked: `charlie的iPhone` is paired with Developer Mode enabled and visible over USB/Xcode destination discovery, but CoreDevice reports it unavailable, DDI services are unavailable, and the tunnel is disconnected.
+
+## 2026-05-23 Home-to-Navigation handoff continuation
+
+The Home screen now avoids double-speaking during `start guidance`. Voice and touch starts stop the Home command session, play deterministic success haptic/audio cues, and route to Navigation, where the existing guidance-start prompt owns the spoken confirmation. The Home cold prompt is guarded with `hasAnnouncedReadyPromptRef`, so changing speech speed, detail, or haptics on Home does not rerun the ready-prompt effect and accidentally stop/restart voice listening.
+
+Validation:
+
+```bash
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:voice-commands
+npm --prefix expo run typecheck
+```
+
+Results: passed locally with Expo lint, no-screen evidence tests, GuideAI conversation-memory tests, and `git diff --check` in the same continuation. Preview preflight passed with launch warnings; TestFlight preflight still failed on unresolved store metadata, stale production smoke, missing no-screen evidence, and missing Sentry env.
+
+## 2026-05-23 native speech renewal continuation
+
+The iOS voice-control module now restarts listening after a final recognition result when the command session is still intended to be active. It preserves partial recognition so STOP barge-in remains available for the next utterance, and the static no-screen contract checks for this native renewal path.
+
+Validation:
+
+```bash
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run typecheck
+```
+
+Results: passed locally. Build iOS Apps `build_sim` also passed for the Release simulator target after the native speech renewal change; physical iPhone smoke remains blocked by CoreDevice availability.

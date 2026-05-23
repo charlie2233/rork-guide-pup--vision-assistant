@@ -128,3 +128,28 @@ Results:
 - `check:ios-device` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled and visible over USB/Xcode destination discovery, but CoreDevice reports it unavailable, DDI services are unavailable, and the tunnel is disconnected.
 
 This remains schema/static validation only; it does not replace a real iPhone no-screen run.
+
+## Device readiness recheck after voice/backend hardening on 2026-05-23
+
+Command:
+
+```bash
+npm --prefix expo run check:ios-device
+```
+
+Result: `BLOCKED`.
+
+- Target: `charlie的iPhone`.
+- Device identifier suffix: `0B5CE6D3`.
+- Hardware UDID suffix: `1178001C`.
+- CoreDevice state: `unavailable`.
+- Pairing state: `paired`.
+- Developer Mode: `enabled`.
+- DDI services available: `false`.
+- Tunnel state: `unavailable`.
+- Last connection: `2026-05-23T19:58:57.734Z`.
+- USB iPhone present: `no`.
+- `xctrace` visibility: `yes`.
+- `xcodebuild` destination visibility: `no`.
+
+The current blocker has moved back to device connectivity/CoreDevice availability before the signed build/provisioning blocker can be retested. No hardware no-screen evidence was produced.

@@ -32,6 +32,20 @@ npm --prefix expo run check:no-screen-smoke
 
 The unit contract uses a mocked vision provider and verifies that scene-query answers and failures do not mutate guidance smoothing state.
 
+## 2026-05-23 low-visibility safety continuation
+
+The backend safety override layer now enforces low-visibility stops after provider normalization. A provider result that recommends `forward` with `lighting: dark` or `lighting: unknown` is converted to a safe stop with `fallbackReason: low-visibility`, even when the provider also reports high confidence and `walkability: clear`. Normally lit clear-path guidance can still remain forward.
+
+Validation added:
+
+```bash
+node --check backend/guidepup-api/test/safety-overrides.test.mjs
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run typecheck
+```
+
+Results: passed locally. The privacy test suite now includes low-visibility override coverage.
+
 ## Code and docs changed
 
 - `backend/guidepup-api/eval/run-live-smoke.mjs`
@@ -58,6 +72,10 @@ The unit contract uses a mocked vision provider and verifies that scene-query an
   - Keep `fallbackReason: null` for successful provider-backed guidance and explicit fallback reasons for safe stops.
   - Allow `lighting: unknown` only for honest safe fallback when no scene analysis exists.
   - Require provider structured output to include lighting, scene description, and surface type before normalization.
+- `backend/guidepup-api/src/safety/overrides.ts`, `backend/guidepup-api/src/lib/normalize.ts`, and `backend/guidepup-api/test/safety-overrides.test.mjs`
+  - Pass provider lighting into deterministic safety overrides.
+  - Force `lighting: dark` and `lighting: unknown` provider guidance to a safe stop with `fallbackReason: low-visibility`.
+  - Preserve normally lit clear-path forward guidance when the provider output is otherwise safe.
 - `expo/src/lib/api.ts` and `expo/src/logic/GuideAI.ts`
   - Make the client reject analyze responses that omit the launch-required structured fields.
   - Preserve explicit safe-stop metadata when local analysis is unavailable.
