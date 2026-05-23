@@ -14,18 +14,18 @@ import { addBreadcrumb, setSentryTag } from "./sentry";
 export const VisionAnalyzeResponseSchema = z.object({
   confidence: z.number().min(0).max(1),
   direction: z.enum(["turn-left", "turn-right", "forward", "stop"]),
-  fallbackReason: z.string().nullable().optional(),
+  fallbackReason: z.string().nullable(),
   hazardLevel: z.enum(["none", "low", "medium", "high"]),
   latencyMs: z.number().min(0),
-  lighting: z.enum(["dark", "dim", "normal", "bright"]).optional(),
-  message: z.string().min(1),
+  lighting: z.enum(["dark", "dim", "normal", "bright", "unknown"]),
+  message: z.string().trim().min(1),
   model: z.string().min(1),
   obstacle: z.boolean(),
   promptVersion: z.string().min(1),
   requestId: z.string().optional(),
   provider: z.string().min(1),
-  sceneDescription: z.string().optional(),
-  surfaceType: z.string().optional(),
+  sceneDescription: z.string().trim().min(1),
+  surfaceType: z.string().trim().min(1),
 });
 
 const AnalyzeVisionErrorSchema = z.object({

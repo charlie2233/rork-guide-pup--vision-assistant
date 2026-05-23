@@ -10,7 +10,7 @@ const VALID_TRACKS = new Set(["staging", "production"]);
 const TEST_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAAK0lEQVR4nO3NMQ0AAAwDoPo33ZpYsgcMkD6JWCwWi8VisVgsFovFYrFYfGcs0K5PemaPnAAAAABJRU5ErkJggg==";
 const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
 const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
-const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright"]);
+const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
 
 function parseArgs(argv) {
   const args = {

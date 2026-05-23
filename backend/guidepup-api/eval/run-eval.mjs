@@ -8,7 +8,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, "..");
 const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
 const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
-const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright"]);
+const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
 
 function parseArgs(argv) {
   const args = {

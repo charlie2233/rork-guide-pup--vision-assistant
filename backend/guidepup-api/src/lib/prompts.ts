@@ -72,7 +72,7 @@ export const ProviderVisionJsonSchema = {
     },
     lighting: {
       type: "string",
-      enum: ["dark", "dim", "normal", "bright"],
+      enum: ["dark", "dim", "normal", "bright", "unknown"],
     },
     walkability: {
       type: "string",

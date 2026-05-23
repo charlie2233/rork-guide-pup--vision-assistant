@@ -336,6 +336,11 @@ export const GuideAI = {
       lastConfidence = 0;
       return {
         direction: "stop",
+        fallbackReason: "analysis-unavailable",
+        hazardLevel: "high",
+        lighting: "unknown",
+        sceneDescription: "Vision guidance is unavailable.",
+        surfaceType: "unknown",
         obstacle: true,
         message: "Stopping: guidance connection unavailable.",
       };

@@ -16,11 +16,6 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
-function cleanOptionalText(value?: string) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 function deriveConfidence(raw: ProviderVision) {
   if (typeof raw.confidence === "number") {
     return clamp(raw.confidence);
@@ -134,11 +129,14 @@ export function createSafeFallbackResponse(
     fallbackReason,
     hazardLevel: "high",
     latencyMs: metadata.latencyMs,
+    lighting: "unknown",
     message,
     model: metadata.model,
     obstacle: true,
     promptVersion: metadata.promptVersion,
     provider: metadata.provider,
+    sceneDescription: "Vision guidance is unavailable.",
+    surfaceType: "unknown",
   });
 }
 
@@ -160,8 +158,8 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
     obstacle,
     promptVersion: metadata.promptVersion,
     provider: metadata.provider,
-    sceneDescription: cleanOptionalText(raw.sceneDescription),
-    surfaceType: cleanOptionalText(raw.surfaceType),
+    sceneDescription: raw.sceneDescription,
+    surfaceType: raw.surfaceType,
   };
 
   const normalized = VisionAnalyzeResponseSchema.parse({

@@ -130,7 +130,7 @@ function validateSmokeEvidenceShape(artifact) {
   requireAnalyzeField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
   requireAnalyzeField("direction", (value) => ["turn-left", "turn-right", "forward", "stop"].includes(value));
   requireAnalyzeField("hazardLevel", (value) => ["none", "low", "medium", "high"].includes(value));
-  requireAnalyzeField("lighting", (value) => ["dark", "dim", "normal", "bright"].includes(value));
+  requireAnalyzeField("lighting", (value) => ["dark", "dim", "normal", "bright", "unknown"].includes(value));
   requireAnalyzeField("message", isNonEmptyString);
   requireAnalyzeField("model", isNonEmptyString);
   requireAnalyzeField("obstacle", (value) => typeof value === "boolean");

@@ -3,6 +3,7 @@
 Date: 2026-05-23
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `52e28d2`
+Contract-tightening continuation start: `bf3da45`
 
 ## Scope
 
@@ -32,6 +33,14 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
   - Preserve and display sanitized analyze metadata plus `lighting`, `surfaceType`, `sceneDescription`, `obstacle`, and `fallbackReason`.
 - `backend/guidepup-api/eval/README.md` and `smoke-results-template.md`
   - Document the new evidence fields and eval manifest metadata.
+- `backend/guidepup-api/src/schemas/vision.ts`, `backend/guidepup-api/src/lib/normalize.ts`, and `backend/guidepup-api/src/lib/prompts.ts`
+  - Make `fallbackReason`, `lighting`, `sceneDescription`, and `surfaceType` required response-contract fields.
+  - Keep `fallbackReason: null` for successful provider-backed guidance and explicit fallback reasons for safe stops.
+  - Allow `lighting: unknown` only for honest safe fallback when no scene analysis exists.
+  - Require provider structured output to include lighting, scene description, and surface type before normalization.
+- `expo/src/lib/api.ts` and `expo/src/logic/GuideAI.ts`
+  - Make the client reject analyze responses that omit the launch-required structured fields.
+  - Preserve explicit safe-stop metadata when local analysis is unavailable.
 
 ## Live smoke evidence
 
@@ -101,6 +110,9 @@ Results:
 - Expo typecheck passed.
 - Expo lint passed.
 - `git diff --check` passed.
+- After the contract-tightening continuation, backend typecheck, Expo typecheck, Expo lint, ESM syntax checks, and `git diff --check` were rerun and passed with required `fallbackReason`, `lighting`, `sceneDescription`, and `surfaceType` schemas.
+- After the contract-tightening continuation, TestFlight preflight was rerun and still failed on unresolved release inputs plus the tracked production smoke artifact missing the new envelope/structured evidence fields.
+- After the contract-tightening continuation, Build iOS Apps plugin `build_sim` again hit the 120 second tool timeout; the shell fallback Release simulator build for `iPhone 16e` passed with `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 - Live scratch smoke ran successfully but is intentionally not launch-valid until live Workers emit the complete structured response.
 - Preview preflight still failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and warned that the tracked staging smoke artifact is missing the new envelope/structured evidence fields.
 - TestFlight preflight still failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and the tracked production smoke artifact missing the new envelope/structured evidence fields.

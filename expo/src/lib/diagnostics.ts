@@ -13,7 +13,7 @@ export type DiagnosticsAnalyzeOutcome =
 
 export type DiagnosticsAnalyzeDirection = "turn-left" | "turn-right" | "forward" | "stop";
 export type DiagnosticsHazardLevel = "none" | "low" | "medium" | "high";
-export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright";
+export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright" | "unknown";
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
 export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
