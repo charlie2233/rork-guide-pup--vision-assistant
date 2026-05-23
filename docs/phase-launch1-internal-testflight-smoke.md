@@ -1,0 +1,140 @@
+# phase-launch1-internal-testflight-smoke
+
+Date: 2026-05-22
+Branch: `codex/guidepup-credentialed-launch`
+Commit at phase start: `c2b8781`
+
+## Scope
+
+This phase advances internal TestFlight readiness without claiming external gates are solved. It fixes launch-facing disclosure copy so the public site, App Review notes, and release docs match the current iOS behavior: Guide Pup uses camera frames for scene guidance, and optional hands-free voice commands request microphone and iOS speech-recognition permissions for a bounded deterministic command lane.
+
+No provider keys, raw images, raw audio, credentials, or signed URLs were logged. No direct model calls or provider secrets were added to the shipping client.
+
+## Code and docs changed
+
+- Updated public home and privacy copy to disclose optional microphone and iOS speech-recognition use for voice commands.
+- Updated public site README behavior notes to remove the stale "no microphone" claim.
+- Updated App Review notes with microphone/speech-recognition permission explanation and bounded-command language.
+- Updated privacy answer matrix so Apple privacy answers do not incorrectly say microphone is not requested.
+- Updated TestFlight checklist to validate microphone and speech-recognition permission prompts during hands-free command smoke.
+- Updated launch inputs release notes to match the current shipping behavior.
+- Updated the in-app camera-permission fallback copy to say "iOS speech recognition" rather than overclaiming on-device speech recognition.
+
+## Evidence gathered
+
+Repository state before edits:
+
+```bash
+git fetch --all --prune
+git pull --ff-only
+git status --short --branch
+git log --oneline -5
+```
+
+Results:
+
+- Branch was already up to date with `origin/codex/guidepup-credentialed-launch`.
+- Latest commit before this phase: `c2b8781 Harden GuidePup voice command lane`.
+- GitHub connector confirmed open PR #4, `Credentialed launch execution`, from `codex/guidepup-credentialed-launch`; it remains draft.
+
+Auth and provider status:
+
+```bash
+for v in CLOUDFLARE_API_TOKEN OPENAI_API_KEY EXPO_TOKEN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT HUGGINGFACE_HUB_TOKEN HF_TOKEN; do ...; done
+gh auth status
+npx wrangler whoami
+```
+
+Results:
+
+- GitHub CLI is authenticated as `charlie2233`.
+- Hugging Face connector is authenticated, but no MiniCPM production comparison was run in this phase.
+- `CLOUDFLARE_API_TOKEN`, local `OPENAI_API_KEY`, `EXPO_TOKEN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `HUGGINGFACE_HUB_TOKEN`, and `HF_TOKEN` are missing in this shell.
+- `npx wrangler whoami` failed with `Not logged in`.
+
+Device status:
+
+```bash
+xcrun devicectl list devices
+xcrun xctrace list devices
+xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+```
+
+Results:
+
+- `charlie的iPhone`, iPhone 15 Pro, is paired but `unavailable`.
+- `xcrun xctrace list devices` shows `charlie的iPhone (26.4.2)` under `Devices Offline`.
+- Device details show Developer Mode `enabled`, pairing state `paired`, tunnel state `unavailable`, UDID `00008130-000A001A1178001C`, and last connection `2026-05-05 22:31:40 +0000`.
+
+Release gate status during this phase:
+
+```bash
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+```
+
+Results:
+
+- Preview preflight failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
+- TestFlight preflight failed on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.
+- Both tracks warn that Sentry env values are not set in this shell.
+
+Validation during this phase:
+
+```bash
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run types
+git diff --check
+rg -n "does not request microphone|shipping path does not request|shipping navigation path does not request|microphone access: not|does not record audio|shipping client does not request microphone" site expo/docs expo/app.json expo/ios/GuidePupVisionAssistant/Info.plist
+```
+
+Results:
+
+- Expo typecheck passed.
+- Expo lint passed.
+- Backend typecheck passed.
+- Worker types regenerated for local `gpt-5.5`, low reasoning effort, and prompt version `2026-05-22.v1`.
+- `git diff --check` passed.
+- The stale "does not request microphone" disclosure grep returned no matches in launch-facing site/docs/config surfaces.
+
+iOS build validation:
+
+```bash
+mcp__xcodebuildmcp__.session_show_defaults
+mcp__xcodebuildmcp__.build_sim({"extraArgs":["-quiet"]})
+SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -sdk iphonesimulator -destination 'platform=iOS Simulator,id=09C3102D-6824-4BA2-8CBE-F6348561F6E8' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build -quiet
+```
+
+Results:
+
+- Build iOS Apps plugin defaults resolved workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, configuration `Release`, simulator `iPhone 16e`.
+- Build iOS Apps plugin compile timed out at the 120 second tool boundary, so the underlying process was checked before starting a shell fallback.
+- Release simulator shell build passed for the `iPhone 16e` simulator with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
+
+## Backend request IDs
+
+No new provider-backed live smoke was run in this phase because Cloudflare auth is missing. Last known live provider-backed request IDs remain from `phase-backend1-provider-backed-analyze-smoke`:
+
+- Staging `/health`: `1135d81c-65d5-4910-af55-ec9ed7932869`
+- Staging `/v1/device/bootstrap`: `6985c962-725b-4305-b316-2e923adb2bd8`
+- Staging `/v1/vision/analyze`: `372a702d-de22-4df9-ad74-19ef7d8b7de3`
+- Production `/health`: `f8abcbf4-16e5-4965-8c6f-fe586c550bb7`
+- Production `/v1/device/bootstrap`: `bc18b829-1200-4bee-a9f0-839010435a5a`
+- Production `/v1/vision/analyze`: `09ff3bf0-1ab7-4fdd-a525-4007328cc731`
+
+Important: live Workers are still provider-backed but have not been redeployed with the local `gpt-5.5` / `2026-05-22.v1` structured-output contract.
+
+## Remaining P0 blockers
+
+- Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
+- Physical iPhone remains paired with Developer Mode enabled, but unavailable/offline to Xcode.
+- Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
+- TestFlight execution is blocked: `EXPO_TOKEN` is missing and release inputs remain unresolved.
+- Sentry issue health could not be queried because Sentry auth/org/project env vars are missing.
+- Privacy manifest/App Store Connect privacy answers still need a final release-owner review before App Store submission.
+
+## Next quality gap
+
+The guidance reliability audit found that live smoke/eval scripts do not yet prove the full sampled-frame envelope (`sessionId`, `frameId`, timestamp, prior guidance, native path, dimensions) and client diagnostics omit some structured output fields (`lighting`, `surfaceType`, `sceneDescription`, `fallbackReason`). That should be handled in `phase-quality1-guidance-reliability`.

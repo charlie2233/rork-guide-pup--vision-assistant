@@ -11,7 +11,8 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 | Third-party AI processing | The backend may send frames to an OpenAI-compatible provider, and benchmark-only MiniCPM-o stays non-production. | Disclose third-party processing in review notes and privacy policy. |
 | Anonymous device/session bootstrap | The app stores an anonymous device ID and session token in `expo-secure-store`, then sends them to the backend for rate limiting and request authorization. | Answer `Yes` for identifiers collected for app functionality, but mark them as anonymous / not user-linked where allowed. |
 | Crash / performance telemetry | `@sentry/react-native` is present and can be enabled with `EXPO_PUBLIC_SENTRY_DSN`. Default config avoids sending default PII. | If Sentry is enabled in release, answer `Yes` for diagnostics / crash data. If it stays disabled, answer `No` for diagnostics collection. |
-| Health / location / contacts / microphone | Not collected in the shipping path. The shipping app does not request microphone permission. No location APIs are used in the current shipping path. | Answer `No` for health, precise location, coarse location, contacts, microphone, and audio recording. |
+| Microphone / speech recognition | Optional hands-free commands request microphone and iOS speech-recognition access. Spoken commands are parsed into a bounded command set such as start, stop, repeat, status, and settings changes. Raw voice audio is not intentionally logged or sent to model providers by Guide Pup. | Disclose microphone and speech-recognition usage for app functionality. Do not claim raw audio collection unless release policy changes. |
+| Health / location / contacts | Not collected in the shipping path. No location APIs are used in the current shipping path. | Answer `No` for health, precise location, coarse location, and contacts. |
 
 ## Code evidence
 
@@ -20,6 +21,7 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - Backend analyze request and request IDs: `expo/src/lib/api.ts`
 - Anonymous device/session storage: `expo/src/lib/device.ts`
 - Sentry SDK init and privacy scrubbing: `expo/src/lib/sentry.ts`
+- Voice permission copy and bounded commands: `expo/app.json`, `expo/src/lib/voiceCommands.ts`, `expo/modules/guidepup-voice-control`
 - OpenAI-compatible provider default and MiniCPM benchmark-only flag: `backend/guidepup-api/wrangler.jsonc`
 
 ## Apple privacy answers to prepare
@@ -29,7 +31,8 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - User content: `Yes` for camera frames sent for app functionality.
 - Identifiers: `Yes` for anonymous device/session identifier used for app functionality.
 - Diagnostics: `Optional` depending on whether `EXPO_PUBLIC_SENTRY_DSN` is set in release.
-- Audio data: `No`.
+- Microphone and speech recognition: `Yes` for app functionality.
+- Audio data: `No` for raw audio collection unless release policy changes.
 - Location: `No`.
 - Purchases / financial data: `No`.
 
@@ -37,5 +40,5 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 
 - Guide Pup uses the camera to analyze the scene ahead for assistive navigation.
 - Camera frames are sent to the Guide Pup backend and may be processed by third-party AI providers.
+- Optional voice commands use microphone and iOS speech recognition for a bounded command set.
 - The app uses anonymous device/session bootstrap instead of user accounts.
-- The shipping path does not request microphone access.

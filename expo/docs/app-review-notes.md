@@ -8,10 +8,12 @@ Guide Pup is an assistive navigation app for blind and low-vision users. It anal
 
 ## What Reviewers Should Know
 
-- The shipping path uses the camera only.
-- The shipping path does not request microphone access.
+- The shipping path uses camera input for scene analysis.
+- Optional hands-free voice commands request microphone and speech-recognition access.
+- Spoken commands are parsed into a bounded command lane for actions such as start, stop, repeat, status, and settings changes.
 - Camera frames are compressed and sent to the Guide Pup backend.
 - The backend may route requests through third-party AI providers.
+- Raw voice audio is not intentionally logged or sent to model providers by Guide Pup.
 - The app uses anonymous device/session bootstrap instead of user sign-in.
 - The app is designed to fail safe and return `STOP` when the scene is unclear, the backend is unavailable, or the response is invalid.
 - Crash reporting may be enabled through Sentry in release builds, but the SDK is configured to avoid collecting default PII.
@@ -21,6 +23,10 @@ Guide Pup is an assistive navigation app for blind and low-vision users. It anal
 If you need to explain the camera permission, use:
 
 Guide Pup uses the camera to analyze the scene ahead for assistive navigation. Frames are sent to Guide Pup's backend and may be processed by third-party AI providers.
+
+If you need to explain the microphone and speech-recognition permissions, use:
+
+Guide Pup uses the microphone and iOS speech recognition for optional hands-free commands. Spoken commands are parsed into a bounded command set such as start guidance, stop guidance, repeat, status, and settings changes. Guide Pup does not intentionally log raw voice audio or send it to AI providers.
 
 If you need to explain the safety model, use:
 

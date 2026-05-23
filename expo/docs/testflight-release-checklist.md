@@ -10,8 +10,8 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 
 - Camera usage: app uses the camera for assistive navigation analysis.
 - Third-party AI processing: camera frames are sent to a backend and may be processed by third-party AI providers.
-- Microphone access: not requested in the shipping navigation path.
-- Audio behavior: the shipping path does not record audio; audio playback exists only in experimental surfaces.
+- Microphone access: optional hands-free commands request microphone access and iOS speech recognition.
+- Audio behavior: spoken commands are parsed into a bounded command set; raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
 - Data retention and deletion: confirm with the final privacy policy and backend logs policy.
 
 ## Build steps
@@ -37,6 +37,7 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Complete onboarding.
 - Verify the home screen routes to the navigation flow.
 - Grant camera permission and confirm the permission copy is correct.
+- Grant microphone and speech-recognition permissions when using hands-free commands, and confirm both permission prompts match the review copy.
 - Capture a frame and verify the app returns spoken guidance.
 - Force a network failure and verify the app degrades to a safe `STOP` response.
 - Verify preview still points at staging, and confirm whether staging is provider-backed or still in safe fallback mode.

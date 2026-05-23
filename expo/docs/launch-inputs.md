@@ -74,8 +74,9 @@ Override the individual URLs only if they live somewhere else.
 
 ## Release Notes
 
-- The shipping client does not request microphone access.
 - Camera frames are sent to the backend and may be processed by third-party AI providers.
+- Optional voice commands request microphone and iOS speech-recognition access for a bounded command set.
+- Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
 - Anonymous device/session bootstrap is used for authenticated vision requests.
 - Optional crash reporting may be enabled in release builds.
 - The app degrades to `STOP` on invalid or unavailable vision responses.

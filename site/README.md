@@ -19,7 +19,8 @@ Current live Pages URL:
 - Frames may be processed by third-party AI providers.
 - Anonymous device and session bootstrap state is used.
 - Optional crash reporting may be enabled.
-- The shipping navigation path does not request microphone access.
+- Optional voice commands use microphone and speech-recognition permissions for a bounded command set.
+- Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
 - Guide Pup provides assistive guidance only and does not guarantee hazard detection or emergency response.
 
 ## Cloudflare Pages deployment

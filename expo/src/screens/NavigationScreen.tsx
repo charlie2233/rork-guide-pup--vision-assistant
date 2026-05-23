@@ -850,7 +850,7 @@ export default function NavigationScreen() {
               <Text style={styles.permissionTitle}>Camera access is required</Text>
               <Text style={styles.permissionBody}>
                 Guide Pup sends compressed camera frames to the backend for navigation analysis.
-                Voice commands are optional and use on-device speech recognition for a bounded
+                Voice commands are optional and use iOS speech recognition for a bounded
                 command set.
               </Text>
 
