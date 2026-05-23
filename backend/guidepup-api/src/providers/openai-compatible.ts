@@ -1,5 +1,5 @@
 import { buildVisionSystemPrompt, buildVisionUserPrompt, ProviderVisionJsonSchema } from "../lib/prompts";
-import { logWarn } from "../lib/logging";
+import { logWarn, sanitizeLogMessage } from "../lib/logging";
 import { ProviderVisionSchema } from "../schemas/vision";
 import { getOpenAIProviderAttempts } from "./config";
 import type { ProviderInput, ProviderResult, VisionProvider } from "./types";
@@ -102,14 +102,13 @@ async function analyzeWithAttempt(
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`${attempt.name} failed (${response.status}): ${body.slice(0, 240)}`);
+    throw new Error(`${attempt.name} failed (${response.status}).`);
   }
 
   const payload = (await response.json()) as OpenAIChatCompletionResponse;
   const message = payload.choices?.[0]?.message;
   if (message?.refusal) {
-    throw new Error(`Provider refused vision analysis: ${message.refusal.slice(0, 160)}`);
+    throw new Error(`Provider refused vision analysis: ${sanitizeLogMessage(message.refusal, 160)}`);
   }
   const text = extractTextContent(message?.content);
   const parsed = ProviderVisionSchema.parse(JSON.parse(extractJsonObject(text)));

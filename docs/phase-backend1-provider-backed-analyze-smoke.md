@@ -19,6 +19,8 @@ This phase tightens the cloud-owned vision contract for internal iOS launch read
 - Analyze request accepts compact frame context: `sessionId`, `frameId`, `timestampMs`, `priorGuidance`, `nativePath`, source size, detail level, sanitized `frameSummary`, `captureHeuristics`, `sampledFrame`, and `hasImage`.
 - Analyze response now carries `fallbackReason` for safe fallback and safety-override cases.
 - iOS sends sampled-frame metadata from the navigation loop while keeping camera capture and STOP/haptics/VoiceOver control local.
+- Backend log redaction is shared with the Sentry envelope path so `deviceId`, tokens, auth headers, API keys, raw image/base64 fields, and keyless bearer/base64-like snippets are redacted before logging or Sentry reporting, while request ID, route, prompt version, and environment remain usable.
+- Provider non-OK errors no longer carry upstream response-body snippets into app logs or Sentry messages.
 
 ## Live backend evidence
 
@@ -52,6 +54,17 @@ Production result:
 - Artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 
 Important: the live Workers are provider-backed, but they have not yet been redeployed with the new `gpt-5.5` / `2026-05-22.v1` structured-output contract because this shell is not authenticated to Cloudflare.
+
+Latest temporary smoke rerun on 2026-05-23, written only to `/tmp` artifacts:
+
+- Staging `/health`: `739426da-e250-4de3-8a5d-1fffdc1c5ea1`
+- Staging `/v1/device/bootstrap`: `bc9e1dc1-28c9-4ab3-9517-bc5e7a45e247`
+- Staging `/v1/vision/analyze`: `22eba2e8-256a-4f60-b42e-df638a406416`
+- Staging execution path: `provider-backed`, but launch-invalid because live Worker still reports `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, and missing `fallbackReason`.
+- Production `/health`: `1e77e206-d639-4b80-ba79-1f7c9cd7ed51`
+- Production `/v1/device/bootstrap`: `55944638-d6f7-4102-ae17-9f3c519d4acf`
+- Production `/v1/vision/analyze`: `8c6b03a5-aa3b-4fc1-8826-d0b4ddcd5d2e`
+- Production execution path: `provider-backed`, but launch-invalid for the same stale model/prompt and missing `fallbackReason` contract gap.
 
 ## Auth and provider status
 
@@ -125,6 +138,34 @@ Results:
 - Live production smoke: passed and provider-backed.
 - Preview preflight: blocked by unresolved iOS bundle identifier.
 - TestFlight preflight: blocked by unresolved iOS bundle identifier, Apple Team ID, App Store Connect App ID, and copyright holder.
+
+Latest validation continuation on 2026-05-23:
+
+```bash
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env production
+node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --output-json /tmp/guidepup-smoke-staging.json --output-md /tmp/guidepup-smoke-staging.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env production --output-json /tmp/guidepup-smoke-production.json --output-md /tmp/guidepup-smoke-production.md
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:ios-device
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+git diff --check
+```
+
+Results:
+
+- Backend privacy tests passed: sensitive keyed fields, keyless bearer/API-key/base64-like strings, Sentry extra, and provider error-body removal are covered.
+- Backend typecheck, staging dry-run bundle, production dry-run bundle, Expo typecheck, Expo lint, voice-command contract, no-screen smoke contract, iOS Release simulator build, and `git diff --check` passed.
+- `check:ios-device` intentionally remains blocked: paired and Developer Mode enabled, but DDI services are unavailable, no USB iPhone is present, and the device is still not runnable.
+- Preview/TestFlight preflights intentionally fail on unresolved release inputs and stale checked-in smoke artifacts.
+- Secret verification intentionally fails without `CLOUDFLARE_API_TOKEN`; `wrangler whoami` still reports not logged in.
 
 ## P0 blockers
 
