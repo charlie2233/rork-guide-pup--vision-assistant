@@ -1,4 +1,5 @@
 import ExpoModulesCore
+import AudioToolbox
 import UIKit
 
 public final class GuidePupNavigationCoreModule: Module {
@@ -58,6 +59,24 @@ public final class GuidePupNavigationCoreModule: Module {
         generator.prepare()
         generator.selectionChanged()
       }
+    }
+    .runOnQueue(.main)
+
+    AsyncFunction("playAudioCue") { (type: String) in
+      let soundId: SystemSoundID
+      switch type {
+      case "stop", "error":
+        soundId = 1006
+      case "success":
+        soundId = 1103
+      case "left":
+        soundId = 1057
+      case "right":
+        soundId = 1058
+      default:
+        soundId = 1104
+      }
+      AudioServicesPlaySystemSound(soundId)
     }
     .runOnQueue(.main)
 

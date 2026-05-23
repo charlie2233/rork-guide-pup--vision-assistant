@@ -303,6 +303,20 @@ export default function DiagnosticsScreen() {
         </InfoCard>
 
         <InfoCard
+          tone={diagnostics.audioCue.lastOutcome === "failure" ? "warning" : "neutral"}
+          title="Audio cues"
+        >
+          <KeyValue label="Last type" value={diagnostics.audioCue.lastType || "None"} />
+          <KeyValue label="Last outcome" value={diagnostics.audioCue.lastOutcome} />
+          <KeyValue label="Last execution path" value={diagnostics.audioCue.lastExecutionPath || "Not found in repo"} />
+          <KeyValue label="Last attempted" value={formatTimestamp(diagnostics.audioCue.lastAttemptedAt)} />
+          <KeyValue label="Last completed" value={formatTimestamp(diagnostics.audioCue.lastCompletedAt)} />
+          <KeyValue label="Success count" value={`${diagnostics.audioCue.successCount}`} />
+          <KeyValue label="Failure count" value={`${diagnostics.audioCue.failureCount}`} />
+          <KeyValue label="Last error" value={diagnostics.audioCue.lastError || "None"} />
+        </InfoCard>
+
+        <InfoCard
           tone={diagnostics.haptics.lastOutcome === "failure" ? "warning" : "neutral"}
           title="Haptics"
         >

@@ -130,6 +130,9 @@ export default function HomeScreen() {
     if (settings.hapticsEnabled && haptic) {
       await GuidePupNavigationCore.playHaptic(haptic).catch(() => undefined);
     }
+    if (haptic) {
+      void GuidePupNavigationCore.playAudioCue(haptic);
+    }
 
     await GuidePupVoiceControl.speak(message, {
       interrupt: true,
@@ -331,6 +334,7 @@ export default function HomeScreen() {
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("success");
     }
+    void GuidePupNavigationCore.playAudioCue("success");
     speak("Guidance started.");
     router.push('/navigation' as never);
   };
@@ -339,6 +343,7 @@ export default function HomeScreen() {
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("error");
     }
+    void GuidePupNavigationCore.playAudioCue("error");
     speak("SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.");
   };
 

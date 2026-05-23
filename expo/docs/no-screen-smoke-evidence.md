@@ -6,7 +6,7 @@ Use this packet for internal iPhone validation before TestFlight. The tester sho
 
 - Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
 - Backend environment and API base URL label: staging, production, or local.
-- Device state: paired/trusted, Developer Mode enabled, network path confirmed, and VoiceOver state.
+- Device state: paired/trusted, Developer Mode enabled, network path confirmed, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
 - Diagnostics export from the app after the run.
 - Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.
 
@@ -32,8 +32,9 @@ Run this exact sequence from a clean install or reset app state:
 - Last analyze event includes request ID, provider, model, prompt version, structured-output fields, sampled-frame envelope, and native path: `native-core` or `js-fallback`.
 - Last analyze event includes sanitized frame summary and capture heuristics: image source, frame age, upload size, and resize flag. It must not include raw image data.
 - Haptics diagnostics show the last attempted haptic type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm physical feedback.
+- Audio-cue diagnostics show the last attempted cue type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm that a cue was audible and did not mask speech or STOP handling.
 - Camera fallback failures, if any, are labeled as camera-frame failures rather than backend failures.
-- VoiceOver and haptic confirmations are usable without screen reading.
+- VoiceOver, haptic, and audio-cue confirmations are usable without screen reading.
 - No raw images, raw audio, credentials, provider keys, or signed URLs are present in logs, screenshots, diagnostics, or notes.
 
 ## Fail Criteria

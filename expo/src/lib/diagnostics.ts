@@ -20,6 +20,7 @@ export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
 export type DiagnosticsVoiceRecognitionPhase = "partial" | "final";
 export type DiagnosticsSpeechListeningOverlapReason = "stop-barge-in" | "unexpected";
 export type DiagnosticsHapticOutcome = "none" | "success" | "failure";
+export type DiagnosticsAudioCueOutcome = "none" | "success" | "failure";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -100,6 +101,18 @@ export interface DiagnosticsHapticSnapshot {
   updatedAt: number;
 }
 
+export interface DiagnosticsAudioCueSnapshot {
+  failureCount: number;
+  lastAttemptedAt?: number;
+  lastCompletedAt?: number;
+  lastError?: string;
+  lastExecutionPath?: DiagnosticsNavigationExecutionPath;
+  lastOutcome: DiagnosticsAudioCueOutcome;
+  lastType?: string;
+  successCount: number;
+  updatedAt: number;
+}
+
 export interface DiagnosticsVoiceSnapshot {
   available: boolean;
   executionPath: DiagnosticsVoiceExecutionPath;
@@ -157,6 +170,7 @@ export interface DiagnosticsAnalyzeEvent {
 }
 
 export interface DiagnosticsSnapshot {
+  audioCue: DiagnosticsAudioCueSnapshot;
   cameraPermission: DiagnosticsCameraPermissionSnapshot | null;
   haptics: DiagnosticsHapticSnapshot;
   lastAnalyze: DiagnosticsAnalyzeEvent | null;
@@ -189,6 +203,12 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
 });
 
 const createInitialSnapshot = (): DiagnosticsSnapshot => ({
+  audioCue: {
+    failureCount: 0,
+    lastOutcome: "none",
+    successCount: 0,
+    updatedAt: Date.now(),
+  },
   cameraPermission: null,
   haptics: {
     failureCount: 0,
@@ -479,6 +499,34 @@ export function recordHapticSnapshot(input: {
   });
 }
 
+export function recordAudioCueSnapshot(input: {
+  error?: string;
+  executionPath?: DiagnosticsNavigationExecutionPath;
+  outcome?: Exclude<DiagnosticsAudioCueOutcome, "none">;
+  type: string;
+}) {
+  const now = Date.now();
+  updateSnapshot((current) => {
+    const outcome = input.outcome ?? "none";
+    const isCompletion = Boolean(input.outcome);
+
+    return {
+      ...current,
+      audioCue: {
+        failureCount: current.audioCue.failureCount + (input.outcome === "failure" ? 1 : 0),
+        lastAttemptedAt: isCompletion ? current.audioCue.lastAttemptedAt : now,
+        lastCompletedAt: isCompletion ? now : current.audioCue.lastCompletedAt,
+        lastError: sanitizeMessage(input.error, 120),
+        lastExecutionPath: input.executionPath ?? current.audioCue.lastExecutionPath,
+        lastOutcome: outcome,
+        lastType: sanitizeMessage(input.type, 40),
+        successCount: current.audioCue.successCount + (input.outcome === "success" ? 1 : 0),
+        updatedAt: now,
+      },
+    };
+  });
+}
+
 export function recordVoiceSnapshot(input: {
   available?: boolean;
   executionPath?: DiagnosticsVoiceExecutionPath;
@@ -715,6 +763,28 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     }`,
   );
   lines.push(`- Last native/core error: ${input.navigationLoop.lastError || "None"}`);
+  lines.push("");
+  lines.push("## Audio cues");
+  lines.push(`- Last type: ${input.audioCue.lastType || "None"}`);
+  lines.push(`- Last outcome: ${input.audioCue.lastOutcome}`);
+  lines.push(`- Last execution path: ${input.audioCue.lastExecutionPath || "Not found in repo"}`);
+  lines.push(
+    `- Last attempted at: ${
+      typeof input.audioCue.lastAttemptedAt === "number"
+        ? new Date(input.audioCue.lastAttemptedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(
+    `- Last completed at: ${
+      typeof input.audioCue.lastCompletedAt === "number"
+        ? new Date(input.audioCue.lastCompletedAt).toISOString()
+        : "Not found in repo"
+    }`,
+  );
+  lines.push(`- Success count: ${input.audioCue.successCount}`);
+  lines.push(`- Failure count: ${input.audioCue.failureCount}`);
+  lines.push(`- Last error: ${input.audioCue.lastError || "None"}`);
   lines.push("");
   lines.push("## Haptics");
   lines.push(`- Last type: ${input.haptics.lastType || "None"}`);

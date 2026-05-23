@@ -83,6 +83,9 @@ mustInclude(navigationScreen, "conversationIntent === \"what-do-you-see\"", "Con
 mustInclude(navigationScreen, "Guidance settings are unchanged", "Scene-query non-mutation confirmation");
 mustInclude(navigationScreen, "isStopBargeInCommand(normalizedTranscript)", "Partial STOP cut-through");
 mustInclude(navigationScreen, "lastStopHandledAtRef", "STOP stale-speech guard");
+mustInclude(navigationScreen, "playAudioCue(\"success\")", "Success audio cue path");
+mustInclude(navigationScreen, "playAudioCue(\"stop\")", "STOP audio cue path");
+mustInclude(navigationScreen, "playAudioCue(\"error\")", "Error audio cue path");
 mustInclude(navigationScreen, "updateSpeechRate", "Spoken speech-rate setting path");
 mustInclude(navigationScreen, "updateDescriptionMode", "Spoken detail-level setting path");
 mustInclude(navigationScreen, "updateHapticsEnabled", "Spoken haptics setting path");
@@ -101,10 +104,14 @@ mustInclude(diagnostics, "voiceOverRunning", "VoiceOver diagnostic");
 mustInclude(diagnostics, "nativePath", "Native camera path diagnostic");
 mustInclude(diagnostics, "frameSummary", "Frame summary diagnostic");
 mustInclude(diagnostics, "captureHeuristics", "Capture heuristics diagnostic");
+mustInclude(diagnostics, "DiagnosticsAudioCueSnapshot", "Audio cue diagnostic snapshot");
+mustInclude(diagnostics, "recordAudioCueSnapshot", "Audio cue diagnostic recorder");
 mustInclude(diagnostics, "DiagnosticsHapticSnapshot", "Haptic diagnostic snapshot");
 mustInclude(diagnostics, "recordHapticSnapshot", "Haptic diagnostic recorder");
 
 const navigationCore = read("../src/native/GuidePupNavigationCore.ts");
+mustInclude(navigationCore, "playAudioCue", "Audio cue path");
+mustInclude(navigationCore, "recordAudioCueSnapshot", "Audio cue path records diagnostics");
 mustInclude(navigationCore, "recordHapticSnapshot", "Haptic path records diagnostics");
 mustInclude(navigationCore, "AccessibilityInfo.announceForAccessibility", "VoiceOver announcement fallback");
 mustInclude(navigationCore, "source: \"native-core\"", "Native camera capture source");
@@ -113,6 +120,7 @@ mustInclude(navigationCore, "source: \"js-fallback\"", "JS camera fallback sourc
 const diagnosticsScreen = read("../src/screens/DiagnosticsScreen.tsx");
 mustInclude(diagnosticsScreen, "Speech/listening invariant", "Diagnostics screen overlap invariant");
 mustInclude(diagnosticsScreen, "VoiceOver running", "Diagnostics screen VoiceOver status");
+mustInclude(diagnosticsScreen, "Audio cues", "Diagnostics screen audio cue evidence");
 mustInclude(diagnosticsScreen, "Last execution path", "Diagnostics screen haptic execution path");
 mustInclude(diagnosticsScreen, "Frame summary", "Diagnostics screen frame summary");
 

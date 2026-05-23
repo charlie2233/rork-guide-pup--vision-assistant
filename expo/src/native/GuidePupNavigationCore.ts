@@ -3,12 +3,13 @@ import type { CameraView } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { AccessibilityInfo, Platform } from "react-native";
 
-import { recordHapticSnapshot } from "@/src/lib/diagnostics";
+import { recordAudioCueSnapshot, recordHapticSnapshot } from "@/src/lib/diagnostics";
 import type { AnalyzeFrameInput } from "@/src/logic/VisionAI";
 
 export type GuidePupNavigationCoreExecutionPath = "native-core" | "js-fallback";
 export type GuidePupNavigationCoreSessionState = "idle" | "running" | "paused" | "stopped";
 export type GuidePupNavigationCoreHapticType = "stop" | "left" | "right" | "forward" | "error" | "success";
+export type GuidePupNavigationCoreAudioCueType = GuidePupNavigationCoreHapticType;
 
 export interface GuidePupNavigationCoreStartOptions {
   preferredCamera?: "back";
@@ -42,6 +43,7 @@ interface GuidePupNavigationCoreNativeModule {
   captureFrame(): Promise<Omit<GuidePupNavigationCoreCaptureResult, "executionPath">>;
   getState(): Promise<GuidePupNavigationCoreState>;
   isAvailable(): Promise<boolean>;
+  playAudioCue(type: GuidePupNavigationCoreAudioCueType): Promise<void>;
   playHaptic(type: GuidePupNavigationCoreHapticType): Promise<void>;
   startSession(options?: GuidePupNavigationCoreStartOptions): Promise<GuidePupNavigationCoreState>;
   stopSession(): Promise<GuidePupNavigationCoreState>;
@@ -203,6 +205,32 @@ async function playHaptic(type: GuidePupNavigationCoreHapticType) {
   }
 }
 
+async function playAudioCue(type: GuidePupNavigationCoreAudioCueType) {
+  recordAudioCueSnapshot({ type });
+
+  if (!nativeModule) {
+    recordAudioCueSnapshot({
+      error: "Native audio cues are unavailable.",
+      executionPath: "js-fallback",
+      outcome: "failure",
+      type,
+    });
+    return;
+  }
+
+  try {
+    await nativeModule.playAudioCue(type);
+    recordAudioCueSnapshot({ executionPath: "native-core", outcome: "success", type });
+  } catch (error) {
+    recordAudioCueSnapshot({
+      error: error instanceof Error ? error.message : "Audio cue failed.",
+      executionPath: "native-core",
+      outcome: "failure",
+      type,
+    });
+  }
+}
+
 async function getState(): Promise<GuidePupNavigationCoreState> {
   if (nativeModule) {
     return nativeModule.getState();
@@ -228,6 +256,7 @@ export const GuidePupNavigationCore = {
   isNativeAvailable() {
     return Boolean(nativeModule);
   },
+  playAudioCue,
   playHaptic,
   startSession,
   stopSession,

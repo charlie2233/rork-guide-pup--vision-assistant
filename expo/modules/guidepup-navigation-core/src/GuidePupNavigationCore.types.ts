@@ -8,6 +8,8 @@ export type GuidePupNavigationCoreHapticType =
   | "error"
   | "success";
 
+export type GuidePupNavigationCoreAudioCueType = GuidePupNavigationCoreHapticType;
+
 export interface GuidePupNavigationCoreStartOptions {
   preferredCamera?: "back";
 }

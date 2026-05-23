@@ -1,6 +1,7 @@
 import type {
   GuidePupNavigationCoreCaptureOptions,
   GuidePupNavigationCoreCaptureResult,
+  GuidePupNavigationCoreAudioCueType,
   GuidePupNavigationCoreHapticType,
   GuidePupNavigationCoreStartOptions,
   GuidePupNavigationCoreState,
@@ -27,6 +28,9 @@ export default {
   },
   isAvailable() {
     return Promise.resolve(false);
+  },
+  playAudioCue(_type: GuidePupNavigationCoreAudioCueType) {
+    return Promise.resolve();
   },
   playHaptic(_type: GuidePupNavigationCoreHapticType) {
     return Promise.resolve();

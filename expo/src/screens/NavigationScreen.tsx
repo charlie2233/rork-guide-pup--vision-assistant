@@ -275,6 +275,7 @@ export default function NavigationScreen() {
         speakCommandResponse(fallbackMessage);
       }
       void GuidePupNavigationCore.announce(fallbackMessage);
+      void GuidePupNavigationCore.playAudioCue("error");
       await refreshNavigationCoreState({
         executionPath: "js-fallback",
         lastError: errorMessage,
@@ -392,6 +393,7 @@ export default function NavigationScreen() {
         speak("Guidance started. Analyzing your surroundings.", {
           keepListeningDuringSpeech: true,
         });
+        void GuidePupNavigationCore.playAudioCue("success");
         void GuidePupNavigationCore.announce("Guidance started. Analyzing your surroundings.");
       }
     }
@@ -613,6 +615,10 @@ export default function NavigationScreen() {
         await GuidePupNavigationCore.playHaptic(hapticType);
       }
 
+      if (mode === "guidance" && (result.obstacle || result.direction === "stop")) {
+        void GuidePupNavigationCore.playAudioCue("stop");
+      }
+
       if (mode === "guidance" && (result.obstacle || result.direction === "stop") && result.message) {
         void GuidePupNavigationCore.announce(result.message);
       }
@@ -731,6 +737,7 @@ export default function NavigationScreen() {
           if (settings.hapticsEnabled) {
             void GuidePupNavigationCore.playHaptic("stop");
           }
+          void GuidePupNavigationCore.playAudioCue("stop");
           speakCommandResponse("Guidance paused. Say start guidance to resume.");
           recordVoiceSnapshot({
             executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
@@ -807,6 +814,7 @@ export default function NavigationScreen() {
           if (settings.hapticsEnabled) {
             void GuidePupNavigationCore.playHaptic("stop");
           }
+          void GuidePupNavigationCore.playAudioCue("stop");
           speakCommandResponse("Guidance paused. Say start guidance to resume.");
           return;
         case "repeat":
@@ -862,6 +870,7 @@ export default function NavigationScreen() {
           if (!settings.hapticsEnabled) {
             void GuidePupNavigationCore.playHaptic("success");
           }
+          void GuidePupNavigationCore.playAudioCue("success");
           speakCommandResponse(
             settings.hapticsEnabled
               ? `Haptics are already ${describeHaptics(true)}.`
@@ -870,6 +879,7 @@ export default function NavigationScreen() {
           return;
         case "haptics-off":
           updateHapticsEnabled(false);
+          void GuidePupNavigationCore.playAudioCue("success");
           speakCommandResponse(
             settings.hapticsEnabled
               ? "Haptics turned off. Say haptics on to undo."
@@ -960,6 +970,7 @@ export default function NavigationScreen() {
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("success");
     }
+    void GuidePupNavigationCore.playAudioCue("stop");
     void GuidePupNavigationCore.announce("Stopping guidance.");
 
     if (navigation.canGoBack()) {
@@ -976,6 +987,7 @@ export default function NavigationScreen() {
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("error");
     }
+    void GuidePupNavigationCore.playAudioCue("error");
     void GuidePupNavigationCore.announce(sosMessage);
   }, [settings.hapticsEnabled, speak]);
 

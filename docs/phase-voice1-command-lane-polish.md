@@ -43,8 +43,9 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - JS fallback capture now waits for `onCameraReady`, records `onMountError`, and labels both direct fallback failures and native-to-JS retry failures as camera-frame failures instead of backend/provider failures.
 - App diagnostics now export sanitized sampled-frame evidence: app version, frame timestamp, sampled-frame boolean, has-image boolean, platform, native path, source size, request ID, provider/model, and structured analyze fields without raw image/base64 data.
 - The backend analyze request schema accepts `sampledFrame` and `hasImage` booleans so cloud request envelopes can preserve the same sanitized evidence fields.
-- Added an executable no-screen smoke contract check covering deterministic voice commands, the separate scene-query conversation lane, STOP cut-through, settings persistence hooks, VoiceOver/native-path diagnostics, haptic diagnostics, and smoke-evidence gates.
+- Added an executable no-screen smoke contract check covering deterministic voice commands, the separate scene-query conversation lane, STOP cut-through, settings persistence hooks, VoiceOver/native-path diagnostics, haptic/audio-cue diagnostics, and smoke-evidence gates.
 - Haptic attempts now record sanitized diagnostics for type, outcome, execution path, and success/failure counts; physical haptic feedback still requires real-iPhone validation.
+- Native audio cues now mirror key success, STOP, and error moments, with sanitized diagnostics for type, outcome, execution path, and success/failure counts; audible delivery still requires real-iPhone validation.
 
 ## Voice command coverage
 
@@ -124,6 +125,9 @@ Results:
 - Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and warns on stale staging smoke/Sentry env vars. TestFlight preflight still fails on unresolved bundle/team/App Store/copyright inputs plus stale production smoke evidence.
 - `wrangler whoami` still reports `Not logged in`; local shell still lacks Cloudflare, OpenAI, Expo, Sentry, and Hugging Face env tokens.
 - New no-screen contract validation command: `npm --prefix expo run check:no-screen-smoke`. It is local/static only and does not replace the real iPhone smoke.
+- New iPhone readiness command: `npm --prefix expo run check:ios-device`. It reports paired/trusted/CoreDevice/USB/Xcode destination status with suffix-only identifiers and does not replace app install/run proof.
+- On the audio-cue/device-readiness continuation, Expo typecheck, Expo lint, backend typecheck, `check:voice-commands`, `check:no-screen-smoke`, ESM syntax checks, `git diff --check`, and Build iOS Apps plugin Release simulator build passed.
+- `check:ios-device` now gives a sanitized blocked result for the current hardware state: paired and Developer Mode enabled, but DDI services and the CoreDevice tunnel are unavailable, no USB iPhone is present, and Xcode does not list the phone as a runnable destination.
 
 ## Backend and request IDs
 
@@ -147,6 +151,7 @@ Environment check from this shell:
 - `EXPO_TOKEN`: missing.
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`: missing.
 - `HUGGINGFACE_HUB_TOKEN`, `HF_TOKEN`: missing.
+- Hugging Face connector is authenticated as `Chargers`; MiniCPM remains experimental and was not moved into production guidance.
 
 No secrets, raw audio, raw images, credentials, or signed URLs were logged.
 
@@ -156,7 +161,7 @@ Physical device discovery:
 
 - `xcrun devicectl list devices`: `charlie的iPhone`, iPhone 15 Pro, state `unavailable`.
 - `xcrun xctrace list devices`: `charlie的iPhone (26.4.2)` appears under `Devices Offline`.
-- Device details: Developer Mode `enabled`, pairing state `paired`, tunnel state `unavailable`, UDID `00008130-000A001A1178001C`, last connection `2026-05-05 22:31:40 +0000`.
+- Device details: Developer Mode `enabled`, pairing state `paired`, tunnel state `unavailable`, identifier suffix `1178001C`, last connection `2026-05-05 22:31:40 +0000`.
 - `system_profiler SPUSBDataType` did not show an attached iPhone on the USB bus.
 
 No physical-device install/run or no-screen blind-user smoke was completed in this phase.
@@ -168,4 +173,4 @@ No physical-device install/run or no-screen blind-user smoke was completed in th
 - Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` is missing and live Workers still need redeploy plus staging/prod smoke for the new structured-output backend contract.
 - Expo/TestFlight release is blocked: `EXPO_TOKEN` is missing and release inputs remain unresolved.
 - Sentry production health could not be queried because Sentry auth/org/project env vars are missing.
-- Hardware behavior for speech input, STOP cut-through, haptics, earcons, VoiceOver, native camera capture, and interruption handling still needs real-device validation.
+- Hardware behavior for speech input, STOP cut-through, haptics, audio cues, VoiceOver, native camera capture, and interruption handling still needs real-device validation.
