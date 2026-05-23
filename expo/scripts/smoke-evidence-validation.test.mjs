@@ -54,6 +54,12 @@ function buildValidSmokeArtifact(overrides = {}) {
       statusCode: 200,
       statusText: "OK",
     },
+    launchContract: {
+      runtimeControlsPresent: true,
+      sampledFrameEnvelopeValid: true,
+      structuredOutputValid: true,
+      valid: true,
+    },
     operator: "Codex",
     providerBacked: true,
     requestEnvelope: {

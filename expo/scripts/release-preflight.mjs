@@ -94,6 +94,10 @@ function modelMatchesExpected(value, expected) {
 function validateSmokeEvidenceShape(artifact) {
   const missing = [];
   const invalid = [];
+  const launchContract =
+    artifact?.launchContract && typeof artifact.launchContract === "object" && !Array.isArray(artifact.launchContract)
+      ? artifact.launchContract
+      : undefined;
   const envelope =
     artifact?.requestEnvelope && typeof artifact.requestEnvelope === "object" && !Array.isArray(artifact.requestEnvelope)
       ? artifact.requestEnvelope
@@ -137,6 +141,17 @@ function validateSmokeEvidenceShape(artifact) {
 
     if (!validator(health[fieldName])) {
       invalid.push(`health.${fieldName}`);
+    }
+  };
+
+  const requireLaunchContractField = (fieldName, validator) => {
+    if (!launchContract || !(fieldName in launchContract) || launchContract[fieldName] === undefined || launchContract[fieldName] === null) {
+      missing.push(`launchContract.${fieldName}`);
+      return;
+    }
+
+    if (!validator(launchContract[fieldName])) {
+      invalid.push(`launchContract.${fieldName}`);
     }
   };
 
@@ -191,6 +206,11 @@ function validateSmokeEvidenceShape(artifact) {
   requireAnalyzeField("sceneDescription", isNonEmptyString);
   requireAnalyzeField("surfaceType", isNonEmptyString);
   requireAnalyzeField("walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
+
+  requireLaunchContractField("runtimeControlsPresent", (value) => value === true);
+  requireLaunchContractField("sampledFrameEnvelopeValid", (value) => value === true);
+  requireLaunchContractField("structuredOutputValid", (value) => value === true);
+  requireLaunchContractField("valid", (value) => value === true);
 
   if (!analyze || !("fallbackReason" in analyze)) {
     missing.push("analyze.fallbackReason");
@@ -264,7 +284,7 @@ function validateSmokeArtifact(artifact, options) {
   const modelContractMessage = `${description} smoke artifact must use launch vision model "${expectedVisionModel}", found health "${artifact.health?.defaultModel ?? "missing"}" and analyze "${artifact.analyze?.model ?? "missing"}".`;
   const promptContractMessage = `${description} smoke artifact must use prompt version "${expectedPromptVersion}", found health "${artifact.health?.promptVersion ?? "missing"}" and analyze "${artifact.analyze?.promptVersion ?? "missing"}".`;
   const evidenceShape = validateSmokeEvidenceShape(artifact);
-  const evidenceShapeMessage = `${description} smoke artifact must include sampled-frame envelope and structured analyze fields. Missing: ${
+  const evidenceShapeMessage = `${description} smoke artifact must include launch contract, sampled-frame envelope, runtime controls, and structured analyze fields. Missing: ${
     evidenceShape.missing.join(", ") || "none"
   }. Invalid: ${evidenceShape.invalid.join(", ") || "none"}.`;
 

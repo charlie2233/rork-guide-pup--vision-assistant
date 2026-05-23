@@ -17,6 +17,10 @@ function buildValidArtifact(overrides = {}) {
   const byId = new Map(sequence.map((step) => [step.id, step]));
   Object.assign(byId.get("start-guidance"), { cameraSessionActive: true });
   Object.assign(byId.get("status"), { statusIncludesSettings: true });
+  Object.assign(byId.get("help"), {
+    helpIncludesBoundedCommandList: true,
+    settingsChanged: false,
+  });
   for (const id of ["slower-speech", "faster-speech", "more-detail", "less-detail"]) {
     Object.assign(byId.get(id), { settingPersisted: true });
   }
@@ -230,6 +234,28 @@ test("no-screen smoke evidence rejects missing STOP barge-in proof", () => {
 
   assert.equal(result.valid, false);
   assert.match(result.invalid.join(","), /sequence\.stop-guidance\.stopCutThrough/);
+});
+
+test("no-screen smoke evidence rejects missing voice help recovery proof", () => {
+  const artifact = buildValidArtifact();
+  const helpStep = artifact.sequence.find((step) => step.id === "help");
+  helpStep.helpIncludesBoundedCommandList = false;
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /sequence\.help\.helpIncludesBoundedCommandList/);
+});
+
+test("no-screen smoke evidence rejects help changing settings", () => {
+  const artifact = buildValidArtifact();
+  const helpStep = artifact.sequence.find((step) => step.id === "help");
+  helpStep.settingsChanged = true;
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /sequence\.help\.settingsChanged/);
 });
 
 test("no-screen smoke evidence rejects cut-through without recognized partial STOP proof", () => {

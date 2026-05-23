@@ -23,16 +23,18 @@ Run this exact sequence from a clean install or reset app state:
 1. Cold prompt: confirm Guide Pup speaks the start/help prompt.
 2. Say `start guidance`: confirm guidance starts, camera/session diagnostics become active, and no screen reading is required.
 3. Say `status`: confirm the response includes guidance state, camera readiness, speech rate, detail level, haptics, and scene-query availability.
-4. Say `slower speech`, then `faster speech`: confirm the setting changes persist and responses stay understandable.
-5. Say `more detail`, then `less detail`: confirm guidance detail changes persist.
-6. Say `haptics off`, then `haptics on`: confirm spoken confirmation and haptic behavior.
-7. Say `repeat`: confirm the last spoken guidance or command response is repeated.
-8. Say `what do you see`: confirm the conversation lane answers from a sampled frame without changing guidance state or settings.
-9. While speech is playing, say `stop guidance`: confirm STOP cuts through from partial recognition, guidance pauses, the stop audio cue and haptic path run, and no stale backend/camera failure speech plays afterward.
+4. Say `help`: confirm the response speaks the bounded command list and does not change guidance state or settings.
+5. Say `slower speech`, then `faster speech`: confirm the setting changes persist and responses stay understandable.
+6. Say `more detail`, then `less detail`: confirm guidance detail changes persist.
+7. Say `haptics off`, then `haptics on`: confirm spoken confirmation and haptic behavior.
+8. Say `repeat`: confirm the last spoken guidance or command response is repeated.
+9. Say `what do you see`: confirm the conversation lane answers from a sampled frame without changing guidance state or settings.
+10. While speech is playing, say `stop guidance`: confirm STOP cuts through from partial recognition, guidance pauses, the stop audio cue and haptic path run, and no stale backend/camera failure speech plays afterward.
 
 ## Pass Criteria
 
 - Voice command lane only accepts the bounded command list; conversation prompts do not mutate guidance, settings, haptics, VoiceOver, or camera/session timing.
+- Help must be available by voice, speak the bounded command list, and avoid mutating settings or navigation state.
 - Diagnostics voice section shows `Speech/listening invariant: PASS` and `Unexpected speech/listening overlap count: 0`.
 - Intentional overlap, if present, is marked as `stop-barge-in`.
 - STOP barge-in evidence must show `recognizedCommand: stop-guidance-partial`, `recognizedPhase: partial`, and `recognizedDuringSpeech: true`; merely keeping the microphone open during speech is not enough.

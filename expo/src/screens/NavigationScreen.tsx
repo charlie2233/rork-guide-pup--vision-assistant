@@ -40,6 +40,7 @@ import {
   recordNavigationLoopSnapshot,
   recordStopBargeInSnapshot,
   recordVoiceSnapshot,
+  resetStopBargeInSnapshot,
 } from "@/src/lib/diagnostics";
 import {
   GuidePupNavigationCore,
@@ -463,6 +464,8 @@ export default function NavigationScreen() {
       return;
     }
 
+    resetStopBargeInSnapshot();
+    lastStopHandledAtRef.current = 0;
     hasAnnouncedStartRef.current = false;
     guidingRef.current = true;
     setIsGuiding(true);
@@ -472,6 +475,10 @@ export default function NavigationScreen() {
       title: "Guidance active",
     });
   }, [speakCommandResponse]);
+
+  useEffect(() => {
+    resetStopBargeInSnapshot();
+  }, []);
 
   const analyzeCurrentFrame = useCallback(async (mode: "guidance" | "scene-query" = "guidance") => {
     if (analyzingRef.current || !guidingRef.current) {

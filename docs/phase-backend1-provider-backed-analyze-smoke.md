@@ -182,9 +182,36 @@ Results:
 - Runtime-control continuation added `backend/guidepup-api/test/provider-runtime-controls.test.mjs`; `npm --prefix backend/guidepup-api run test:privacy` passed with the privacy redaction tests plus provider runtime-control coverage.
 - Runtime-control continuation reran `npm --prefix backend/guidepup-api run types`, `npm --prefix backend/guidepup-api run typecheck`, staging and production Worker dry-runs, Expo typecheck/lint, voice-command and no-screen smoke contracts, iOS device readiness, release preflight preview/TestFlight gates, Build iOS Apps Release simulator build, and `git diff --check`.
 
+## 2026-05-23 smoke evidence semantics continuation
+
+The live smoke artifact now separates provider reachability from launch-contract validity:
+
+- `providerBacked` means `/v1/vision/analyze` returned through the provider-backed execution path.
+- `launchContract.valid` means the artifact also has structured output, sampled-frame envelope proof, and bounded runtime controls.
+- Release preflight still requires both for TestFlight/store, and still separately checks the expected launch model and prompt version.
+
+This preserves honest provider-backed request evidence for stale Workers while keeping submission blocked until staging/production are redeployed and smoked with `gpt-5.5`, prompt `2026-05-22.v1`, structured outputs, sampled-frame context, and runtime-control health fields.
+
+Validation:
+
+```bash
+node --check backend/guidepup-api/eval/run-live-smoke.mjs
+node backend/guidepup-api/eval/run-live-smoke.mjs --env staging --output-json /tmp/guidepup-smoke-staging-semantics.json --output-md /tmp/guidepup-smoke-staging-semantics.md
+node backend/guidepup-api/eval/run-live-smoke.mjs --env production --output-json /tmp/guidepup-smoke-production-semantics.json --output-md /tmp/guidepup-smoke-production-semantics.md
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+```
+
+Results:
+
+- Staging live smoke: provider-backed `true`, `launchContract.valid: false`, `/health` request ID `b553605f-b523-4a6e-96fb-0cb74fa299ad`, `/v1/device/bootstrap` request ID `d887d24f-6dc7-430b-b770-d3a8952468ba`, `/v1/vision/analyze` request ID `46306d35-f28e-46d4-a9dc-14686320fe65`.
+- Production live smoke: provider-backed `true`, `launchContract.valid: false`, `/health` request ID `00323ea2-1784-4574-9db4-68eccac0b690`, `/v1/device/bootstrap` request ID `3a15afe0-194f-4a6c-8aa2-558a036b578d`, `/v1/vision/analyze` request ID `59a565ea-1399-4214-9d39-54d3c210e131`.
+- Both live Workers still report `gpt-4.1` / `2026-03-31.v1`; both are missing runtime-control health fields, `walkability`, and launch-valid structured output.
+- Backend typecheck and backend privacy/runtime/prompt contract tests passed.
+
 ## P0 blockers
 
-- Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
+- Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
 - Physical device is paired with Developer Mode enabled, but unavailable/offline to Xcode right now.
 - Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` missing and Wrangler is not logged in.
 - New backend structured-output contract and `gpt-5.5` config are local only until staging/prod are deployed and smoked again.

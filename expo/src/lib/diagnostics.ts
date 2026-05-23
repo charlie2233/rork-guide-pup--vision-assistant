@@ -224,6 +224,18 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
   websiteUrl: appConfig.websiteUrl,
 });
 
+const createInitialStopBargeInSnapshot = (): DiagnosticsStopBargeInSnapshot => ({
+  armedDuringSpeech: false,
+  attemptedDuringSpeech: false,
+  audioCueAttempted: false,
+  cutThrough: false,
+  guidancePaused: false,
+  hapticAttempted: false,
+  recognizedDuringSpeech: false,
+  staleSpeechAfterStop: false,
+  updatedAt: Date.now(),
+});
+
 const createInitialSnapshot = (): DiagnosticsSnapshot => ({
   audioCue: {
     failureCount: 0,
@@ -253,17 +265,7 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
     status: "unknown",
     updatedAt: Date.now(),
   },
-  stopBargeIn: {
-    armedDuringSpeech: false,
-    attemptedDuringSpeech: false,
-    audioCueAttempted: false,
-    cutThrough: false,
-    guidancePaused: false,
-    hapticAttempted: false,
-    recognizedDuringSpeech: false,
-    staleSpeechAfterStop: false,
-    updatedAt: Date.now(),
-  },
+  stopBargeIn: createInitialStopBargeInSnapshot(),
   voice: {
     available: false,
     executionPath: "js-fallback",
@@ -648,6 +650,13 @@ export function recordStopBargeInSnapshot(input: Partial<Omit<DiagnosticsStopBar
   }));
 }
 
+export function resetStopBargeInSnapshot() {
+  updateSnapshot((current) => ({
+    ...current,
+    stopBargeIn: createInitialStopBargeInSnapshot(),
+  }));
+}
+
 export function recordAnalyzeEvent(
   input: Omit<DiagnosticsAnalyzeEvent, "id" | "timestamp"> & {
     timestamp?: number;
@@ -810,6 +819,11 @@ function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
     {
       ...baseStep("status"),
       statusIncludesSettings: false,
+    },
+    {
+      ...baseStep("help"),
+      helpIncludesBoundedCommandList: false,
+      settingsChanged: false,
     },
     {
       ...baseStep("slower-speech"),

@@ -171,6 +171,7 @@
     { "id": "cold-prompt", "pass": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true },
     { "id": "start-guidance", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "cameraSessionActive": true },
     { "id": "status", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "statusIncludesSettings": true },
+    { "id": "help", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "helpIncludesBoundedCommandList": true, "settingsChanged": false },
     { "id": "slower-speech", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
     { "id": "faster-speech", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },
     { "id": "more-detail", "pass": true, "voiceRecognized": true, "noScreenRequired": true, "spokenFeedbackConfirmed": true, "settingPersisted": true },

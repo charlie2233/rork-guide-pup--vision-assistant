@@ -272,9 +272,15 @@ Results:
 - Cloudflare CLI reports `Not logged in`; EAS CLI reports `Not logged in`; local env presence checks show `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`, `EXPO_TOKEN`, Sentry envs, and Hugging Face env tokens are missing.
 - App Store Connect / TestFlight submission was not attempted because the preflight gates prove the build is not submission-ready.
 
+## Help and smoke semantics continuation
+
+- The real-iPhone no-screen evidence sequence now includes `help` after `status`, with schema proof that it speaks the bounded command list and leaves settings unchanged.
+- STOP barge-in diagnostics reset when a new navigation run starts, preventing stale STOP cut-through proof from carrying into another smoke draft.
+- Live backend smoke now separates `providerBacked` from `launchContract.valid`; release preflight requires both, so stale-but-provider-backed Workers are represented accurately without weakening submission gates.
+
 ## Remaining P0 blockers
 
-- Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
+- Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
 - Machine-readable real-iPhone no-screen evidence is missing: `expo/release/no-screen-smoke.latest.json`.
 - Physical iPhone remains paired with Developer Mode enabled, but unavailable/offline to Xcode.
 - Cloudflare deploy/auth is blocked: `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.

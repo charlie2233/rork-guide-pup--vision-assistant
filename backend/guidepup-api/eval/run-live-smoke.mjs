@@ -207,6 +207,68 @@ function sanitizeAnalyzeRequestEnvelope(payload) {
   };
 }
 
+function hasBoundedRuntimeControls(healthJson) {
+  return (
+    Number.isInteger(healthJson?.defaultMaxCompletionTokens) &&
+    healthJson.defaultMaxCompletionTokens >= 128 &&
+    healthJson.defaultMaxCompletionTokens <= 1200 &&
+    Number.isInteger(healthJson?.defaultRequestTimeoutMs) &&
+    healthJson.defaultRequestTimeoutMs >= 3000 &&
+    healthJson.defaultRequestTimeoutMs <= 30000 &&
+    Number.isInteger(healthJson?.defaultRetryCount) &&
+    healthJson.defaultRetryCount >= 0 &&
+    healthJson.defaultRetryCount <= 2 &&
+    Number.isInteger(healthJson?.defaultRetryDelayMs) &&
+    healthJson.defaultRetryDelayMs >= 0 &&
+    healthJson.defaultRetryDelayMs <= 2000
+  );
+}
+
+function hasSampledFrameEnvelope(envelope) {
+  return (
+    envelope?.sampledFrame === true &&
+    envelope.hasImage === true &&
+    isNonEmptyString(envelope.appVersion) &&
+    isNonEmptyString(envelope.sessionId) &&
+    isNonEmptyString(envelope.frameId) &&
+    isNonEmptyString(envelope.frameSummary) &&
+    Number.isInteger(envelope.timestampMs) &&
+    envelope.timestampMs > 0 &&
+    (envelope.nativePath === "native-core" || envelope.nativePath === "js-fallback") &&
+    ["ios", "android", "web", "unknown"].includes(envelope.platform) &&
+    (envelope.detail === "low" || envelope.detail === "high") &&
+    Number.isInteger(envelope.sourceHeight) &&
+    envelope.sourceHeight > 0 &&
+    Number.isInteger(envelope.sourceWidth) &&
+    envelope.sourceWidth > 0 &&
+    envelope.captureHeuristics &&
+    typeof envelope.captureHeuristics === "object" &&
+    !Array.isArray(envelope.captureHeuristics) &&
+    ["uri", "base64", "unknown"].includes(envelope.captureHeuristics.imageSource) &&
+    typeof envelope.captureHeuristics.resizedForUpload === "boolean" &&
+    Number.isInteger(envelope.captureHeuristics.uploadedHeight) &&
+    envelope.captureHeuristics.uploadedHeight > 0 &&
+    Number.isInteger(envelope.captureHeuristics.uploadedWidth) &&
+    envelope.captureHeuristics.uploadedWidth > 0 &&
+    typeof envelope.captureHeuristics.frameAgeMs === "number" &&
+    Number.isFinite(envelope.captureHeuristics.frameAgeMs) &&
+    envelope.captureHeuristics.frameAgeMs >= 0
+  );
+}
+
+function buildLaunchContract({ analyzeSummary, healthJson, requestEnvelope }) {
+  const runtimeControlsPresent = hasBoundedRuntimeControls(healthJson);
+  const sampledFrameEnvelopeValid = hasSampledFrameEnvelope(requestEnvelope);
+  const structuredOutputValid = analyzeSummary.structuredOutputValid === true;
+
+  return {
+    runtimeControlsPresent,
+    sampledFrameEnvelopeValid,
+    structuredOutputValid,
+    valid: runtimeControlsPresent && sampledFrameEnvelopeValid && structuredOutputValid,
+  };
+}
+
 function deriveAnalyzeSummary(result) {
   if (result.response.ok && result.json) {
     const structuredOutput = validateStructuredAnalyzeOutput(result.json);
@@ -328,6 +390,14 @@ function toMarkdown(artifact) {
     `  - fallback reason: \`${artifact.analyze.fallbackReason || "none"}\``,
     `  - message: \`${artifact.analyze.message || artifact.analyze.errorMessage || "not-found"}\``,
     "",
+    "## Launch contract",
+    "",
+    `- provider backed: \`${artifact.providerBacked ? "yes" : "no"}\``,
+    `- launch contract valid: \`${artifact.launchContract.valid ? "yes" : "no"}\``,
+    `- structured output valid: \`${artifact.launchContract.structuredOutputValid ? "yes" : "no"}\``,
+    `- sampled-frame envelope valid: \`${artifact.launchContract.sampledFrameEnvelopeValid ? "yes" : "no"}\``,
+    `- runtime controls present: \`${artifact.launchContract.runtimeControlsPresent ? "yes" : "no"}\``,
+    "",
     "## Analyze request envelope",
     "",
     `- sampled frame: \`${artifact.requestEnvelope.sampledFrame ? "yes" : "no"}\``,
@@ -394,6 +464,12 @@ async function main() {
   });
 
   const analyzeSummary = deriveAnalyzeSummary(analyze);
+  const requestEnvelope = sanitizeAnalyzeRequestEnvelope(analyzePayload);
+  const launchContract = buildLaunchContract({
+    analyzeSummary,
+    healthJson: health.json,
+    requestEnvelope,
+  });
   const artifact = {
     analyze: {
       ...analyzeSummary,
@@ -428,9 +504,10 @@ async function main() {
       statusCode: health.response.status,
       statusText: health.response.statusText || "",
     },
+    launchContract,
     operator: args.operator,
-    providerBacked: analyzeSummary.executionPath === "provider-backed" && analyzeSummary.structuredOutputValid === true,
-    requestEnvelope: sanitizeAnalyzeRequestEnvelope(analyzePayload),
+    providerBacked: analyzeSummary.executionPath === "provider-backed",
+    requestEnvelope,
   };
 
   const outputJsonPath = getOutputPath(args.outputJson);

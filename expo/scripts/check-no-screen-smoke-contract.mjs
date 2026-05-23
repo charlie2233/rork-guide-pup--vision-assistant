@@ -127,6 +127,7 @@ mustInclude(diagnostics, "unexpectedSpeechListeningOverlapCount", "Unexpected ov
 mustInclude(diagnostics, "lastSpeechListeningOverlapReason", "STOP overlap reason diagnostic");
 mustInclude(diagnostics, "DiagnosticsStopBargeInSnapshot", "STOP barge-in diagnostic snapshot");
 mustInclude(diagnostics, "recordStopBargeInSnapshot", "STOP barge-in diagnostic recorder");
+mustInclude(diagnostics, "resetStopBargeInSnapshot", "STOP barge-in diagnostic reset");
 mustInclude(diagnostics, "recognizedDuringSpeech", "STOP recognition during speech diagnostic");
 mustInclude(diagnostics, "recognizedPhase", "STOP recognition phase diagnostic");
 mustInclude(diagnostics, "voiceOverRunning", "VoiceOver diagnostic");
@@ -165,6 +166,7 @@ for (const phrase of [
   "Cold prompt",
   "start guidance",
   "status",
+  "help",
   "slower speech",
   "faster speech",
   "more detail",
@@ -194,8 +196,10 @@ mustInclude(releasePreflight, "requireHealthField(\"defaultRetryCount\"", "Provi
 mustInclude(releasePreflight, "requireEnvelopeField(\"frameSummary\"", "Frame summary preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"captureHeuristics\"", "Capture heuristics preflight gate");
 mustInclude(releasePreflight, "requireAnalyzeField(\"walkability\"", "Walkability preflight gate");
+mustInclude(releasePreflight, "requireLaunchContractField(\"valid\"", "Launch contract preflight gate");
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
+mustInclude(liveSmoke, "launchContract", "Live smoke records launch contract");
 mustInclude(liveSmoke, "hasImage: true", "Live smoke sends hasImage");
 mustInclude(liveSmoke, "sampledFrame: true", "Live smoke sends sampledFrame");
 mustInclude(liveSmoke, "frameSummary", "Live smoke records frame summary");
@@ -207,6 +211,8 @@ mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry c
 
 const noScreenEvidenceSchema = read("../scripts/no-screen-smoke-evidence.mjs");
 mustInclude(noScreenEvidenceSchema, "REQUIRED_NO_SCREEN_SEQUENCE", "No-screen evidence required sequence");
+mustInclude(noScreenEvidenceSchema, "helpIncludesBoundedCommandList", "No-screen evidence voice help proof");
+mustInclude(noScreenEvidenceSchema, "sequence.help.settingsChanged", "No-screen evidence help non-mutation proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidence STOP cut-through proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedCommand", "No-screen evidence STOP recognized command proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedDuringSpeech", "No-screen evidence STOP during-speech proof");

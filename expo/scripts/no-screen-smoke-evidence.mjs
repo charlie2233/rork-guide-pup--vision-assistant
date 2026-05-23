@@ -11,6 +11,7 @@ export const REQUIRED_NO_SCREEN_SEQUENCE = [
   "cold-prompt",
   "start-guidance",
   "status",
+  "help",
   "slower-speech",
   "faster-speech",
   "more-detail",
@@ -250,6 +251,7 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
     const expectedStepFlags = {
       "start-guidance": ["cameraSessionActive"],
       status: ["statusIncludesSettings"],
+      help: ["helpIncludesBoundedCommandList"],
       "slower-speech": ["settingPersisted"],
       "faster-speech": ["settingPersisted"],
       "more-detail": ["settingPersisted"],
@@ -276,6 +278,10 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
     const sceneStep = stepsById.get("what-do-you-see");
     if (sceneStep && sceneStep.settingsChanged !== false) {
       invalid.push("sequence.what-do-you-see.settingsChanged");
+    }
+    const helpStep = stepsById.get("help");
+    if (helpStep && helpStep.settingsChanged !== false) {
+      invalid.push("sequence.help.settingsChanged");
     }
   }
 
