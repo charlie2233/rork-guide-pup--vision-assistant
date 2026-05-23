@@ -11,6 +11,13 @@ export type GuidePupVoiceCommandIntent =
   | "haptics-off"
   | "status";
 
+export interface GuidePupHandledTranscript {
+  normalizedTranscript: string;
+  timestampMs: number;
+}
+
+const DUPLICATE_TRANSCRIPT_WINDOW_MS = 1500;
+
 const commandMatchers: Array<[GuidePupVoiceCommandIntent, RegExp[]]> = [
   [
     "start-guidance",
@@ -121,6 +128,17 @@ const stopBargeInCommands = new Set([
 
 export function isStopBargeInCommand(transcript: string) {
   return stopBargeInCommands.has(normalizeVoiceTranscript(transcript));
+}
+
+export function isRecentDuplicateTranscript(
+  normalizedTranscript: string,
+  lastHandledTranscript: GuidePupHandledTranscript | null,
+  nowMs = Date.now(),
+) {
+  return (
+    lastHandledTranscript?.normalizedTranscript === normalizedTranscript &&
+    nowMs - lastHandledTranscript.timestampMs < DUPLICATE_TRANSCRIPT_WINDOW_MS
+  );
 }
 
 export function buildVoiceHelpPrompt(isGuiding: boolean, options: { conversationLaneEnabled: boolean }) {

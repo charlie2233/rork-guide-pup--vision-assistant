@@ -16,7 +16,13 @@ import { useVoice } from "@/src/components/VoiceAnnouncer";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { canAnswerWhatDoYouSee, parseConversationPrompt } from "@/src/lib/voiceConversation";
-import { buildVoiceHelpPrompt, isStopBargeInCommand, parseVoiceCommand } from "@/src/lib/voiceCommands";
+import {
+  buildVoiceHelpPrompt,
+  isRecentDuplicateTranscript,
+  isStopBargeInCommand,
+  parseVoiceCommand,
+  type GuidePupHandledTranscript,
+} from "@/src/lib/voiceCommands";
 import {
   buildVoiceStatusSummary,
   describeHaptics,
@@ -97,9 +103,10 @@ export default function NavigationScreen() {
   const cameraRef = useRef<CameraView>(null);
   const analyzingRef = useRef(false);
   const guidingRef = useRef(true);
+  const hasAnnouncedCameraPermissionRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const hasAnnouncedStartRef = useRef(false);
-  const lastHandledTranscriptRef = useRef<string | null>(null);
+  const lastHandledTranscriptRef = useRef<GuidePupHandledTranscript | null>(null);
   const lastSpokenMessageRef = useRef("Guidance started. Analyzing your surroundings.");
   const lastStopHandledAtRef = useRef(0);
   const guidanceSessionIdRef = useRef(`guidepup-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
@@ -171,6 +178,17 @@ export default function NavigationScreen() {
       });
 
       if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+        const permissionMessage = permissions.microphone !== "granted" && permissions.speech !== "granted"
+          ? "Microphone and speech recognition permissions are required for hands-free commands. STOP remains available from the screen."
+          : permissions.microphone !== "granted"
+            ? "Microphone permission is required for hands-free commands. STOP remains available from the screen."
+            : "Speech recognition permission is required for hands-free commands. STOP remains available from the screen.";
+        lastSpokenMessageRef.current = permissionMessage;
+        recordVoiceSnapshot({
+          lastError: permissionMessage,
+          listening: false,
+        });
+        speak(permissionMessage);
         return;
       }
 
@@ -197,7 +215,7 @@ export default function NavigationScreen() {
         listening: false,
       });
     }
-  }, []);
+  }, [speak]);
 
   const speakCommandResponse = useCallback((
     message: string,
@@ -282,8 +300,16 @@ export default function NavigationScreen() {
         lastError: "Camera permission not granted.",
         sessionActive: false,
       });
+      if (!hasAnnouncedCameraPermissionRef.current) {
+        hasAnnouncedCameraPermissionRef.current = true;
+        const cameraMessage = "Camera access is required before Guide Pup can analyze the scene.";
+        lastSpokenMessageRef.current = cameraMessage;
+        speak(cameraMessage);
+      }
       return;
     }
+
+    hasAnnouncedCameraPermissionRef.current = false;
 
     if (isGuiding) {
       setGuidanceStatus({
@@ -579,7 +605,8 @@ export default function NavigationScreen() {
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
       const normalizedTranscript = transcript.trim().toLowerCase();
-      if (!normalizedTranscript || normalizedTranscript === lastHandledTranscriptRef.current) {
+      const nowMs = Date.now();
+      if (!normalizedTranscript || isRecentDuplicateTranscript(normalizedTranscript, lastHandledTranscriptRef.current, nowMs)) {
         return;
       }
 
@@ -590,7 +617,10 @@ export default function NavigationScreen() {
       if (!isFinal) {
         if (isStopBargeInCommand(normalizedTranscript) && guidingRef.current && !recentlyHandledStop) {
           lastStopHandledAtRef.current = Date.now();
-          lastHandledTranscriptRef.current = normalizedTranscript;
+          lastHandledTranscriptRef.current = {
+            normalizedTranscript,
+            timestampMs: nowMs,
+          };
           stopVoice();
           pauseGuidanceForVoice();
           if (settings.hapticsEnabled) {
@@ -613,7 +643,10 @@ export default function NavigationScreen() {
         return;
       }
 
-      lastHandledTranscriptRef.current = normalizedTranscript;
+      lastHandledTranscriptRef.current = {
+        normalizedTranscript,
+        timestampMs: nowMs,
+      };
 
       recordVoiceSnapshot({
         executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
@@ -633,8 +666,8 @@ export default function NavigationScreen() {
           speakCommandResponse("The experimental conversation lane is not enabled right now.");
           return;
         }
-        if (direction?.sceneDescription) {
-          speakCommandResponse(direction.sceneDescription);
+        if (analyzingRef.current) {
+          speakCommandResponse("I am already analyzing. Say repeat in a moment for the latest guidance.");
           return;
         }
         speakCommandResponse("Analyzing the scene now.");
@@ -827,12 +860,13 @@ export default function NavigationScreen() {
   }, [navigation, router, settings.hapticsEnabled, speak, stopVoice]);
 
   const handleSOS = useCallback(() => {
-    lastSpokenMessageRef.current = "Emergency SOS activated.";
-    speak("Emergency SOS activated.");
+    const sosMessage = "SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.";
+    lastSpokenMessageRef.current = sosMessage;
+    speak(sosMessage);
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("error");
     }
-    void GuidePupNavigationCore.announce("Emergency SOS activated.");
+    void GuidePupNavigationCore.announce(sosMessage);
   }, [settings.hapticsEnabled, speak]);
 
   const canOpenCameraSettings = typeof Linking.openSettings === "function" && Platform.OS !== "web";

@@ -6,7 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGuidePupRouter } from '@/src/lib/router';
 import { recordVoiceSnapshot } from '@/src/lib/diagnostics';
 import { parseConversationPrompt } from '@/src/lib/voiceConversation';
-import { buildVoiceHelpPrompt, parseVoiceCommand } from '@/src/lib/voiceCommands';
+import {
+  buildVoiceHelpPrompt,
+  isRecentDuplicateTranscript,
+  parseVoiceCommand,
+  type GuidePupHandledTranscript,
+} from '@/src/lib/voiceCommands';
 import { buildVoiceStatusSummary, describeHaptics, describeSpeechRate, fasterSpeechRate, slowerSpeechRate } from '@/src/lib/voiceSettings';
 import { GuidePupNavigationCore } from '@/src/native/GuidePupNavigationCore';
 import { GuidePupVoiceControl } from '@/src/native/GuidePupVoiceControl';
@@ -21,7 +26,7 @@ export default function HomeScreen() {
     updateHapticsEnabled,
     updateSpeechRate,
   } = useSettings();
-  const lastHandledTranscriptRef = useRef<string | null>(null);
+  const lastHandledTranscriptRef = useRef<GuidePupHandledTranscript | null>(null);
   const lastSpokenMessageRef = useRef("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
   const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,6 +67,19 @@ export default function HomeScreen() {
       });
 
       if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+        const permissionMessage = permissions.microphone !== "granted" && permissions.speech !== "granted"
+          ? "Microphone and speech recognition permissions are required for hands-free commands. You can still use the buttons."
+          : permissions.microphone !== "granted"
+            ? "Microphone permission is required for hands-free commands. You can still use the buttons."
+            : "Speech recognition permission is required for hands-free commands. You can still use the buttons.";
+        lastSpokenMessageRef.current = permissionMessage;
+        recordVoiceSnapshot({
+          lastError: permissionMessage,
+          listening: false,
+        });
+        await GuidePupVoiceControl.speak(permissionMessage, {
+          interrupt: true,
+        }).catch(() => speak(permissionMessage));
         return;
       }
 
@@ -88,7 +106,7 @@ export default function HomeScreen() {
         listening: false,
       });
     }
-  }, []);
+  }, [speak]);
 
   const speakVoiceResponse = useCallback(async (
     message: string,
@@ -156,11 +174,15 @@ export default function HomeScreen() {
       }
 
       const normalizedTranscript = transcript.trim().toLowerCase();
-      if (!normalizedTranscript || normalizedTranscript === lastHandledTranscriptRef.current) {
+      const nowMs = Date.now();
+      if (!normalizedTranscript || isRecentDuplicateTranscript(normalizedTranscript, lastHandledTranscriptRef.current, nowMs)) {
         return;
       }
 
-      lastHandledTranscriptRef.current = normalizedTranscript;
+      lastHandledTranscriptRef.current = {
+        normalizedTranscript,
+        timestampMs: nowMs,
+      };
       const intent = parseVoiceCommand(normalizedTranscript);
       const conversationIntent = intent ? null : parseConversationPrompt(normalizedTranscript);
 
@@ -311,8 +333,7 @@ export default function HomeScreen() {
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("error");
     }
-    speak("SOS mode activated. Connecting to emergency services.");
-    // Placeholder for SOS logic
+    speak("SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.");
   };
 
   const handleOpenSettings = () => {

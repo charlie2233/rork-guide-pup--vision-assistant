@@ -60,9 +60,9 @@ Last updated: 2026-05-22
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
-  - `preview`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`; staging smoke is now provider-backed
-  - `testflight`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`; production provider-backed smoke gate is now satisfied
-  - `store`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`; production provider-backed smoke gate is now satisfied
+  - `preview`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`; staging provider reachability is present, but the launch contract remains stale until smoke shows `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
+  - `testflight`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract
+  - `store`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
@@ -237,3 +237,22 @@ Last updated: 2026-05-22
   - `system_profiler SPUSBDataType` does not show the iPhone on the USB bus.
 - Re-ran `npm run release:preflight:preview`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
 - Re-ran `npm run release:preflight:testflight`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.
+
+## Actions taken on 2026-05-22
+
+- Hardened the Xcode simulator validation path after the Build iOS Apps plugin reached the native build but failed in Sentry upload before app validation.
+- Added a simulator-only Sentry upload guard to `expo/ios/.xcode.env`:
+  - `SENTRY_DISABLE_AUTO_UPLOAD=true`
+  - `SENTRY_ALLOW_FAILURE=true`
+- This guard applies only when `PLATFORM_NAME` contains `simulator`, so device/archive/TestFlight builds still require the real Sentry release environment for symbol/source-map upload.
+- Re-ran Build iOS Apps plugin Release simulator build after the guard; it passed for the `iPhone 16e` simulator.
+- Tightened release preflight so provider-backed smoke is not considered launch-valid unless the live Worker also proves the expected `gpt-5.5` model, `2026-05-22.v1` prompt version, sampled-frame envelope, structured output validity, and nullable `fallbackReason`.
+- Hardened no-screen voice flows locally:
+  - Repeated identical spoken commands are only suppressed inside a short duplicate-recognition window.
+  - The native voice controller clears its transcript de-dupe state on command-session start/stop.
+  - `what do you see` no longer reuses stale scene text and now speaks a deterministic "already analyzing" response instead of promising a scene query that cannot start.
+  - Microphone, speech-recognition, and camera permission denial paths now speak short no-screen fallbacks.
+  - The placeholder SOS copy no longer claims emergency services are connected.
+- Reconfirmed Cloudflare remains blocked locally: `npx wrangler whoami` reports `Not logged in`.
+- Reconfirmed this shell still lacks `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`, `EXPO_TOKEN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `HUGGINGFACE_HUB_TOKEN`, and `HF_TOKEN`.
+- Hugging Face connector is authenticated as `Chargers`; no MiniCPM/GPT comparison was run in this pass.

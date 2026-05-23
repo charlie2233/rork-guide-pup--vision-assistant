@@ -23,6 +23,10 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Navigation help only advertises `what do you see` when guidance, camera access, and the scene-query lane are all available.
 - Voice status now reports camera readiness, native/fallback voice input availability, and whether the scene question is available in the current context.
 - Scene-query aliases stay bounded to a conversation-lane trigger; they can request a scene answer but cannot mutate settings, guidance status, direction UI, navigation-core diagnostics, STOP behavior, haptics, VoiceOver, or camera/session timing.
+- Repeated identical spoken commands are only suppressed inside a short duplicate-recognition window, and the native iOS voice controller clears its transcript de-dupe state when command sessions start or stop.
+- Microphone, speech-recognition, and camera permission denial paths now speak short no-screen fallbacks instead of silently returning.
+- `what do you see` no longer reuses stale scene text; if a guidance analysis is already running, it speaks a deterministic "already analyzing" response instead of promising a scene query that cannot start.
+- Placeholder SOS copy now says the shortcut is not connected in this build instead of claiming emergency services are active.
 
 ## Voice command coverage
 
@@ -82,6 +86,7 @@ Results:
 - Build iOS Apps plugin session defaults resolved workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, configuration `Release`, simulator `iPhone 16e`.
 - Build iOS Apps plugin compile failed in the Sentry upload phase: `sentry-cli` required an org slug and did not see `SENTRY_DISABLE_AUTO_UPLOAD=true` inside its build script environment.
 - Release simulator shell build for `iPhone 16e` passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
+- After the duplicate-command, permission-fallback, scene-query, and SOS continuation, Expo typecheck, Expo lint, backend typecheck, `git diff --check`, and the Build iOS Apps plugin Release simulator build passed. Preview/TestFlight preflight intentionally remain blocked by unresolved launch inputs and stale live Worker smoke contract.
 
 ## Backend and request IDs
 

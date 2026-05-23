@@ -79,6 +79,10 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function modelMatchesExpected(value, expected) {
+  return typeof value === "string" && (value === expected || value.startsWith(`${expected}-`));
+}
+
 function validateSmokeEvidenceShape(artifact) {
   const missing = [];
   const invalid = [];
@@ -165,6 +169,8 @@ function validateSmokeArtifact(artifact, options) {
     allowWarning,
     description,
     filePath,
+    expectedPromptVersion,
+    expectedVisionModel,
     requireProviderBacked,
     targetUrl,
   } = options;
@@ -182,6 +188,21 @@ function validateSmokeArtifact(artifact, options) {
   expect(artifact.apiUrl === targetUrl, `${description} smoke artifact must target "${targetUrl}", found "${artifact.apiUrl ?? "undefined"}".`);
   expect(artifact.health?.statusCode === 200, `${description} smoke artifact must show /health 200.`);
   expect(artifact.bootstrap?.statusCode === 200, `${description} smoke artifact must show /v1/device/bootstrap 200.`);
+
+  const modelMatches =
+    !expectedVisionModel ||
+    (
+      modelMatchesExpected(artifact.health?.defaultModel, expectedVisionModel) &&
+      modelMatchesExpected(artifact.analyze?.model, expectedVisionModel)
+    );
+  const promptMatches =
+    !expectedPromptVersion ||
+    (
+      artifact.health?.promptVersion === expectedPromptVersion &&
+      artifact.analyze?.promptVersion === expectedPromptVersion
+    );
+  const modelContractMessage = `${description} smoke artifact must use launch vision model "${expectedVisionModel}", found health "${artifact.health?.defaultModel ?? "missing"}" and analyze "${artifact.analyze?.model ?? "missing"}".`;
+  const promptContractMessage = `${description} smoke artifact must use prompt version "${expectedPromptVersion}", found health "${artifact.health?.promptVersion ?? "missing"}" and analyze "${artifact.analyze?.promptVersion ?? "missing"}".`;
   const evidenceShape = validateSmokeEvidenceShape(artifact);
   const evidenceShapeMessage = `${description} smoke artifact must include sampled-frame envelope and structured analyze fields. Missing: ${
     evidenceShape.missing.join(", ") || "none"
@@ -192,6 +213,8 @@ function validateSmokeArtifact(artifact, options) {
       artifact.providerBacked === true && artifact.analyze?.executionPath === "provider-backed",
       `${description} smoke artifact must show provider-backed analyze. Current execution path is "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
     );
+    expect(modelMatches, modelContractMessage);
+    expect(promptMatches, promptContractMessage);
     expect(evidenceShape.valid, evidenceShapeMessage);
     return;
   }
@@ -204,6 +227,8 @@ function validateSmokeArtifact(artifact, options) {
   }
 
   warn(evidenceShape.valid, evidenceShapeMessage);
+  warn(modelMatches, modelContractMessage);
+  warn(promptMatches, promptContractMessage);
 }
 
 const argv = process.argv.slice(2);
@@ -280,6 +305,8 @@ if (requiresPreview) {
   validateSmokeArtifact(stagingSmokeArtifact, {
     allowWarning: !strictPreviewProvider,
     description: "Preview / staging",
+    expectedPromptVersion: launchInputs.productionPromptVersion,
+    expectedVisionModel: launchInputs.productionVisionModel,
     filePath: stagingSmokeArtifactPath,
     requireProviderBacked: strictPreviewProvider,
     targetUrl: launchInputs.stagingApiBaseUrl,
@@ -314,6 +341,8 @@ if (requiresStoreBackedDistribution) {
   validateSmokeArtifact(productionSmokeArtifact, {
     allowWarning: false,
     description: "Production",
+    expectedPromptVersion: launchInputs.productionPromptVersion,
+    expectedVisionModel: launchInputs.productionVisionModel,
     filePath: productionSmokeArtifactPath,
     requireProviderBacked: true,
     targetUrl: launchInputs.productionApiBaseUrl,

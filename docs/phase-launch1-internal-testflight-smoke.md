@@ -19,6 +19,9 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 - Updated TestFlight checklist to validate microphone and speech-recognition permission prompts during hands-free command smoke.
 - Updated launch inputs release notes to match the current shipping behavior.
 - Updated the in-app camera-permission fallback copy to say "iOS speech recognition" rather than overclaiming on-device speech recognition.
+- Added a versioned Xcode env guard so iOS simulator builds skip Sentry source-map/debug-symbol upload attempts unless explicitly overridden. This keeps local/plugin simulator validation from requiring Sentry org/project credentials while leaving device/archive/TestFlight upload behavior unchanged.
+- Tightened release preflight so provider-backed smoke is not launch-valid unless staging/production evidence also matches the expected `gpt-5.5` model, `2026-05-22.v1` prompt, sampled-frame envelope, structured output validity, and nullable `fallbackReason`.
+- Hardened no-screen voice behavior for repeated commands, permission denial fallbacks, scene-query-in-progress responses, stale scene-query answers, and placeholder SOS copy.
 
 ## Evidence gathered
 
@@ -112,6 +115,47 @@ Results:
 - Build iOS Apps plugin defaults resolved workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, configuration `Release`, simulator `iPhone 16e`.
 - Build iOS Apps plugin compile timed out at the 120 second tool boundary, so the underlying process was checked before starting a shell fallback.
 - Release simulator shell build passed for the `iPhone 16e` simulator with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
+
+Continuation on `2026-05-22` after commit `390e372`:
+
+```bash
+git fetch --all --prune
+git pull --ff-only
+npx --yes wrangler whoami
+node -e "for (const k of ['CLOUDFLARE_API_TOKEN','OPENAI_API_KEY','EXPO_TOKEN','SENTRY_AUTH_TOKEN','SENTRY_ORG','SENTRY_PROJECT','HUGGINGFACE_HUB_TOKEN','HF_TOKEN']) console.log(k + '=' + (process.env[k] ? 'set' : 'missing'))"
+```
+
+Results:
+
+- Repo sync: already up to date with `origin/codex/guidepup-credentialed-launch`.
+- Cloudflare remains blocked: Wrangler returned `Not logged in`.
+- Local env remains missing `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`, `EXPO_TOKEN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `HUGGINGFACE_HUB_TOKEN`, and `HF_TOKEN`.
+- Hugging Face connector is authenticated as `Chargers`; no MiniCPM production comparison was run in this continuation.
+- Prior Build iOS Apps plugin validation failed before app validation because the Sentry Xcode script attempted a simulator source-map upload without Sentry org/project env. The versioned `.xcode.env` now defaults `SENTRY_DISABLE_AUTO_UPLOAD=true` and `SENTRY_ALLOW_FAILURE=true` only when `PLATFORM_NAME` is a simulator target.
+- Preflight now treats checked-in live smoke as stale until it proves the launch backend contract, not just provider reachability.
+
+Validation after the continuation:
+
+```bash
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix backend/guidepup-api run typecheck
+git diff --check
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+xcodebuildmcp session_show_defaults
+xcodebuildmcp build_sim --extraArgs -quiet CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+```
+
+Results:
+
+- Expo typecheck: passed.
+- Expo lint: passed.
+- Backend typecheck: passed.
+- `git diff --check`: passed.
+- Preview preflight: still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`; now warns that staging smoke is stale for the launch contract (`gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope and nullable `fallbackReason`).
+- TestFlight preflight: still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract (`gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope and nullable `fallbackReason`).
+- Build iOS Apps plugin Release simulator build now passes for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, simulator `iPhone 16e`, after the simulator-only Sentry upload guard.
 
 ## Backend request IDs
 

@@ -175,6 +175,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
     partialResults: Bool
   ) throws {
     stopListeningSession(resetError: false)
+    lastTranscript = nil
 
     let locale = Locale(identifier: localeIdentifier ?? Locale.current.identifier)
     guard let recognizer = SFSpeechRecognizer(locale: locale) else {
@@ -254,6 +255,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
 
     recognitionTask?.cancel()
     recognitionTask = nil
+    lastTranscript = nil
 
     if audioEngine.isRunning {
       audioEngine.stop()
