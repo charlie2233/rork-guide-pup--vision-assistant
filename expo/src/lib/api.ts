@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { z } from "zod";
 
@@ -52,12 +53,17 @@ export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema> & {
   latencyMs: number;
 };
 
+type GuidePupClientPlatform = "ios" | "android" | "web" | "unknown";
+
 export type AnalyzeVisionPayload = {
+  appVersion?: string;
   detail?: "low" | "high";
   frameId?: string;
+  hasImage?: boolean;
   imageBase64: string;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
   nativePath?: "native-core" | "js-fallback";
+  sampledFrame?: boolean;
   priorGuidance?: string;
   sessionId?: string;
   sourceHeight?: number;
@@ -79,12 +85,16 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
   }
 }
 
-function getPlatform() {
+function getPlatform(): GuidePupClientPlatform {
   if (Platform.OS === "ios" || Platform.OS === "android" || Platform.OS === "web") {
     return Platform.OS;
   }
 
   return "unknown";
+}
+
+function getAppVersion() {
+  return Constants.expoConfig?.version || "unknown";
 }
 
 function getErrorMessage(error: unknown) {
@@ -109,10 +119,15 @@ function safeParseJson(rawText: string) {
 
 function buildAnalyzeTelemetryEnvelope(payload: AnalyzeVisionPayload) {
   return {
+    appVersion: payload.appVersion || getAppVersion(),
     detail: payload.detail,
     frameId: payload.frameId,
+    frameTimestampMs: payload.timestampMs,
+    hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
     nativePath: payload.nativePath,
+    platform: getPlatform(),
     priorGuidanceSummary: payload.priorGuidance,
+    sampledFrame: payload.sampledFrame ?? true,
     sessionId: payload.sessionId,
     sourceHeight: payload.sourceHeight,
     sourceWidth: payload.sourceWidth,
@@ -128,11 +143,14 @@ function recordAnalyzeTelemetry(
     | "timeout"
     | "unauthorized",
   input: {
+    appVersion?: string;
     detail?: "low" | "high";
     direction?: VisionAnalyzeResponse["direction"];
     error?: string;
     frameId?: string;
+    frameTimestampMs?: number;
     hazardLevel?: VisionAnalyzeResponse["hazardLevel"];
+    hasImage?: boolean;
     fallbackReason?: string | null;
     latencyMs?: number;
     lighting?: VisionAnalyzeResponse["lighting"];
@@ -140,10 +158,12 @@ function recordAnalyzeTelemetry(
     model?: string;
     nativePath?: AnalyzeVisionPayload["nativePath"];
     obstacle?: boolean;
+    platform?: GuidePupClientPlatform;
     priorGuidanceSummary?: string;
     promptVersion?: string;
     requestId?: string;
     provider?: string;
+    sampledFrame?: boolean;
     safeReason?: string;
     sceneDescription?: string;
     sessionId?: string;
@@ -155,17 +175,22 @@ function recordAnalyzeTelemetry(
 ) {
   recordAnalyzeEvent({
     ...input,
+    appVersion: sanitizeMessage(input.appVersion, 64),
     error: sanitizeMessage(input.error, 120),
     frameId: sanitizeMessage(input.frameId, 80),
+    frameTimestampMs: input.frameTimestampMs,
+    hasImage: input.hasImage,
     lighting: input.lighting,
     message: sanitizeMessage(input.message, 160),
     nativePath: input.nativePath,
     outcome,
+    platform: input.platform,
     priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     requestId: sanitizeMessage(input.requestId, 80),
     provider: sanitizeMessage(input.provider, 64),
     fallbackReason: sanitizeMessage(input.fallbackReason ?? undefined, 120),
+    sampledFrame: input.sampledFrame,
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     sessionId: sanitizeMessage(input.sessionId, 80),
@@ -342,14 +367,16 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         "x-guidepup-device-id": session.deviceId,
       },
       body: JSON.stringify({
-        appVersion: undefined,
+        appVersion: payload.appVersion || getAppVersion(),
         detail: payload.detail || "low",
         frameId: payload.frameId,
+        hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
         imageBase64: payload.imageBase64,
         mimeType: payload.mimeType,
         nativePath: payload.nativePath,
         platform: getPlatform(),
         priorGuidance: payload.priorGuidance,
+        sampledFrame: payload.sampledFrame ?? true,
         sessionId: payload.sessionId,
         sourceHeight: payload.sourceHeight,
         sourceWidth: payload.sourceWidth,

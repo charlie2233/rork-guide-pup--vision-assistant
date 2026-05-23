@@ -37,6 +37,12 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - JS fallback camera capture failures are labeled as camera-frame failures and do not masquerade as backend/provider failures.
 - Settings exposes a direct VoiceOver-reachable Diagnostics link for sanitized launch evidence export, while preserving the hidden version-row shortcut.
 - The TestFlight checklist now links to a required no-screen smoke evidence packet with the exact voice sequence, diagnostics expectations, pass/fail criteria, and no-raw-media/no-secret evidence rules.
+- Navigation responses now keep command recognition open for STOP cut-through only when guidance is active and the spoken text does not contain `stop` or `pause`, reducing self-trigger risk from help/safe-stop copy.
+- The JS fallback camera preview is now a non-collapsed, non-accessible full-surface capture view instead of a 1x1 transparent view, improving fallback capture reliability while keeping it out of VoiceOver and touch handling.
+- The stop/pause self-trigger guard is centralized in `voiceCommands` and enforced by `VoiceAnnouncer`, so future callers cannot accidentally keep recognition open while speaking stop/pause copy.
+- JS fallback capture now waits for `onCameraReady`, records `onMountError`, and labels both direct fallback failures and native-to-JS retry failures as camera-frame failures instead of backend/provider failures.
+- App diagnostics now export sanitized sampled-frame evidence: app version, frame timestamp, sampled-frame boolean, has-image boolean, platform, native path, source size, request ID, provider/model, and structured analyze fields without raw image/base64 data.
+- The backend analyze request schema accepts `sampledFrame` and `hasImage` booleans so cloud request envelopes can preserve the same sanitized evidence fields.
 
 ## Voice command coverage
 
@@ -111,6 +117,10 @@ Results:
 - On the 2026-05-23 command-parser and evidence continuation, `check:voice-commands`, Expo typecheck, Expo lint, backend typecheck, script syntax check, `git diff --check`, and the Build iOS Apps plugin Release simulator build passed.
 - Preview/TestFlight preflight results remain intentionally blocked for the same launch reasons: unresolved Apple bundle/team/app/copyright inputs where applicable, stale staging/production smoke artifacts on `gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope fields, and missing Sentry env vars in this shell.
 - Current device recheck still shows `charlie的iPhone` as unavailable/offline to Xcode and absent from USB, so physical no-screen smoke remains unvalidated.
+- On the 2026-05-23 STOP cut-through and fallback-camera continuation, Expo typecheck, `check:voice-commands`, and `git diff --check` passed before the final validation pass.
+- Final validation for that continuation passed: Expo typecheck, Expo lint, backend typecheck, `check:voice-commands`, script syntax check, `git diff --check`, and Build iOS Apps plugin Release simulator build for `iPhone 16e`.
+- Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and warns on stale staging smoke/Sentry env vars. TestFlight preflight still fails on unresolved bundle/team/App Store/copyright inputs plus stale production smoke evidence.
+- `wrangler whoami` still reports `Not logged in`; local shell still lacks Cloudflare, OpenAI, Expo, Sentry, and Hugging Face env tokens.
 
 ## Backend and request IDs
 

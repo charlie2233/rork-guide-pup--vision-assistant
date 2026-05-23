@@ -18,6 +18,7 @@ import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { canAnswerWhatDoYouSee, parseConversationPrompt } from "@/src/lib/voiceConversation";
 import {
   buildVoiceHelpPrompt,
+  canKeepListeningForStopBargeInDuringSpeech,
   isRecentDuplicateTranscript,
   isStopBargeInCommand,
   normalizeVoiceTranscript,
@@ -100,6 +101,8 @@ export default function NavigationScreen() {
   const [navigationCorePath, setNavigationCorePath] = useState<GuidePupNavigationCoreExecutionPath>(
     GuidePupNavigationCore.isNativeAvailable() ? "native-core" : "js-fallback",
   );
+  const [fallbackCameraError, setFallbackCameraError] = useState<string | null>(null);
+  const [fallbackCameraReady, setFallbackCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const analyzingRef = useRef(false);
@@ -225,9 +228,12 @@ export default function NavigationScreen() {
     rateOverride?: number,
     options?: { keepListeningDuringSpeech?: boolean },
   ) => {
+    const keepListeningDuringSpeech =
+      (options?.keepListeningDuringSpeech ?? guidingRef.current)
+      && canKeepListeningForStopBargeInDuringSpeech(message);
     lastSpokenMessageRef.current = message;
     speak(message, {
-      keepListeningDuringSpeech: options?.keepListeningDuringSpeech,
+      keepListeningDuringSpeech,
       rate: rateOverride ?? (
         settings.speechRate === "slow"
           ? 0.7
@@ -251,6 +257,60 @@ export default function NavigationScreen() {
     });
   }, []);
 
+  const handleCameraFrameUnavailable = useCallback(async (
+    error: unknown,
+    errorMessage: string,
+    mode: "guidance" | "scene-query",
+  ) => {
+    if (mode === "guidance") {
+      const fallbackMessage = "Guide Pup could not capture a camera frame and switched to a safe stop. Check camera access and retry.";
+      setGuidanceStatus({
+        detail: fallbackMessage,
+        tone: "critical",
+        title: "Camera frame unavailable",
+      });
+      setDirection(null);
+      if (!isSpeakingRef.current) {
+        lastSpokenMessageRef.current = fallbackMessage;
+        speakCommandResponse(fallbackMessage);
+      }
+      void GuidePupNavigationCore.announce(fallbackMessage);
+      await refreshNavigationCoreState({
+        executionPath: "js-fallback",
+        lastError: errorMessage,
+        sessionActive: guidingRef.current,
+      });
+    } else if (!isSpeakingRef.current) {
+      speakCommandResponse("I could not capture a camera frame right now. Guidance settings are unchanged.");
+    }
+
+    void captureAppError(error, {
+      screen: "NavigationScreen",
+      stage: "captureFrame.jsFallback",
+    });
+  }, [refreshNavigationCoreState, speakCommandResponse]);
+
+  const handleFallbackCameraReady = useCallback(() => {
+    setFallbackCameraReady(true);
+    setFallbackCameraError(null);
+    void refreshNavigationCoreState({
+      executionPath: "js-fallback",
+      lastError: null,
+      sessionActive: guidingRef.current,
+    });
+  }, [refreshNavigationCoreState]);
+
+  const handleFallbackCameraMountError = useCallback((event: { message?: string }) => {
+    const errorMessage = event.message?.trim() || "Fallback camera preview could not start.";
+    setFallbackCameraReady(false);
+    setFallbackCameraError(errorMessage);
+    void refreshNavigationCoreState({
+      executionPath: "js-fallback",
+      lastError: errorMessage,
+      sessionActive: guidingRef.current,
+    });
+  }, [refreshNavigationCoreState]);
+
   useEffect(() => {
     guidingRef.current = isGuiding;
   }, [isGuiding]);
@@ -258,6 +318,11 @@ export default function NavigationScreen() {
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
   }, [isSpeaking]);
+
+  useEffect(() => {
+    setFallbackCameraReady(false);
+    setFallbackCameraError(null);
+  }, [navigationCorePath, permission?.granted]);
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -417,6 +482,10 @@ export default function NavigationScreen() {
       let frame: Awaited<ReturnType<typeof GuidePupNavigationCore.captureFrame>>;
 
       try {
+        if (navigationCorePath !== "native-core" && (!cameraRef.current || !fallbackCameraReady || fallbackCameraError)) {
+          throw new Error(fallbackCameraError || "Fallback camera preview is not ready.");
+        }
+
         frame = await GuidePupNavigationCore.captureFrame({
           cameraRef: cameraRef.current,
           compressionQuality: 0.4,
@@ -437,12 +506,28 @@ export default function NavigationScreen() {
             });
           }
 
-          frame = await GuidePupNavigationCore.captureFrame({
-            cameraRef: cameraRef.current,
-            compressionQuality: 0.4,
-            forceFallback: true,
-            maxDimension: 768,
-          });
+          if (!fallbackCameraReady || fallbackCameraError) {
+            await handleCameraFrameUnavailable(
+              new Error(fallbackCameraError || "Fallback camera preview is not ready."),
+              fallbackCameraError || "Fallback camera preview is not ready.",
+              mode,
+            );
+            return;
+          }
+
+          try {
+            frame = await GuidePupNavigationCore.captureFrame({
+              cameraRef: cameraRef.current,
+              compressionQuality: 0.4,
+              forceFallback: true,
+              maxDimension: 768,
+            });
+          } catch (fallbackCaptureError) {
+            const fallbackCaptureErrorMessage =
+              fallbackCaptureError instanceof Error ? fallbackCaptureError.message : "Guide Pup could not capture a fallback camera frame.";
+            await handleCameraFrameUnavailable(fallbackCaptureError, fallbackCaptureErrorMessage, mode);
+            return;
+          }
         } else if (navigationCorePath === "native-core") {
           if (mode === "guidance") {
             setNavigationCorePath("js-fallback");
@@ -456,31 +541,7 @@ export default function NavigationScreen() {
           }
           return;
         } else {
-          if (mode === "guidance") {
-            const fallbackMessage = "Guide Pup could not capture a camera frame and switched to a safe stop. Check camera access and retry.";
-            setGuidanceStatus({
-              detail: fallbackMessage,
-              tone: "critical",
-              title: "Camera frame unavailable",
-            });
-            setDirection(null);
-            if (!isSpeakingRef.current) {
-              lastSpokenMessageRef.current = fallbackMessage;
-              speakCommandResponse(fallbackMessage);
-            }
-            void GuidePupNavigationCore.announce(fallbackMessage);
-            await refreshNavigationCoreState({
-              executionPath: "js-fallback",
-              lastError: captureErrorMessage,
-              sessionActive: guidingRef.current,
-            });
-          } else if (!isSpeakingRef.current) {
-            speakCommandResponse("I could not capture a camera frame right now. Guidance settings are unchanged.");
-          }
-          void captureAppError(captureError, {
-            screen: "NavigationScreen",
-            stage: "captureFrame.jsFallback",
-          });
+          await handleCameraFrameUnavailable(captureError, captureErrorMessage, mode);
           return;
         }
       }
@@ -532,7 +593,7 @@ export default function NavigationScreen() {
           mode === "guidance" &&
           result.direction !== "stop" &&
           !result.obstacle &&
-          !/\b(stop|pause)\b/i.test(spokenGuidance);
+          canKeepListeningForStopBargeInDuringSpeech(spokenGuidance);
         lastSpokenMessageRef.current = spokenGuidance;
         speakCommandResponse(spokenGuidance, undefined, {
           keepListeningDuringSpeech: canListenForStopBargeIn,
@@ -636,6 +697,9 @@ export default function NavigationScreen() {
       analyzingRef.current = false;
     }
   }, [
+    fallbackCameraError,
+    fallbackCameraReady,
+    handleCameraFrameUnavailable,
     navigationCorePath,
     refreshNavigationCoreState,
     settings.descriptionMode,
@@ -929,8 +993,15 @@ export default function NavigationScreen() {
         <CameraView
           ref={cameraRef}
           style={styles.hiddenCamera}
+          active
           facing="back"
           enableTorch={false}
+          onCameraReady={handleFallbackCameraReady}
+          onMountError={handleFallbackCameraMountError}
+          pointerEvents="none"
+          accessible={false}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
         />
       ) : null}
 
@@ -1054,10 +1125,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   hiddenCamera: {
-    height: 1,
-    opacity: 0,
+    bottom: 0,
+    left: 0,
+    opacity: 0.01,
     position: "absolute",
-    width: 1,
+    right: 0,
+    top: 0,
+    zIndex: -1,
   },
   safeArea: {
     flex: 1,

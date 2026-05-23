@@ -406,9 +406,28 @@ export default function DiagnosticsScreen() {
             label="Prompt version"
             value={diagnostics.lastAnalyze?.promptVersion || "Not found in repo"}
           />
+          <KeyValue label="App version" value={diagnostics.lastAnalyze?.appVersion || "Not found in repo"} />
           <KeyValue label="Session ID" value={diagnostics.lastAnalyze?.sessionId || "Not found in repo"} />
           <KeyValue label="Frame ID" value={diagnostics.lastAnalyze?.frameId || "Not found in repo"} />
+          <KeyValue label="Frame time" value={formatTimestamp(diagnostics.lastAnalyze?.frameTimestampMs)} />
+          <KeyValue
+            label="Sampled frame"
+            value={
+              typeof diagnostics.lastAnalyze?.sampledFrame === "boolean"
+                ? String(diagnostics.lastAnalyze.sampledFrame)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue
+            label="Has image"
+            value={
+              typeof diagnostics.lastAnalyze?.hasImage === "boolean"
+                ? String(diagnostics.lastAnalyze.hasImage)
+                : "Not found in repo"
+            }
+          />
           <KeyValue label="Native path" value={diagnostics.lastAnalyze?.nativePath || "Not found in repo"} />
+          <KeyValue label="Platform" value={diagnostics.lastAnalyze?.platform || "Not found in repo"} />
           <KeyValue
             label="Source size"
             value={

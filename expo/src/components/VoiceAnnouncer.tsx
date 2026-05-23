@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 
 import { recordVoiceSnapshot } from "@/src/lib/diagnostics";
+import { canKeepListeningForStopBargeInDuringSpeech } from "@/src/lib/voiceCommands";
 import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 import { useSettings } from "@/src/providers/SettingsProvider";
 
@@ -38,8 +39,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
+      const keepListeningDuringSpeech = Boolean(speechOptions?.keepListeningDuringSpeech)
+        && canKeepListeningForStopBargeInDuringSpeech(combinedMessage);
       const shouldResumeListening = Boolean(voiceState?.listening);
-      const shouldPauseListening = shouldResumeListening && !speechOptions?.keepListeningDuringSpeech;
+      const shouldPauseListening = shouldResumeListening && !keepListeningDuringSpeech;
 
       if (shouldPauseListening) {
         const stoppedState = await GuidePupVoiceControl.stopCommandSession().catch(() => null);
@@ -53,7 +56,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       recordVoiceSnapshot({
         listening: shouldPauseListening ? false : voiceState?.listening,
         speaking: true,
-        speechListeningOverlapReason: speechOptions?.keepListeningDuringSpeech ? "stop-barge-in" : undefined,
+        speechListeningOverlapReason: keepListeningDuringSpeech ? "stop-barge-in" : undefined,
       });
 
       await GuidePupVoiceControl.speak(combinedMessage, {

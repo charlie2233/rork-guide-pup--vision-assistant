@@ -99,13 +99,16 @@ export interface DiagnosticsVoiceSnapshot {
 }
 
 export interface DiagnosticsAnalyzeEvent {
+  appVersion?: string;
   confidence?: number;
   detail?: "low" | "high";
   direction?: DiagnosticsAnalyzeDirection;
   error?: string;
   fallbackReason?: string;
   frameId?: string;
+  frameTimestampMs?: number;
   hazardLevel?: DiagnosticsHazardLevel;
+  hasImage?: boolean;
   id: string;
   latencyMs?: number;
   lighting?: DiagnosticsLighting;
@@ -113,11 +116,13 @@ export interface DiagnosticsAnalyzeEvent {
   model?: string;
   nativePath?: DiagnosticsNavigationExecutionPath;
   obstacle?: boolean;
+  platform?: string;
   priorGuidanceSummary?: string;
   requestId?: string;
   outcome: DiagnosticsAnalyzeOutcome;
   promptVersion?: string;
   provider?: string;
+  sampledFrame?: boolean;
   safeReason?: string;
   sceneDescription?: string;
   sessionId?: string;
@@ -468,20 +473,25 @@ export function recordAnalyzeEvent(
 ) {
   const event: DiagnosticsAnalyzeEvent = {
     ...input,
+    appVersion: sanitizeMessage(input.appVersion, 64),
     confidence: input.confidence,
     direction: input.direction,
     error: sanitizeMessage(input.error, 120),
     fallbackReason: sanitizeMessage(input.fallbackReason, 120),
     frameId: sanitizeMessage(input.frameId, 80),
+    frameTimestampMs: input.frameTimestampMs,
     id: input.id || createEventId(),
+    hasImage: input.hasImage,
     latencyMs: input.latencyMs,
     lighting: input.lighting,
     message: sanitizeMessage(input.message, 160),
     nativePath: input.nativePath,
+    platform: sanitizeMessage(input.platform, 16),
     priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     provider: sanitizeMessage(input.provider, 64),
     requestId: sanitizeMessage(input.requestId, 80),
+    sampledFrame: input.sampledFrame,
     safeReason: sanitizeMessage(input.safeReason, 120),
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     sessionId: sanitizeMessage(input.sessionId, 80),
@@ -651,9 +661,18 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Model: ${lastAnalyze.model || "Not found in repo"}`);
     lines.push(`- Request ID: ${lastAnalyze.requestId || "Not found in repo"}`);
     lines.push(`- Prompt version: ${lastAnalyze.promptVersion || "Not found in repo"}`);
+    lines.push(`- App version: ${lastAnalyze.appVersion || "Not found in repo"}`);
     lines.push(`- Session ID: ${lastAnalyze.sessionId || "Not found in repo"}`);
     lines.push(`- Frame ID: ${lastAnalyze.frameId || "Not found in repo"}`);
+    lines.push(`- Frame timestamp: ${
+      typeof lastAnalyze.frameTimestampMs === "number"
+        ? new Date(lastAnalyze.frameTimestampMs).toISOString()
+        : "Not found in repo"
+    }`);
+    lines.push(`- Sampled frame: ${typeof lastAnalyze.sampledFrame === "boolean" ? String(lastAnalyze.sampledFrame) : "Not found in repo"}`);
+    lines.push(`- Has image: ${typeof lastAnalyze.hasImage === "boolean" ? String(lastAnalyze.hasImage) : "Not found in repo"}`);
     lines.push(`- Native path: ${lastAnalyze.nativePath || "Not found in repo"}`);
+    lines.push(`- Platform: ${lastAnalyze.platform || "Not found in repo"}`);
     lines.push(`- Detail: ${lastAnalyze.detail || "Not found in repo"}`);
     lines.push(`- Source size: ${
       typeof lastAnalyze.sourceWidth === "number" && typeof lastAnalyze.sourceHeight === "number"
