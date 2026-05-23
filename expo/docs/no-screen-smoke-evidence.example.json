@@ -129,9 +129,15 @@
     }
   },
   "stopBargeIn": {
+    "armedDuringSpeech": true,
     "attemptedDuringSpeech": true,
+    "audioCueAttempted": true,
     "cutThrough": true,
+    "hapticAttempted": true,
     "lastSpeechListeningOverlapReason": "stop-barge-in",
+    "recognizedCommand": "stop-guidance-partial",
+    "recognizedDuringSpeech": true,
+    "recognizedPhase": "partial",
     "unexpectedSpeechListeningOverlapCount": 0,
     "speechListeningInvariant": "PASS",
     "staleSpeechAfterStop": false,

@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  findDisallowedKeys,
+  findSensitivePatterns,
+} from "./evidence-privacy.mjs";
 
 export const NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH = "release/no-screen-smoke.latest.json";
 
@@ -16,36 +20,6 @@ export const REQUIRED_NO_SCREEN_SEQUENCE = [
   "repeat",
   "what-do-you-see",
   "stop-guidance",
-];
-
-const DISALLOWED_KEYS = new Set([
-  "apiKey",
-  "authorization",
-  "audioBase64",
-  "credential",
-  "credentials",
-  "deviceId",
-  "fullDeviceIdentifier",
-  "base64",
-  "imageBase64",
-  "password",
-  "providerKey",
-  "rawAudio",
-  "rawImage",
-  "sessionToken",
-  "signedUrl",
-  "token",
-  "udid",
-  "uri",
-]);
-
-const SENSITIVE_PATTERNS = [
-  /data:(?:image|audio)\/[a-z0-9.+-]+;base64,/i,
-  /Bearer\s+[A-Za-z0-9._-]{20,}/,
-  /sk-[A-Za-z0-9_-]{20,}/,
-  /OPENAI_API_KEY\s*[:=]\s*[^,"\s]+/i,
-  /(?:X-Amz-Signature|X-Goog-Signature|Signature=|sig=)/i,
-  /[A-Za-z0-9+/]{200,}={0,2}/,
 ];
 
 function isNonEmptyString(value) {
@@ -87,37 +61,6 @@ function getPathValue(source, fieldPath) {
     }
     return value[segment];
   }, source);
-}
-
-function findDisallowedKeys(value, prefix = "") {
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) => findDisallowedKeys(item, `${prefix}[${index}]`));
-  }
-
-  const matches = [];
-  for (const [key, child] of Object.entries(value)) {
-    const fieldPath = prefix ? `${prefix}.${key}` : key;
-    if (DISALLOWED_KEYS.has(key)) {
-      matches.push(fieldPath);
-    }
-    matches.push(...findDisallowedKeys(child, fieldPath));
-  }
-  return matches;
-}
-
-function findSensitivePatterns(value) {
-  const serialized = JSON.stringify(value);
-  if (!serialized) {
-    return [];
-  }
-
-  return SENSITIVE_PATTERNS
-    .filter((pattern) => pattern.test(serialized))
-    .map((pattern) => pattern.toString());
 }
 
 export function readNoScreenSmokeEvidenceArtifact(projectDir, relativePath = NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH) {
@@ -235,8 +178,14 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("diagnostics.audioCues.successCount", (value) => Number.isInteger(value) && value > 0);
 
   requireField("stopBargeIn.attemptedDuringSpeech", isBooleanTrue);
+  requireField("stopBargeIn.armedDuringSpeech", isBooleanTrue);
+  requireField("stopBargeIn.audioCueAttempted", isBooleanTrue);
   requireField("stopBargeIn.cutThrough", isBooleanTrue);
+  requireField("stopBargeIn.hapticAttempted", isBooleanTrue);
   requireField("stopBargeIn.lastSpeechListeningOverlapReason", (value) => value === "stop-barge-in");
+  requireField("stopBargeIn.recognizedCommand", (value) => value === "stop-guidance-partial");
+  requireField("stopBargeIn.recognizedDuringSpeech", isBooleanTrue);
+  requireField("stopBargeIn.recognizedPhase", (value) => value === "partial");
   requireField("stopBargeIn.unexpectedSpeechListeningOverlapCount", (value) => value === 0);
   requireField("stopBargeIn.speechListeningInvariant", (value) => value === "PASS");
   requireField("stopBargeIn.staleSpeechAfterStop", isBooleanFalse);

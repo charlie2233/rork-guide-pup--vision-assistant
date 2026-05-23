@@ -177,3 +177,33 @@ No physical-device install/run or no-screen blind-user smoke was completed in th
 - Expo/TestFlight release is blocked: `EXPO_TOKEN` is missing and release inputs remain unresolved.
 - Sentry production health could not be queried because Sentry auth/org/project env vars are missing.
 - Hardware behavior for speech input, STOP cut-through, haptics, audio cues, VoiceOver, native camera capture, and interruption handling still needs real-device validation.
+
+## 2026-05-23 STOP cut-through evidence continuation
+
+The STOP barge-in proof was tightened so release evidence can no longer pass from the microphone simply staying open during speech. The app now records a separate STOP barge-in diagnostic snapshot when guidance speech is armed for STOP, and it only marks cut-through after a `stop-guidance-partial` command is recognized while speech is active, `stopVoice()` runs, guidance is paused, and the stop audio cue / haptic paths are attempted.
+
+Evidence schema changes:
+
+- `stopBargeIn.recognizedCommand` must be `stop-guidance-partial`.
+- `stopBargeIn.recognizedPhase` must be `partial`.
+- `stopBargeIn.recognizedDuringSpeech`, `audioCueAttempted`, `hapticAttempted`, `guidancePaused`, and `cutThrough` must be true.
+- Final-only STOP recognition is recorded for diagnostics but does not satisfy the no-screen barge-in proof.
+
+Validation for this continuation:
+
+```bash
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:voice-commands
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+```
+
+Results:
+
+- No-screen evidence tests passed, including explicit rejects for missing partial STOP proof, final-only STOP, and STOP after speech ended.
+- Static no-screen contract, voice-command contract, Expo typecheck, Expo lint, backend typecheck, backend privacy tests, and `git diff --check` passed.
+- Build iOS Apps plugin `build_sim` passed for Release `GuidePupVisionAssistant` on `iPhone 16e` with `SENTRY_DISABLE_AUTO_UPLOAD=true`, `CODE_SIGNING_ALLOWED=NO`, `ONLY_ACTIVE_ARCH=YES`, and `COMPILER_INDEX_STORE_ENABLE=NO`; warnings were limited to existing third-party/native warnings and bundle globals.
+- Physical iPhone readiness remains blocked: `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, the tunnel is disconnected, USB is absent, and the last connection was `2026-05-05T22:31:40.881Z`.

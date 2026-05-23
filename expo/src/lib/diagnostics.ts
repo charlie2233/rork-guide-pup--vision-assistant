@@ -20,6 +20,8 @@ export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
 export type DiagnosticsVoiceRecognitionPhase = "partial" | "final";
 export type DiagnosticsSpeechListeningOverlapReason = "stop-barge-in" | "unexpected";
+export type DiagnosticsStopBargeInRecognitionPhase = "partial" | "final";
+export type DiagnosticsStopBargeInRecognizedCommand = "stop-guidance-partial" | "stop-guidance";
 export type DiagnosticsHapticOutcome = "none" | "success" | "failure";
 export type DiagnosticsAudioCueOutcome = "none" | "success" | "failure";
 
@@ -135,6 +137,22 @@ export interface DiagnosticsVoiceSnapshot {
   updatedAt: number;
 }
 
+export interface DiagnosticsStopBargeInSnapshot {
+  armedAt?: number;
+  armedDuringSpeech: boolean;
+  attemptedDuringSpeech: boolean;
+  audioCueAttempted: boolean;
+  cutThrough: boolean;
+  guidancePaused: boolean;
+  hapticAttempted: boolean;
+  lastRecognizedAt?: number;
+  recognizedCommand?: DiagnosticsStopBargeInRecognizedCommand;
+  recognizedDuringSpeech: boolean;
+  recognizedPhase?: DiagnosticsStopBargeInRecognitionPhase;
+  staleSpeechAfterStop: boolean;
+  updatedAt: number;
+}
+
 export interface DiagnosticsAnalyzeEvent {
   appVersion?: string;
   captureHeuristics?: DiagnosticsCaptureHeuristics;
@@ -182,6 +200,7 @@ export interface DiagnosticsSnapshot {
   recentAnalyzeEvents: DiagnosticsAnalyzeEvent[];
   runtime: DiagnosticsRuntimeSnapshot;
   session: DiagnosticsSessionSnapshot;
+  stopBargeIn: DiagnosticsStopBargeInSnapshot;
   voice: DiagnosticsVoiceSnapshot;
 }
 
@@ -232,6 +251,17 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
   runtime: createInitialRuntime(),
   session: {
     status: "unknown",
+    updatedAt: Date.now(),
+  },
+  stopBargeIn: {
+    armedDuringSpeech: false,
+    attemptedDuringSpeech: false,
+    audioCueAttempted: false,
+    cutThrough: false,
+    guidancePaused: false,
+    hapticAttempted: false,
+    recognizedDuringSpeech: false,
+    staleSpeechAfterStop: false,
     updatedAt: Date.now(),
   },
   voice: {
@@ -594,6 +624,30 @@ export function recordVoiceSnapshot(input: {
   });
 }
 
+export function recordStopBargeInSnapshot(input: Partial<Omit<DiagnosticsStopBargeInSnapshot, "updatedAt">>) {
+  const now = Date.now();
+
+  updateSnapshot((current) => ({
+    ...current,
+    stopBargeIn: {
+      ...current.stopBargeIn,
+      armedAt: input.armedAt ?? current.stopBargeIn.armedAt,
+      armedDuringSpeech: input.armedDuringSpeech ?? current.stopBargeIn.armedDuringSpeech,
+      attemptedDuringSpeech: input.attemptedDuringSpeech ?? current.stopBargeIn.attemptedDuringSpeech,
+      audioCueAttempted: input.audioCueAttempted ?? current.stopBargeIn.audioCueAttempted,
+      cutThrough: input.cutThrough ?? current.stopBargeIn.cutThrough,
+      guidancePaused: input.guidancePaused ?? current.stopBargeIn.guidancePaused,
+      hapticAttempted: input.hapticAttempted ?? current.stopBargeIn.hapticAttempted,
+      lastRecognizedAt: input.lastRecognizedAt ?? current.stopBargeIn.lastRecognizedAt,
+      recognizedCommand: input.recognizedCommand ?? current.stopBargeIn.recognizedCommand,
+      recognizedDuringSpeech: input.recognizedDuringSpeech ?? current.stopBargeIn.recognizedDuringSpeech,
+      recognizedPhase: input.recognizedPhase ?? current.stopBargeIn.recognizedPhase,
+      staleSpeechAfterStop: input.staleSpeechAfterStop ?? current.stopBargeIn.staleSpeechAfterStop,
+      updatedAt: now,
+    },
+  }));
+}
+
 export function recordAnalyzeEvent(
   input: Omit<DiagnosticsAnalyzeEvent, "id" | "timestamp"> & {
     timestamp?: number;
@@ -793,7 +847,9 @@ function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
     },
     {
       ...baseStep("stop-guidance"),
-      stopCutThrough: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+      stopCutThrough: input.stopBargeIn.cutThrough
+        && input.stopBargeIn.recognizedDuringSpeech
+        && input.stopBargeIn.recognizedPhase === "partial",
     },
   ];
 }
@@ -813,6 +869,9 @@ export function buildNoScreenSmokeEvidenceDraft(
     hapticsEnabled: options.settings?.hapticsEnabled ?? true,
     speechRate: options.settings?.speechRate || "normal",
   };
+  const stopBargeInConfirmed = input.stopBargeIn.cutThrough
+    && input.stopBargeIn.recognizedDuringSpeech
+    && input.stopBargeIn.recognizedPhase === "partial";
 
   return {
     artifactVersion: 1,
@@ -887,7 +946,7 @@ export function buildNoScreenSmokeEvidenceDraft(
         && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
           ? "PASS"
           : "FAIL",
-      stopBargeInConfirmed: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+      stopBargeInConfirmed,
       unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
       voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
     },
@@ -931,16 +990,22 @@ export function buildNoScreenSmokeEvidenceDraft(
       restoredDefaultsAfterValidation: false,
     },
     stopBargeIn: {
-      attemptedDuringSpeech: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
-      cutThrough: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
-      guidancePaused: !input.navigationLoop.sessionActive,
+      armedDuringSpeech: input.stopBargeIn.armedDuringSpeech,
+      attemptedDuringSpeech: input.stopBargeIn.attemptedDuringSpeech,
+      audioCueAttempted: input.stopBargeIn.audioCueAttempted,
+      cutThrough: input.stopBargeIn.cutThrough,
+      guidancePaused: input.stopBargeIn.guidancePaused,
+      hapticAttempted: input.stopBargeIn.hapticAttempted,
       lastSpeechListeningOverlapReason: input.voice.lastSpeechListeningOverlapReason || "",
+      recognizedCommand: input.stopBargeIn.recognizedCommand || "",
+      recognizedDuringSpeech: input.stopBargeIn.recognizedDuringSpeech,
+      recognizedPhase: input.stopBargeIn.recognizedPhase || "",
       speechListeningInvariant:
         input.voice.unexpectedSpeechListeningOverlapCount === 0
         && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
           ? "PASS"
           : "FAIL",
-      staleSpeechAfterStop: input.voice.speaking,
+      staleSpeechAfterStop: input.stopBargeIn.staleSpeechAfterStop,
       unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
     },
     validationMode: "real-iphone-no-screen",

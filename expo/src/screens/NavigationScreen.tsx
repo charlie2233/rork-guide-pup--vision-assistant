@@ -38,6 +38,7 @@ import {
   classifyAnalyzeError,
   recordCameraPermissionSnapshot,
   recordNavigationLoopSnapshot,
+  recordStopBargeInSnapshot,
   recordVoiceSnapshot,
 } from "@/src/lib/diagnostics";
 import {
@@ -727,6 +728,8 @@ export default function NavigationScreen() {
 
       if (!isFinal) {
         if (isStopBargeInCommand(normalizedTranscript) && guidingRef.current && !recentlyHandledStop) {
+          const stopRecognizedDuringSpeech = isSpeakingRef.current;
+          const hapticAttempted = settings.hapticsEnabled;
           lastStopHandledAtRef.current = Date.now();
           lastHandledTranscriptRef.current = {
             normalizedTranscript,
@@ -734,11 +737,23 @@ export default function NavigationScreen() {
           };
           stopVoice();
           pauseGuidanceForVoice();
-          if (settings.hapticsEnabled) {
+          if (hapticAttempted) {
             void GuidePupNavigationCore.playHaptic("stop");
           }
           void GuidePupNavigationCore.playAudioCue("stop");
           speakCommandResponse("Guidance paused. Say start guidance to resume.");
+          recordStopBargeInSnapshot({
+            attemptedDuringSpeech: stopRecognizedDuringSpeech,
+            audioCueAttempted: true,
+            cutThrough: stopRecognizedDuringSpeech,
+            guidancePaused: true,
+            hapticAttempted,
+            lastRecognizedAt: nowMs,
+            recognizedCommand: "stop-guidance-partial",
+            recognizedDuringSpeech: stopRecognizedDuringSpeech,
+            recognizedPhase: "partial",
+            staleSpeechAfterStop: false,
+          });
           recordVoiceSnapshot({
             executionPath: GuidePupVoiceControl.isNativeModuleAvailable() ? "native-voice" : "js-fallback",
             lastRecognizedAt: nowMs,
@@ -803,20 +818,35 @@ export default function NavigationScreen() {
             void analyzeCurrentFrame();
           }
           return;
-        case "stop-guidance":
+        case "stop-guidance": {
           if (!guidingRef.current) {
             speakCommandResponse("Guidance is already paused.");
             return;
           }
+          const stopRecognizedDuringSpeech = isSpeakingRef.current;
+          const hapticAttempted = settings.hapticsEnabled;
           lastStopHandledAtRef.current = Date.now();
           stopVoice();
           pauseGuidanceForVoice();
-          if (settings.hapticsEnabled) {
+          if (hapticAttempted) {
             void GuidePupNavigationCore.playHaptic("stop");
           }
           void GuidePupNavigationCore.playAudioCue("stop");
           speakCommandResponse("Guidance paused. Say start guidance to resume.");
+          recordStopBargeInSnapshot({
+            attemptedDuringSpeech: stopRecognizedDuringSpeech,
+            audioCueAttempted: true,
+            cutThrough: stopRecognizedDuringSpeech,
+            guidancePaused: true,
+            hapticAttempted,
+            lastRecognizedAt: nowMs,
+            recognizedCommand: "stop-guidance",
+            recognizedDuringSpeech: stopRecognizedDuringSpeech,
+            recognizedPhase: "final",
+            staleSpeechAfterStop: false,
+          });
           return;
+        }
         case "repeat":
           speakCommandResponse(lastSpokenMessageRef.current);
           return;

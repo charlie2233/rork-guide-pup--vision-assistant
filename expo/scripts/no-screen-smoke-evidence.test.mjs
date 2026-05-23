@@ -186,10 +186,16 @@ function buildValidArtifact(overrides = {}) {
       restoredDefaultsAfterValidation: true,
     },
     stopBargeIn: {
+      armedDuringSpeech: true,
       attemptedDuringSpeech: true,
+      audioCueAttempted: true,
       cutThrough: true,
       guidancePaused: true,
+      hapticAttempted: true,
       lastSpeechListeningOverlapReason: "stop-barge-in",
+      recognizedCommand: "stop-guidance-partial",
+      recognizedDuringSpeech: true,
+      recognizedPhase: "partial",
       speechListeningInvariant: "PASS",
       staleSpeechAfterStop: false,
       unexpectedSpeechListeningOverlapCount: 0,
@@ -224,6 +230,42 @@ test("no-screen smoke evidence rejects missing STOP barge-in proof", () => {
 
   assert.equal(result.valid, false);
   assert.match(result.invalid.join(","), /sequence\.stop-guidance\.stopCutThrough/);
+});
+
+test("no-screen smoke evidence rejects cut-through without recognized partial STOP proof", () => {
+  const artifact = buildValidArtifact();
+  delete artifact.stopBargeIn.recognizedCommand;
+  delete artifact.stopBargeIn.recognizedPhase;
+  artifact.stopBargeIn.recognizedDuringSpeech = false;
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.missing.join(","), /stopBargeIn\.recognizedCommand/);
+  assert.match(result.missing.join(","), /stopBargeIn\.recognizedPhase/);
+  assert.match(result.invalid.join(","), /stopBargeIn\.recognizedDuringSpeech/);
+});
+
+test("no-screen smoke evidence rejects final-only STOP as barge-in proof", () => {
+  const artifact = buildValidArtifact();
+  artifact.stopBargeIn.recognizedCommand = "stop-guidance";
+  artifact.stopBargeIn.recognizedPhase = "final";
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /stopBargeIn\.recognizedCommand/);
+  assert.match(result.invalid.join(","), /stopBargeIn\.recognizedPhase/);
+});
+
+test("no-screen smoke evidence rejects STOP recognized after speech ended", () => {
+  const artifact = buildValidArtifact();
+  artifact.stopBargeIn.recognizedDuringSpeech = false;
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /stopBargeIn\.recognizedDuringSpeech/);
 });
 
 test("no-screen smoke evidence rejects raw media and full identifiers", () => {

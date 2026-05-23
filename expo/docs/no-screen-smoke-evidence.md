@@ -28,13 +28,14 @@ Run this exact sequence from a clean install or reset app state:
 6. Say `haptics off`, then `haptics on`: confirm spoken confirmation and haptic behavior.
 7. Say `repeat`: confirm the last spoken guidance or command response is repeated.
 8. Say `what do you see`: confirm the conversation lane answers from a sampled frame without changing guidance state or settings.
-9. While speech is playing, say `stop guidance`: confirm STOP cuts through, guidance pauses, and no stale backend/camera failure speech plays afterward.
+9. While speech is playing, say `stop guidance`: confirm STOP cuts through from partial recognition, guidance pauses, the stop audio cue and haptic path run, and no stale backend/camera failure speech plays afterward.
 
 ## Pass Criteria
 
 - Voice command lane only accepts the bounded command list; conversation prompts do not mutate guidance, settings, haptics, VoiceOver, or camera/session timing.
 - Diagnostics voice section shows `Speech/listening invariant: PASS` and `Unexpected speech/listening overlap count: 0`.
 - Intentional overlap, if present, is marked as `stop-barge-in`.
+- STOP barge-in evidence must show `recognizedCommand: stop-guidance-partial`, `recognizedPhase: partial`, and `recognizedDuringSpeech: true`; merely keeping the microphone open during speech is not enough.
 - Last analyze event includes request ID, provider, model, prompt version, structured-output fields including `walkability`, sampled-frame envelope, and native path: `native-core` or `js-fallback`.
 - Last analyze event includes sanitized frame summary and capture heuristics: image source, frame age, upload size, and resize flag. It must not include raw image data.
 - Haptics diagnostics show the last attempted haptic type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm physical feedback.

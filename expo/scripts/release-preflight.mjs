@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { validateEvidencePrivacy } from "./evidence-privacy.mjs";
 import {
   formatNoScreenSmokeEvidenceIssues,
   NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH,
@@ -205,6 +206,14 @@ function validateSmokeEvidenceShape(artifact) {
     invalid.push(`analyze.structuredOutputInvalidFields:${analyze.structuredOutputInvalidFields.join(",")}`);
   }
 
+  const privacy = validateEvidencePrivacy(artifact);
+  for (const fieldPath of privacy.disallowedKeys) {
+    invalid.push(`disallowedKey:${fieldPath}`);
+  }
+  for (const pattern of privacy.sensitivePatterns) {
+    invalid.push(`sensitivePattern:${pattern}`);
+  }
+
   return {
     invalid,
     missing,
@@ -349,6 +358,8 @@ if (requiresStoreBackedDistribution) {
   checkPlaceholder(launchInputs.ascAppId, "App Store Connect app ID");
   checkPlaceholder(launchInputs.copyright, "Store copyright");
   checkPlaceholder(launchInputs.productionApiBaseUrl, "Production API base URL");
+  checkPlaceholder(launchInputs.supportEmail, "Support email");
+  checkPlaceholder(launchInputs.emergencyDisclaimer, "Emergency / safety disclaimer");
 }
 
 if (isAllTracks) {
@@ -359,10 +370,19 @@ if (isAllTracks) {
 expect(Boolean(publicUrls.websiteUrl), "Website URL is unresolved.");
 expect(Boolean(publicUrls.privacyPolicyUrl), "Privacy policy URL is unresolved.");
 expect(Boolean(publicUrls.supportUrl), "Support URL is unresolved.");
+expect(Boolean(publicUrls.safetyUrl), "Safety URL is unresolved.");
+expect(fileExistsAbsolute(path.resolve(projectDir, "../site/privacy/index.html")), "Public privacy page is missing: site/privacy/index.html.");
+expect(fileExistsAbsolute(path.resolve(projectDir, "../site/support/index.html")), "Public support page is missing: site/support/index.html.");
+expect(fileExistsAbsolute(path.resolve(projectDir, "../site/safety/index.html")), "Public safety page is missing: site/safety/index.html.");
 
 compare(appJson.expo.name, launchInputs.appName, "App name");
 compare(appJson.expo.slug, launchInputs.slug, "App slug");
 compare(appJson.expo.scheme, launchInputs.scheme, "App scheme");
+
+const iosInfoPlist = appJson.expo.ios?.infoPlist || {};
+expect(isNonEmptyString(iosInfoPlist.NSCameraUsageDescription), "iOS camera permission copy is missing.");
+expect(isNonEmptyString(iosInfoPlist.NSMicrophoneUsageDescription), "iOS microphone permission copy is missing.");
+expect(isNonEmptyString(iosInfoPlist.NSSpeechRecognitionUsageDescription), "iOS speech-recognition permission copy is missing.");
 
 const previewProfile = easJson.build?.preview;
 const testflightProfile = easJson.build?.testflight;
@@ -386,6 +406,10 @@ if (previewProfile && requiresPreview) {
   compare(previewProfile.env?.EXPO_PUBLIC_RELEASE_TRACK, "internal-preview", "preview release track");
   compare(previewProfile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", "preview experimental tabs flag");
   compare(previewProfile.env?.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, "preview website URL");
+  compare(previewProfile.env?.EXPO_PUBLIC_PRIVACY_POLICY_URL, publicUrls.privacyPolicyUrl, "preview privacy policy URL");
+  compare(previewProfile.env?.EXPO_PUBLIC_SUPPORT_URL, publicUrls.supportUrl, "preview support URL");
+  compare(previewProfile.env?.EXPO_PUBLIC_SUPPORT_EMAIL, launchInputs.supportEmail, "preview support email");
+  compare(previewProfile.env?.EXPO_PUBLIC_EMERGENCY_DISCLAIMER, launchInputs.emergencyDisclaimer, "preview emergency disclaimer");
 }
 
 if (requiresPreview) {
@@ -419,6 +443,10 @@ for (const [profileName, profile] of Object.entries({ testflight: testflightProf
   compare(profile.env?.EXPO_PUBLIC_API_BASE_URL, launchInputs.productionApiBaseUrl, `${profileName} API base URL`);
   compare(profile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", `${profileName} experimental tabs flag`);
   compare(profile.env?.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, `${profileName} website URL`);
+  compare(profile.env?.EXPO_PUBLIC_PRIVACY_POLICY_URL, publicUrls.privacyPolicyUrl, `${profileName} privacy policy URL`);
+  compare(profile.env?.EXPO_PUBLIC_SUPPORT_URL, publicUrls.supportUrl, `${profileName} support URL`);
+  compare(profile.env?.EXPO_PUBLIC_SUPPORT_EMAIL, launchInputs.supportEmail, `${profileName} support email`);
+  compare(profile.env?.EXPO_PUBLIC_EMERGENCY_DISCLAIMER, launchInputs.emergencyDisclaimer, `${profileName} emergency disclaimer`);
   expect(
     profile.ios?.image === launchInputs.storeBuildImage,
     `${profileName} iOS image must be "${launchInputs.storeBuildImage}" for App Store uploads.`,

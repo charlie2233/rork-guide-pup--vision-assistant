@@ -223,6 +223,55 @@ Expected failures in the submission review:
 
 Browser, Computer Use, ChatGPT Atlas, and App Store Connect were not used to submit because submission would be invalid before these gates pass. WhatsApp escalation was not needed for this review because the blockers are explicit release/auth/device inputs, not an ambiguous login screen.
 
+## Public config gate continuation
+
+The release preflight now fails TestFlight/store when final public support and safety inputs are still placeholders, not only when Apple identifiers are unresolved.
+
+Changes:
+
+- EAS preview, TestFlight, and store profiles now carry `EXPO_PUBLIC_PRIVACY_POLICY_URL`, `EXPO_PUBLIC_SUPPORT_URL`, `EXPO_PUBLIC_SUPPORT_EMAIL`, and `EXPO_PUBLIC_EMERGENCY_DISCLAIMER` from the launch-input contract.
+- `release-preflight` now verifies public privacy, support, and safety pages exist in `site/`.
+- `release-preflight` now checks iOS camera, microphone, and speech-recognition permission strings are present.
+- TestFlight/store preflight now hard-block on unresolved `TODO_SUPPORT_EMAIL` and `TODO_EMERGENCY_SAFETY_DISCLAIMER`, so builds cannot silently ship fallback support/safety copy when final public launch copy is still missing.
+
+Validation:
+
+```bash
+node --check expo/scripts/release-preflight.mjs
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+```
+
+Results:
+
+- Script syntax check passed.
+- Preview preflight still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER` and stale staging smoke warnings.
+- TestFlight/store preflight now also fail on unresolved support email and emergency/safety disclaimer, alongside the existing Apple identifier, smoke, no-screen evidence, and Sentry blockers.
+
+## Smoke evidence privacy continuation
+
+Release preflight now also scans provider-backed smoke artifacts for raw media and secret-bearing fields before they can support TestFlight/store readiness. The shared privacy scanner flags provider keys, bearer tokens, session tokens, raw image/audio fields, signed URLs, data-URL media, and long base64-like payloads.
+
+Validation:
+
+```bash
+npm --prefix expo run test:smoke-evidence
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+npx wrangler whoami
+npx eas-cli@latest whoami
+```
+
+Results:
+
+- Smoke evidence privacy tests passed for valid provider-backed artifacts and reject raw image payload fields, bootstrap session tokens, raw media snippets, bearer tokens, and signed URLs.
+- Preview preflight failed as expected on unresolved bundle identifier and stale staging smoke evidence.
+- TestFlight/store preflights failed as expected on unresolved Apple/support/safety inputs, stale production smoke evidence, and missing real-iPhone no-screen artifact.
+- Cloudflare CLI reports `Not logged in`; EAS CLI reports `Not logged in`; local env presence checks show `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`, `EXPO_TOKEN`, Sentry envs, and Hugging Face env tokens are missing.
+- App Store Connect / TestFlight submission was not attempted because the preflight gates prove the build is not submission-ready.
+
 ## Remaining P0 blockers
 
 - Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.

@@ -20,7 +20,11 @@
         "EXPO_PUBLIC_APP_ENV": "preview",
         "EXPO_PUBLIC_RELEASE_TRACK": "internal-preview",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
-        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev",
+        "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://guidepup-site.pages.dev/privacy",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://guidepup-site.pages.dev/support",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "TODO_SUPPORT_EMAIL",
+        "EXPO_PUBLIC_EMERGENCY_DISCLAIMER": "TODO_EMERGENCY_SAFETY_DISCLAIMER"
       }
     },
     "testflight": {
@@ -35,7 +39,11 @@
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "testflight",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
-        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev",
+        "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://guidepup-site.pages.dev/privacy",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://guidepup-site.pages.dev/support",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "TODO_SUPPORT_EMAIL",
+        "EXPO_PUBLIC_EMERGENCY_DISCLAIMER": "TODO_EMERGENCY_SAFETY_DISCLAIMER"
       }
     },
     "store": {
@@ -50,7 +58,11 @@
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_RELEASE_TRACK": "app-store",
         "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS": "false",
-        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev"
+        "EXPO_PUBLIC_WEBSITE_URL": "https://guidepup-site.pages.dev",
+        "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://guidepup-site.pages.dev/privacy",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://guidepup-site.pages.dev/support",
+        "EXPO_PUBLIC_SUPPORT_EMAIL": "TODO_SUPPORT_EMAIL",
+        "EXPO_PUBLIC_EMERGENCY_DISCLAIMER": "TODO_EMERGENCY_SAFETY_DISCLAIMER"
       }
     }
   },

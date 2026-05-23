@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
 
-import { recordVoiceSnapshot } from "@/src/lib/diagnostics";
+import { recordStopBargeInSnapshot, recordVoiceSnapshot } from "@/src/lib/diagnostics";
 import { canKeepListeningForStopBargeInDuringSpeech } from "@/src/lib/voiceCommands";
 import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 import { useSettings } from "@/src/providers/SettingsProvider";
@@ -58,6 +58,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         speaking: true,
         speechListeningOverlapReason: keepListeningDuringSpeech ? "stop-barge-in" : undefined,
       });
+      if (keepListeningDuringSpeech) {
+        recordStopBargeInSnapshot({
+          armedAt: Date.now(),
+          armedDuringSpeech: true,
+        });
+      }
 
       await GuidePupVoiceControl.speak(combinedMessage, {
         interrupt: true,
