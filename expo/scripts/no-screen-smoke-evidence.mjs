@@ -72,6 +72,20 @@ function settingsSnapshotsEqual(left, right) {
   );
 }
 
+function requireMatchingFields(source, fieldPaths, invalid) {
+  const values = fieldPaths.map((fieldPath) => [fieldPath, getPathValue(source, fieldPath)]);
+  if (values.some(([, value]) => value === undefined || value === null || value === "")) {
+    return;
+  }
+
+  const firstValue = values[0][1];
+  for (const [fieldPath, value] of values.slice(1)) {
+    if (value !== firstValue) {
+      invalid.push(`${fieldPath}.matches.${values[0][0]}`);
+    }
+  }
+}
+
 function isCompleteSettingsSnapshot(value) {
   return (
     value &&
@@ -157,6 +171,15 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   if (options.expectedBundleIdentifier && artifact.device?.bundleIdentifier !== options.expectedBundleIdentifier) {
     invalid.push(`device.bundleIdentifier:${artifact.device?.bundleIdentifier ?? "missing"}`);
   }
+  if (options.expectedBundleIdentifier && artifact.provenance?.bundleIdentifier !== options.expectedBundleIdentifier) {
+    invalid.push(`provenance.bundleIdentifier:${artifact.provenance?.bundleIdentifier ?? "missing"}`);
+  }
+
+  requireMatchingFields(artifact, ["device.appVersion", "provenance.appVersion"], invalid);
+  requireMatchingFields(artifact, ["device.buildNumber", "provenance.buildNumber"], invalid);
+  requireMatchingFields(artifact, ["device.buildProfile", "provenance.buildProfile"], invalid);
+  requireMatchingFields(artifact, ["device.bundleIdentifier", "provenance.bundleIdentifier"], invalid);
+  requireMatchingFields(artifact, ["backendSmoke.environment", "provenance.apiEnvironment", "provenance.apiBaseUrlLabel"], invalid);
 
   requireField("deviceReadiness.result", (value) => value === "ready");
   requireField("deviceReadiness.paired", isBooleanTrue);

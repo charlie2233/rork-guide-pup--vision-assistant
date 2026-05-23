@@ -11,6 +11,7 @@ The Diagnostics screen can export a sanitized `Export no-screen JSON draft` payl
 - Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
 - Backend environment and API base URL label: staging, production, or local.
 - Device state: paired/trusted, Developer Mode enabled, network path confirmed, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
+- Structured device-readiness JSON from `npm --prefix expo run check:ios-device -- --json`. This output is suffix-only and can be copied into the evidence packet when it reports `deviceReadiness.result: "ready"`.
 - Diagnostics export from the app after the run.
 - Sanitized no-screen JSON draft from the Diagnostics screen after the run.
 - Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.
@@ -53,11 +54,12 @@ Run this exact sequence from a clean install or reset app state:
 Before TestFlight or App Store submission, run:
 
 ```bash
+npm --prefix expo run check:ios-device -- --json
 npm --prefix expo run check:no-screen-evidence
 npm --prefix expo run release:preflight:testflight
 ```
 
-`check:no-screen-evidence` validates `expo/release/no-screen-smoke.latest.json` and fails if the artifact is missing, if any required step lacks no-screen voice proof, if STOP barge-in is not confirmed, if haptics/audio cues/VoiceOver/settings/native camera/JS fallback are not proven, or if raw media, secrets, signed URLs, or full device identifiers are present.
+The iPhone readiness JSON is launch evidence only when it reports `ready`; blocked JSON is useful for debugging but must not be copied as passing evidence. `check:no-screen-evidence` validates `expo/release/no-screen-smoke.latest.json` and fails if the artifact is missing, if provenance/device/backend fields do not agree, if any required step lacks no-screen voice proof, if STOP barge-in is not confirmed, if haptics/audio cues/VoiceOver/settings/native camera/JS fallback are not proven, or if raw media, secrets, signed URLs, or full device identifiers are present.
 
 ## Fail Criteria
 

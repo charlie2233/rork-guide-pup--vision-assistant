@@ -45,6 +45,7 @@ Results:
 
 - Added `npm --prefix expo run check:no-screen-smoke` to make the no-screen voice contract executable without pretending to validate hardware.
 - Added `npm --prefix expo run check:ios-device` to summarize paired/trusted/CoreDevice/USB/Xcode destination status with sanitized identifiers before a real-device no-screen smoke.
+- Added `npm --prefix expo run check:ios-device -- --json` so the same readiness check can emit suffix-only structured `deviceReadiness` evidence without copying full device IDs.
 - Added `npm --prefix expo run check:no-screen-evidence` and a TestFlight/store preflight gate for `expo/release/no-screen-smoke.latest.json`, so release submission cannot treat static checks or simulator builds as real no-screen hardware proof.
 - The contract check asserts deterministic command coverage for start, stop, repeat, help/status, speech rate, detail, and haptics.
 - It asserts `what do you see` remains in the conversation lane and outside deterministic command parsing.
@@ -66,6 +67,7 @@ npm --prefix expo run check:no-screen-smoke
 npm --prefix expo run test:no-screen-evidence
 npm --prefix expo run check:no-screen-evidence
 npm --prefix expo run check:ios-device
+npm --prefix expo run check:ios-device -- --json
 npm --prefix backend/guidepup-api run typecheck
 node --check expo/scripts/check-ios-device-ready.mjs
 node --check expo/scripts/check-no-screen-smoke-contract.mjs
@@ -82,6 +84,7 @@ Results:
 - The no-screen evidence schema tests passed for a valid artifact, missing voice-help proof, help mutating settings, missing STOP barge-in proof, final-only STOP proof, STOP after speech ended, and raw-media/full-identifier rejection.
 - Build iOS Apps plugin Release simulator build passed for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, simulator `iPhone 16e`, with `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 - `npm --prefix expo run check:ios-device` intentionally exits blocked in the current hardware state: paired and Developer Mode enabled, but DDI services are unavailable, the tunnel is unavailable, no USB iPhone is present, and Xcode does not list the phone as a runnable destination.
+- `npm --prefix expo run check:ios-device -- --json` intentionally exits blocked in the same state and emits only suffix identifiers plus structured readiness fields; it is useful for debugging but not launch-passing evidence until `deviceReadiness.result` is `ready`.
 - `npm --prefix expo run check:no-screen-evidence` intentionally exits blocked until a real `expo/release/no-screen-smoke.latest.json` artifact is produced from hardware validation.
 
 ## Not Yet Proven
@@ -97,9 +100,10 @@ Results:
 1. Keep the iPhone unlocked, on the same LAN, with Developer Mode enabled.
 2. Prefer USB for the first install/run if available; otherwise fix the CoreDevice tunnel until `devicectl device info details` returns complete information.
 3. Install a signed internal build once bundle ID, Apple Team ID, App Store Connect app ID, and Expo auth are configured.
-4. Run the exact no-screen sequence, export diagnostics afterward, use the Diagnostics screen no-screen JSON draft, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
-5. Run `npm --prefix expo run check:no-screen-evidence` before TestFlight preflight.
-6. Attach only sanitized diagnostics and backend smoke request IDs; do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
+4. Run `npm --prefix expo run check:ios-device -- --json` and copy the readiness fields only when it reports `deviceReadiness.result: "ready"`.
+5. Run the exact no-screen sequence, export diagnostics afterward, use the Diagnostics screen no-screen JSON draft, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
+6. Run `npm --prefix expo run check:no-screen-evidence` before TestFlight preflight.
+7. Attach only sanitized diagnostics and backend smoke request IDs; do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
 
 ## Evidence gate tightening on 2026-05-23
 
@@ -110,6 +114,7 @@ Read-only blind-validation review found that the no-screen evidence schema could
 - `settingsPersistence.afterRestore` differs from `before`.
 - `cameraPaths.nativeCore.captureHeuristics` or `cameraPaths.jsFallback.captureHeuristics` is missing `imageSource`, `frameAgeMs`, `resizedForUpload`, `uploadedHeight`, or `uploadedWidth`.
 - Capture heuristic uploaded dimensions do not match the corresponding camera path uploaded dimensions.
+- Device, provenance, and backend environment fields disagree on app version, build number, build profile, bundle identifier, or API environment.
 
 Validation:
 
@@ -122,10 +127,10 @@ npm --prefix expo run check:ios-device
 
 Results:
 
-- `test:no-screen-evidence` passed 13 schema tests, including new negative tests for fake settings persistence, missing camera heuristics, and mismatched upload dimensions.
+- `test:no-screen-evidence` passed 15 schema tests, including negative tests for fake settings persistence, mismatched provenance/device/backend identity, missing camera heuristics, mismatched upload dimensions, and raw media/full identifiers.
 - `check:no-screen-smoke` passed the static voice/no-screen contract.
 - `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` does not exist.
-- `check:ios-device` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled and visible over USB/Xcode destination discovery, but CoreDevice reports it unavailable, DDI services are unavailable, and the tunnel is disconnected.
+- `check:ios-device -- --json` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled and visible to `xctrace`, but CoreDevice reports it unavailable, DDI services are unavailable, USB is absent, and Xcode does not list it as a runnable destination.
 
 This remains schema/static validation only; it does not replace a real iPhone no-screen run.
 

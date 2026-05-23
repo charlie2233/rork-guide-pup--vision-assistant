@@ -6,6 +6,7 @@ const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const targetName = process.env.GUIDEPUP_IOS_DEVICE_NAME || "charlie的iPhone";
 const workspacePath = path.join(projectDir, "ios/GuidePupVisionAssistant.xcworkspace");
 const scheme = "GuidePupVisionAssistant";
+const outputJson = process.argv.includes("--json");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -18,6 +19,36 @@ function run(command, args, options = {}) {
     output: `${result.stdout || ""}${result.stderr || ""}`,
     status: result.status,
   };
+}
+
+function exitWithBlockedJson(reason, details = {}) {
+  console.log(JSON.stringify({
+    device: {
+      hardwareUdidSuffix: "not-found",
+      identifierSuffix: "not-found",
+      name: "not-found",
+    },
+    deviceReadiness: {
+      ddiServicesAvailable: false,
+      developerModeEnabled: false,
+      lastConnectionDate: "not-found",
+      paired: false,
+      result: "blocked",
+      trusted: false,
+      tunnelConnected: false,
+      usbOrSameLan: false,
+      xcodeDestinationAvailable: false,
+      xctraceVisible: false,
+    },
+    privacy: {
+      containsFullDeviceIds: false,
+      identifierHandling: "suffix-only",
+    },
+    reason,
+    targetName,
+    ...details,
+  }, null, 2));
+  process.exit(1);
 }
 
 function parseDevicectlJson(output) {
@@ -82,6 +113,11 @@ function findTargetDevice(devicectlPayload) {
 
 const devicectl = run("xcrun", ["devicectl", "list", "devices", "--json-output", "-"]);
 if (!devicectl.ok) {
+  if (outputJson) {
+    exitWithBlockedJson("devicectl failed", {
+      status: devicectl.status ?? "unknown",
+    });
+  }
   console.log("Guide Pup iPhone readiness check");
   console.log("");
   console.log(`Result: BLOCKED`);
@@ -93,6 +129,11 @@ let device;
 try {
   device = findTargetDevice(parseDevicectlJson(devicectl.output));
 } catch (error) {
+  if (outputJson) {
+    exitWithBlockedJson("devicectl JSON parse failed", {
+      parseError: error instanceof Error ? error.message : "unknown parse error",
+    });
+  }
   console.log("Guide Pup iPhone readiness check");
   console.log("");
   console.log("Result: BLOCKED");
@@ -147,6 +188,36 @@ const ready =
   ddiServicesAvailable === true &&
   xctraceVisible &&
   xcodeDestinationVisible;
+
+const readinessReport = {
+  device: {
+    hardwareUdidSuffix: udidSuffix,
+    identifierSuffix,
+    name: deviceName,
+  },
+  deviceReadiness: {
+    ddiServicesAvailable: ddiServicesAvailable === true,
+    developerModeEnabled: developerMode === "enabled",
+    lastConnectionDate,
+    paired: pairingState === "paired",
+    result: ready ? "ready" : "blocked",
+    trusted: pairingState === "paired",
+    tunnelConnected: tunnelState === "connected",
+    usbOrSameLan: usbPresent || tunnelState === "connected",
+    xcodeDestinationAvailable: xcodeDestinationVisible,
+    xctraceVisible,
+  },
+  privacy: {
+    containsFullDeviceIds: false,
+    identifierHandling: "suffix-only",
+  },
+  targetName,
+};
+
+if (outputJson) {
+  console.log(JSON.stringify(readinessReport, null, 2));
+  process.exit(ready ? 0 : 1);
+}
 
 console.log("Guide Pup iPhone readiness check");
 console.log("");

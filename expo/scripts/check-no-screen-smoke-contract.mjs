@@ -244,6 +244,8 @@ mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry c
 const noScreenEvidenceSchema = read("../scripts/no-screen-smoke-evidence.mjs");
 mustInclude(noScreenEvidenceSchema, "REQUIRED_NO_SCREEN_SEQUENCE", "No-screen evidence required sequence");
 mustInclude(noScreenEvidenceSchema, "sequence.order", "No-screen evidence required sequence order");
+mustInclude(noScreenEvidenceSchema, "requireMatchingFields", "No-screen evidence provenance/device consistency");
+mustInclude(noScreenEvidenceSchema, "provenance.bundleIdentifier", "No-screen evidence bundle provenance consistency");
 mustInclude(noScreenEvidenceSchema, "helpIncludesBoundedCommandList", "No-screen evidence voice help proof");
 mustInclude(noScreenEvidenceSchema, "sequence.help.settingsChanged", "No-screen evidence help non-mutation proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidence STOP cut-through proof");
@@ -259,5 +261,10 @@ mustInclude(noScreenEvidenceSchema, "nativeCore", "No-screen evidence native-cor
 mustInclude(noScreenEvidenceSchema, "jsFallback", "No-screen evidence JS fallback camera proof");
 mustInclude(noScreenEvidenceSchema, "backendSmoke.walkability", "No-screen evidence walkability proof");
 mustInclude(noScreenEvidenceSchema, "privacy.containsRawMedia", "No-screen evidence privacy proof");
+
+const iosDeviceReady = read("../scripts/check-ios-device-ready.mjs");
+mustInclude(iosDeviceReady, "--json", "iOS device readiness JSON output");
+mustInclude(iosDeviceReady, "identifierHandling", "iOS device readiness suffix-only evidence");
+mustInclude(iosDeviceReady, "containsFullDeviceIds", "iOS device readiness privacy guard");
 
 console.log("No-screen smoke contract passed. Real iPhone validation is still required for hardware proof.");

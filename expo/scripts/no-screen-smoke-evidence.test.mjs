@@ -344,6 +344,22 @@ test("no-screen smoke evidence rejects settings that are not restored after vali
   assert.match(result.invalid.join(","), /settingsPersistence\.afterRestore\.matchesBefore/);
 });
 
+test("no-screen smoke evidence rejects mismatched provenance and device identity", () => {
+  const artifact = buildValidArtifact();
+  artifact.provenance.bundleIdentifier = "com.example.other";
+  artifact.provenance.buildProfile = "store";
+  artifact.provenance.apiEnvironment = "staging";
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact, {
+    expectedBundleIdentifier: "com.example.guidepup",
+  });
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /provenance\.bundleIdentifier:com\.example\.other/);
+  assert.match(result.invalid.join(","), /provenance\.buildProfile\.matches\.device\.buildProfile/);
+  assert.match(result.invalid.join(","), /provenance\.apiEnvironment\.matches\.backendSmoke\.environment/);
+});
+
 test("no-screen smoke evidence rejects incomplete camera capture heuristics", () => {
   const artifact = buildValidArtifact();
   artifact.cameraPaths.nativeCore.captureHeuristics = {};

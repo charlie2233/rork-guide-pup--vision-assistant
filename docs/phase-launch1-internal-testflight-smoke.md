@@ -531,3 +531,42 @@ Results:
 - Preview preflight passed with warnings only for stale staging smoke contract and missing real-iPhone no-screen evidence.
 - TestFlight/store preflight failed as intended on unresolved store metadata, App Review contact fields, stale production smoke contract, and missing no-screen evidence.
 - Expo typecheck, lint, no-screen smoke contract, no-screen evidence tests, smoke-evidence privacy tests, GuideAI conversation-memory test, backend typecheck, backend privacy tests, backend staging dry-run, and Build iOS Apps Release simulator build all passed.
+
+## Structured iPhone readiness evidence on 2026-05-23
+
+The real-iPhone evidence path now has a structured readiness output instead of relying only on human-readable terminal text.
+
+Changes:
+
+- Added `npm --prefix expo run check:ios-device -- --json` so the CoreDevice/Xcode readiness script emits suffix-only JSON for the `deviceReadiness` section of `expo/release/no-screen-smoke.latest.json`.
+- Preserved the text output for humans and kept the command exit code strict: blocked hardware still exits nonzero.
+- Added a privacy marker to the JSON output: `identifierHandling: "suffix-only"` and `containsFullDeviceIds: false`.
+- Tightened no-screen evidence validation so device/provenance/backend identity fields must agree. A no-screen packet can no longer mix one bundle ID, build profile, or API environment in `device`, `provenance`, and `backendSmoke`.
+
+Validation:
+
+```bash
+node --check expo/scripts/check-ios-device-ready.mjs
+node --check expo/scripts/no-screen-smoke-evidence.mjs
+node --check expo/scripts/no-screen-smoke-evidence.test.mjs
+node --check expo/scripts/check-no-screen-smoke-contract.mjs
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:ios-device -- --json
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run test:smoke-evidence
+npm --prefix backend/guidepup-api run typecheck
+Build iOS Apps plugin build_sim, Release, iPhone 16e, Sentry upload disabled for simulator
+```
+
+Results:
+
+- No-screen evidence tests passed: 15 tests, including the new mismatched provenance/device/backend identity rejection.
+- `check:ios-device -- --json` still exits blocked and emits only suffix identifiers for `charlie的iPhone`; the current blocker is unchanged: CoreDevice unavailable, DDI services unavailable, USB/same-LAN execution unavailable, and no Xcode runnable destination.
+- `check:no-screen-evidence` still exits blocked because the real hardware evidence artifact is missing.
+- Preview preflight passes with warnings; TestFlight preflight fails on the intended unresolved store metadata, stale production launch-smoke contract, and missing no-screen evidence.
+- Expo typecheck, lint, smoke-evidence privacy tests, backend typecheck, `git diff --check`, and Build iOS Apps Release simulator build passed.

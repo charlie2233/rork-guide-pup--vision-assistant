@@ -301,6 +301,14 @@ Last updated: 2026-05-23
 - This removes missing Sentry env as a launch blocker for the current disabled-diagnostics launch path; production smoke, real-iPhone no-screen evidence, EAS auth, Apple provisioning, and final store metadata still block submission.
 - Latest validation passed: release-preflight syntax, no-screen contract, preview preflight expected-pass, TestFlight/store preflight expected-fail, Expo typecheck, Expo lint, no-screen evidence tests, smoke-evidence privacy tests, GuideAI conversation-memory test, backend typecheck, backend privacy tests, backend staging dry-run, and Build iOS Apps Release simulator build on `iPhone 16e`.
 
+## Actions taken on 2026-05-23 structured iPhone evidence gate
+
+- Added `npm --prefix expo run check:ios-device -- --json` output so the same CoreDevice readiness check can feed suffix-only structured `deviceReadiness` evidence into the real-iPhone no-screen artifact.
+- The JSON output includes only device identifier suffixes and explicitly declares `privacy.identifierHandling: "suffix-only"` / `containsFullDeviceIds: false`.
+- Tightened `expo/release/no-screen-smoke.latest.json` validation so device, provenance, and backend fields must agree on app version, build number, build profile, bundle identifier, and API environment.
+- Current JSON readiness still exits blocked: `charlie的iPhone` is paired with Developer Mode enabled and visible to `xctrace`, but DDI services are unavailable, USB/same-LAN execution is unavailable, and Xcode does not list it as a runnable destination.
+- Latest validation passed: `check-ios-device-ready.mjs` syntax, no-screen evidence syntax/tests, no-screen static contract, preview preflight expected-pass, TestFlight preflight expected-fail, Expo typecheck, Expo lint, smoke-evidence privacy tests, backend typecheck, `git diff --check`, and Build iOS Apps Release simulator build on `iPhone 16e`.
+
 ## Actions taken on 2026-05-23 no-screen evidence and scene-query gate
 
 - Tightened `expo/release/no-screen-smoke.latest.json` validation so the required no-screen sequence must appear in the exact P0 order, not merely as an unordered set of passed steps.
