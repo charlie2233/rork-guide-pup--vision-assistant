@@ -8,6 +8,10 @@ Charlie still needs to set these values before launch execution can finish:
 - Final support email
 - Copyright holder string for App Store metadata
 - Final emergency / safety disclaimer copy
+- App Review contact first name
+- App Review contact last name
+- App Review contact email, as a valid email address
+- App Review contact phone number, including country code, for example `+1 555 010 1234`
 - Optional production Sentry DSN
 - `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`
 - Expo/EAS login or `EXPO_TOKEN`
@@ -21,6 +25,8 @@ Charlie still needs to set these values before launch execution can finish:
   - Evidence: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
 - App Store Connect App ID: `6756947790`
   - Evidence: App Store Connect app list and App Information page for `Guide Pup: Vision Assistant`.
+- App Review sign-in requirement: `false`
+  - Evidence: Guide Pup has no account sign-in flow; `expo/store.config.js` now sets `apple.review.demoRequired` from `expo/release/launch-inputs.js`.
 
 ## Backend by environment
 

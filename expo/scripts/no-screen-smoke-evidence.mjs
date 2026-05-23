@@ -282,6 +282,14 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   if (!sequence) {
     missing.push("sequence");
   } else {
+    const sequenceOrder = sequence.map((step) => step?.id);
+    if (
+      sequenceOrder.length !== REQUIRED_NO_SCREEN_SEQUENCE.length ||
+      sequenceOrder.some((stepId, index) => stepId !== REQUIRED_NO_SCREEN_SEQUENCE[index])
+    ) {
+      invalid.push("sequence.order");
+    }
+
     const stepsById = new Map(sequence.map((step) => [step?.id, step]));
     for (const stepId of REQUIRED_NO_SCREEN_SEQUENCE) {
       const step = stepsById.get(stepId);

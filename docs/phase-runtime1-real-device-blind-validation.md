@@ -153,3 +153,16 @@ Result: `BLOCKED`.
 - `xcodebuild` destination visibility: `no`.
 
 The current blocker has moved back to device connectivity/CoreDevice availability before the signed build/provisioning blocker can be retested. No hardware no-screen evidence was produced.
+
+## Evidence-order gate on 2026-05-23
+
+The no-screen evidence validator now rejects artifacts that include all required voice steps but record them out of order. The P0 sequence is not just a checklist; it must prove the exact cold prompt -> start guidance -> status -> help -> speech/detail/haptics settings -> repeat -> what do you see -> stop guidance path.
+
+Validation:
+
+```bash
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-smoke
+```
+
+Results: passed with 14 no-screen evidence tests, including the new wrong-order rejection. This is still schema/static validation only. It prevents weak evidence packets but does not replace a real iPhone no-screen run.

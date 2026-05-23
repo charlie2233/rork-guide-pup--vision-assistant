@@ -9,6 +9,14 @@ module.exports = {
     version: appConfig.expo.version,
     copyright: launchInputs.copyright,
     categories: ["NAVIGATION", "UTILITIES"],
+    review: {
+      firstName: launchInputs.appReviewFirstName,
+      lastName: launchInputs.appReviewLastName,
+      email: launchInputs.appReviewEmail,
+      phone: launchInputs.appReviewPhone,
+      demoRequired: launchInputs.appReviewDemoRequired,
+      notes: launchInputs.appReviewNotes,
+    },
     info: {
       "en-US": {
         title: launchInputs.appName,

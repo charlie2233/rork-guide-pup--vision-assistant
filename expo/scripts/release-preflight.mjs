@@ -39,6 +39,7 @@ const iosPrivacyManifestPath = path.resolve(projectDir, "ios/GuidePupVisionAssis
 
 const errors = [];
 const warnings = [];
+let cachedMetadataConfig;
 
 function expect(condition, message) {
   if (!condition) {
@@ -94,8 +95,33 @@ function readTextFileAbsolute(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+function loadMetadataConfig() {
+  if (cachedMetadataConfig !== undefined) {
+    return cachedMetadataConfig;
+  }
+
+  const metadataPath = path.join(projectDir, launchInputs.metadataPath);
+  try {
+    const metadata = require(metadataPath);
+    cachedMetadataConfig = typeof metadata === "function" ? metadata() : metadata;
+  } catch (error) {
+    errors.push(`Metadata config could not be loaded from ${launchInputs.metadataPath}: ${error instanceof Error ? error.message : String(error)}.`);
+    cachedMetadataConfig = null;
+  }
+
+  return cachedMetadataConfig;
+}
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isLikelyEmail(value) {
+  return isNonEmptyString(value) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function isLikelyInternationalPhone(value) {
+  return isNonEmptyString(value) && /^\+[0-9][0-9\s().-]{6,}$/.test(value);
 }
 
 function modelMatchesExpected(value, expected) {
@@ -382,6 +408,45 @@ function validatePublicSupportPageForStore() {
   );
 }
 
+function validateAppReviewMetadataForStore() {
+  const metadataConfig = loadMetadataConfig();
+  if (!metadataConfig || typeof metadataConfig !== "object" || Array.isArray(metadataConfig)) {
+    expect(false, `Metadata config must export an object for App Store review metadata: ${launchInputs.metadataPath}.`);
+    return;
+  }
+
+  const review = metadataConfig.apple?.review;
+  expect(Boolean(review), "App Store metadata must include apple.review App Review Information.");
+  if (!review) {
+    return;
+  }
+
+  compare(review.firstName, launchInputs.appReviewFirstName, "App Review first name");
+  compare(review.lastName, launchInputs.appReviewLastName, "App Review last name");
+  compare(review.email, launchInputs.appReviewEmail, "App Review email");
+  compare(review.phone, launchInputs.appReviewPhone, "App Review phone");
+  if (!isPlaceholderValue(review.email)) {
+    expect(isLikelyEmail(review.email), "App Review email must be a valid email address.");
+  }
+  if (!isPlaceholderValue(review.phone)) {
+    expect(isLikelyInternationalPhone(review.phone), "App Review phone must include a country code, for example +1 555 010 1234.");
+  }
+  compare(review.demoRequired, false, "App Review sign-in required / demoRequired");
+  compare(launchInputs.appReviewDemoRequired, false, "Launch input appReviewDemoRequired");
+  expect(
+    !("demoUsername" in review) && !("demoPassword" in review),
+    "App Review metadata must not include demo credentials because Guide Pup has no account sign-in flow.",
+  );
+  expect(
+    isNonEmptyString(review.notes) && review.notes === launchInputs.appReviewNotes,
+    "App Review notes must come from launch-inputs.js.",
+  );
+  expect(
+    typeof review.notes === "string" && review.notes.toLowerCase().includes("does not require account sign-in"),
+    "App Review notes must clearly state that Guide Pup does not require account sign-in.",
+  );
+}
+
 function hasBooleanFalseForKey(xml, keyName) {
   const keyIndex = xml.indexOf(`<key>${keyName}</key>`);
   if (keyIndex === -1) {
@@ -500,6 +565,10 @@ if (requiresStoreBackedDistribution) {
   checkPlaceholder(launchInputs.productionApiBaseUrl, "Production API base URL");
   checkPlaceholder(launchInputs.supportEmail, "Support email");
   checkPlaceholder(launchInputs.emergencyDisclaimer, "Emergency / safety disclaimer");
+  checkPlaceholder(launchInputs.appReviewFirstName, "App Review first name");
+  checkPlaceholder(launchInputs.appReviewLastName, "App Review last name");
+  checkPlaceholder(launchInputs.appReviewEmail, "App Review email");
+  checkPlaceholder(launchInputs.appReviewPhone, "App Review phone");
 }
 
 if (isAllTracks) {
@@ -517,6 +586,7 @@ expect(fileExistsAbsolute(path.resolve(projectDir, "../site/safety/index.html"))
 
 if (requiresStoreBackedDistribution) {
   validatePublicSupportPageForStore();
+  validateAppReviewMetadataForStore();
 }
 
 compare(appJson.expo.name, launchInputs.appName, "App name");

@@ -283,7 +283,7 @@ export default function NavigationScreen() {
         lastError: errorMessage,
         sessionActive: guidingRef.current,
       });
-    } else if (!isSpeakingRef.current) {
+    } else {
       speakCommandResponse("I could not capture a camera frame right now. Guidance settings are unchanged.");
     }
 
@@ -546,7 +546,7 @@ export default function NavigationScreen() {
               lastError: captureErrorMessage,
               sessionActive: true,
             });
-          } else if (!isSpeakingRef.current) {
+          } else {
             speakCommandResponse("I could not describe the scene right now. Guidance settings are unchanged.");
           }
           return;
@@ -599,9 +599,10 @@ export default function NavigationScreen() {
         ? result.sceneDescription || result.message
         : result.message;
 
-      if (spokenGuidance && !isSpeakingRef.current) {
+      if (spokenGuidance && (mode === "scene-query" || !isSpeakingRef.current)) {
         const canListenForStopBargeIn =
-          mode === "guidance" &&
+          (mode === "guidance" || mode === "scene-query") &&
+          guidingRef.current &&
           result.direction !== "stop" &&
           !result.obstacle &&
           canKeepListeningForStopBargeInDuringSpeech(spokenGuidance);
@@ -660,10 +661,8 @@ export default function NavigationScreen() {
       }
 
       if (mode === "scene-query") {
-        if (!isSpeakingRef.current) {
-          lastSpokenMessageRef.current = sceneQueryFallback;
-          speakCommandResponse(sceneQueryFallback);
-        }
+        lastSpokenMessageRef.current = sceneQueryFallback;
+        speakCommandResponse(sceneQueryFallback);
         void captureAppError(error, {
           screen: "NavigationScreen",
           stage: "analyzeCurrentFrame.sceneQuery",

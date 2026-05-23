@@ -109,6 +109,8 @@ const navigationScreen = read("../src/screens/NavigationScreen.tsx");
 mustInclude(navigationScreen, "conversationIntent === \"what-do-you-see\"", "Conversation-lane route");
 mustInclude(navigationScreen, "Guidance settings are unchanged", "Scene-query non-mutation confirmation");
 mustInclude(navigationScreen, "updateNavigationMemory: mode === \"guidance\"", "Conversation lane does not mutate navigation smoothing memory");
+mustInclude(navigationScreen, "mode === \"scene-query\" || !isSpeakingRef.current", "Scene-query final answer can interrupt the analyzing prompt");
+mustInclude(navigationScreen, "mode === \"guidance\" || mode === \"scene-query\"", "Scene-query answer can keep STOP barge-in armed");
 mustInclude(navigationScreen, "isStopBargeInCommand(normalizedTranscript)", "Partial STOP cut-through");
 mustInclude(navigationScreen, "lastStopHandledAtRef", "STOP stale-speech guard");
 mustInclude(navigationScreen, "recordStopBargeInSnapshot", "STOP cut-through diagnostic recorder");
@@ -220,6 +222,9 @@ mustInclude(releasePreflight, "requireAnalyzeField(\"walkability\"", "Walkabilit
 mustInclude(releasePreflight, "requireLaunchContractField(\"valid\"", "Launch contract preflight gate");
 mustInclude(releasePreflight, "validatePublicSupportPageForStore", "Public support page App Store preflight gate");
 mustInclude(releasePreflight, "Public support page must include the configured support email", "Public support contact preflight gate");
+mustInclude(releasePreflight, "validateAppReviewMetadataForStore", "App Review metadata preflight gate");
+mustInclude(releasePreflight, "App Review sign-in required / demoRequired", "App Review sign-in required preflight gate");
+mustInclude(releasePreflight, "does not require account sign-in", "App Review no-login notes preflight gate");
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
 mustInclude(liveSmoke, "launchContract", "Live smoke records launch contract");
@@ -236,6 +241,7 @@ mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry c
 
 const noScreenEvidenceSchema = read("../scripts/no-screen-smoke-evidence.mjs");
 mustInclude(noScreenEvidenceSchema, "REQUIRED_NO_SCREEN_SEQUENCE", "No-screen evidence required sequence");
+mustInclude(noScreenEvidenceSchema, "sequence.order", "No-screen evidence required sequence order");
 mustInclude(noScreenEvidenceSchema, "helpIncludesBoundedCommandList", "No-screen evidence voice help proof");
 mustInclude(noScreenEvidenceSchema, "sequence.help.settingsChanged", "No-screen evidence help non-mutation proof");
 mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidence STOP cut-through proof");

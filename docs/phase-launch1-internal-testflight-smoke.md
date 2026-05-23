@@ -469,3 +469,23 @@ Results:
 - iPhone readiness check returned `BLOCKED`: `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode does not list it as a runnable destination.
 - Staging Worker dry-run passed and shows the local bundle would use `OPENAI_MODEL=gpt-5.5`, `PROMPT_VERSION=2026-05-22.v1`, and bounded runtime controls.
 - Wrangler and EAS both returned `Not logged in`; no deploy, build upload, TestFlight submission, or App Store submission was attempted.
+
+## App Review metadata gate on 2026-05-23
+
+Expo EAS Metadata supports App Review Information through `apple.review`, including `demoRequired`. The launch metadata now sets `demoRequired: false` from `expo/release/launch-inputs.js` because Guide Pup has no account sign-in flow, and release preflight rejects demo credentials for this shipping path. The gate also requires App Review contact name, email, and phone before TestFlight/store metadata can be considered ready.
+
+This does not change App Store Connect directly; EAS and Apple authentication are still required before metadata can be pushed. It prevents the local release source of truth from silently preserving the previously observed App Store Connect mismatch where sign-in was checked despite no account flow.
+
+Validation:
+
+```bash
+node --check expo/scripts/release-preflight.mjs
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+```
+
+Results:
+
+- Preview preflight still passes with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env.
+- TestFlight/store preflight now also fail on unresolved App Review contact first name, last name, email, and phone. This is intentional until the release owner supplies final App Review contact values.

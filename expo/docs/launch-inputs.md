@@ -23,6 +23,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - iOS bundle identifier: `app.rork.guide-pup-vision-assist`
 - Apple Team ID: `SBSJ3MX9GZ`
 - App Store Connect App ID: `6756947790`
+- App Review sign-in required / demo account required: `false`
 
 ## Unresolved Inputs
 
@@ -34,6 +35,10 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Support email: `TODO_SUPPORT_EMAIL`
 - Copyright holder: `TODO_COPYRIGHT_HOLDER`
 - Emergency / safety disclaimer final copy: `TODO_EMERGENCY_SAFETY_DISCLAIMER`
+- App Review first name: `TODO_APP_REVIEW_FIRST_NAME`
+- App Review last name: `TODO_APP_REVIEW_LAST_NAME`
+- App Review email: `TODO_APP_REVIEW_EMAIL`
+- App Review phone with country code: `TODO_APP_REVIEW_PHONE`
 - Preview API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
 - Staging bootstrap secret: configured as a Wrangler secret on `2026-04-01`
 - Staging provider key: `OPENAI_API_KEY` still missing
@@ -47,6 +52,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - App Store Connect App Information was verified in the side-panel browser on 2026-05-23 and shows bundle ID `app.rork.guide-pup-vision-assist`, SKU `EX1766553072106`, Apple ID `6756947790`, and primary category `Navigation`.
 - iOS bundle identifier `app.rork.guide-pup-vision-assist` is present in `expo/app.config.ts`, `expo/app.json`, the native Xcode project `PRODUCT_BUNDLE_IDENTIFIER`, and the iOS URL schemes in `Info.plist`.
 - Apple Team ID `SBSJ3MX9GZ` is present in the local Apple Development signing identity `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- App Review sign-in required must be false because Guide Pup uses anonymous device/session bootstrap and has no account flow. `store.config.js` now carries `apple.review.demoRequired: false`, and release preflight rejects demo credentials for this shipping path.
 
 ## Final Values To Mirror
 
@@ -62,6 +68,7 @@ When Charlie fills these in, mirror the same value in the matching release docs 
 - Support email
 - Copyright holder
 - Emergency / safety disclaimer copy
+- App Review contact name, email, and phone
 - Production API base URL
 - Production Sentry DSN
 

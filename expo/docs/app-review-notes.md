@@ -15,6 +15,8 @@ Guide Pup is an assistive navigation app for blind and low-vision users. It anal
 - The backend may route requests through third-party AI providers.
 - Raw voice audio is not intentionally logged or sent to model providers by Guide Pup.
 - The app uses anonymous device/session bootstrap instead of user sign-in.
+- App Review sign-in / demo account required should be set to `No` / `false`.
+- Do not provide demo credentials; there is no account flow in the shipping app.
 - The app is designed to fail safe and return `STOP` when the scene is unclear, the backend is unavailable, or the response is invalid.
 - Crash reporting may be enabled through Sentry in release builds, but the SDK is configured to avoid collecting default PII.
 
@@ -39,3 +41,4 @@ Guide Pup is assistive guidance, not guaranteed hazard detection or emergency re
 - Marketing URL: `https://guidepup-site.pages.dev`
 - Safety disclaimer: see [Launch Inputs](./launch-inputs.md)
 - If a reviewer asks for email support, use the support email in [Launch Inputs](./launch-inputs.md).
+- App Review contact name, email, and phone must be filled in [Launch Inputs](./launch-inputs.md) before metadata push or submission.

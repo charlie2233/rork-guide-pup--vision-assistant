@@ -258,6 +258,21 @@ test("no-screen smoke evidence rejects help changing settings", () => {
   assert.match(result.invalid.join(","), /sequence\.help\.settingsChanged/);
 });
 
+test("no-screen smoke evidence rejects voice sequence in the wrong order", () => {
+  const artifact = buildValidArtifact();
+  const whatDoYouSeeIndex = artifact.sequence.findIndex((step) => step.id === "what-do-you-see");
+  const stopGuidanceIndex = artifact.sequence.findIndex((step) => step.id === "stop-guidance");
+  [artifact.sequence[whatDoYouSeeIndex], artifact.sequence[stopGuidanceIndex]] = [
+    artifact.sequence[stopGuidanceIndex],
+    artifact.sequence[whatDoYouSeeIndex],
+  ];
+
+  const result = validateNoScreenSmokeEvidenceArtifact(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /sequence\.order/);
+});
+
 test("no-screen smoke evidence rejects cut-through without recognized partial STOP proof", () => {
   const artifact = buildValidArtifact();
   delete artifact.stopBargeIn.recognizedCommand;

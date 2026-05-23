@@ -243,3 +243,19 @@ npm --prefix expo run typecheck
 ```
 
 Results: passed locally. Build iOS Apps `build_sim` also passed for the Release simulator target after the native speech renewal change; physical iPhone smoke remains blocked by CoreDevice availability.
+
+## 2026-05-23 scene-query STOP continuation
+
+The `what do you see` path now treats the final scene answer as a voice-first response that can interrupt the interim "Analyzing the scene now" prompt. While guidance is active, safe scene-query answers can keep STOP barge-in armed just like safe guidance speech, so the required `what do you see` -> `stop guidance` smoke leg does not depend on waiting for a scene answer to finish.
+
+Validation:
+
+```bash
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:voice-commands
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+```
+
+Results: passed locally. Build iOS Apps `build_sim` also passed for the Release simulator target after this continuation.

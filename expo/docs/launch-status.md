@@ -284,6 +284,20 @@ Last updated: 2026-05-23
 - Re-ran `npx --yes wrangler whoami` and `npx --yes eas-cli whoami`; both returned `Not logged in`.
 - Submission remains blocked. Main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Sentry env, and final store metadata are not complete.
 
+## Actions taken on 2026-05-23 App Review metadata gate
+
+- Added App Review metadata to `expo/store.config.js` so EAS Metadata can push `apple.review.demoRequired: false` when auth is available.
+- Added release-preflight checks for App Review contact first name, last name, email, phone, no demo credentials, and review notes that explicitly state Guide Pup does not require account sign-in.
+- This addresses the local source-of-truth gap for the App Store Connect sign-in-required checkbox, but EAS/App Store auth is still required before the dashboard can be updated.
+- Preview preflight still passes with warnings. TestFlight/store preflight now also fail on unresolved App Review contact fields, as intended.
+
+## Actions taken on 2026-05-23 no-screen evidence and scene-query gate
+
+- Tightened `expo/release/no-screen-smoke.latest.json` validation so the required no-screen sequence must appear in the exact P0 order, not merely as an unordered set of passed steps.
+- Updated Navigation scene-query speech so the final `what do you see` answer can interrupt the interim analyzing prompt and keep STOP barge-in armed when guidance is active and the spoken answer is safe for recognition overlap.
+- Added static contract coverage for both behaviors.
+- Validation passed: no-screen smoke contract, voice command contract, no-screen evidence tests, Expo typecheck, Expo lint, release preflight preview expected-pass, release preflight TestFlight expected-fail, and Build iOS Apps Release simulator build.
+
 ## Actions taken on 2026-05-22
 
 - Hardened the Xcode simulator validation path after the Build iOS Apps plugin reached the native build but failed in Sentry upload before app validation.
