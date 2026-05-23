@@ -395,7 +395,7 @@ Results:
 - TestFlight/store still fail on copyright holder, support email, emergency/safety disclaimer, public support page readiness, stale production smoke contract, and missing real-iPhone no-screen evidence.
 - Typecheck, lint, voice-command contract, no-screen smoke contract, no-screen evidence tests, smoke-evidence tests, backend typecheck, backend privacy/runtime/prompt tests, and `git diff --check` passed.
 - `check:no-screen-evidence` still fails because `release/no-screen-smoke.latest.json` has not been produced by a real iPhone run.
-- `check:ios-device` still reports `charlie的iPhone` unavailable to CoreDevice, DDI unavailable, tunnel disconnected, and no USB iPhone present.
+- Before the wired/unlocked retry, `check:ios-device` still reported `charlie的iPhone` unavailable to CoreDevice. After the retry below, the device-readiness signal moved to Xcode/account provisioning rather than hardware connectivity.
 - EAS remains blocked with `Not logged in`; Wrangler remains blocked with `Not logged in`.
 - Build iOS Apps plugin `build_sim` timed out at the tool limit; the underlying process was allowed to finish, then the explicit shell fallback Release simulator build passed with third-party warnings and `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 
@@ -419,4 +419,9 @@ Results:
 - `xcodebuild` reached the device but failed before build/install because the developer disk image could not be mounted.
 - `devicectl device info ddiServices` returned `kAMDMobileImageMounterDeviceLocked: The device is locked`.
 - `devicectl device info details` shows Developer Mode enabled, pairing state paired, tunnel connected, and `ddiServicesAvailable: false`.
-- Next action is user-side: unlock the iPhone, keep it awake, and accept any Trust/Developer prompts before retrying the device build/no-screen smoke.
+- After unlocking, `devicectl device info ddiServices` succeeded and reports the developer disk image `isUsable: true`.
+- `npm --prefix expo run check:ios-device` now returns `READY`; it reports DDI services available, tunnel connected, USB present, xctrace visibility, and Xcode destination visibility. The readiness script was adjusted to accept that execution-ready signal when JSON-only `devicectl` output leaves table state `unknown`.
+- The second signed Release device build now reaches signing/provisioning and fails with:
+  - `No Accounts: Add a new account in Accounts settings.`
+  - `No profiles for 'app.rork.guide-pup-vision-assist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'app.rork.guide-pup-vision-assist'.`
+- Next action is Apple-side: sign Xcode in with an account that can provision team `SBSJ3MX9GZ`, create/download an iOS App Development profile for `app.rork.guide-pup-vision-assist`, then rerun the device build/install and no-screen smoke.

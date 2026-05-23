@@ -130,9 +130,18 @@ const lastConnectionDate = device?.connectionProperties?.lastConnectionDate || "
 const usbPresent = /iphone|apple mobile/i.test(usb.output);
 const xctraceVisible = deviceName !== "not-found" && xctrace.output.includes(deviceName);
 const xcodeDestinationVisible = deviceName !== "not-found" && destinations.output.includes(deviceName);
+const executionVisible =
+  ddiServicesAvailable === true &&
+  tunnelState === "connected" &&
+  xctraceVisible &&
+  xcodeDestinationVisible;
+const stateSupportsExecution =
+  state === "available" ||
+  state === "connected" ||
+  (state === "unknown" && executionVisible);
 
 const ready =
-  state === "available" &&
+  stateSupportsExecution &&
   pairingState === "paired" &&
   developerMode === "enabled" &&
   ddiServicesAvailable === true &&

@@ -224,6 +224,19 @@ Last updated: 2026-05-23
 - The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
 - The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `app.rork.guide-pup-vision-assist`.
 
+## Actions taken on 2026-05-23
+
+- Confirmed App Store Connect identifiers from the logged-in app record:
+  - Apple/App Store Connect app ID: `6756947790`
+  - Bundle ID: `app.rork.guide-pup-vision-assist`
+  - SKU: `EX1766553072106`
+  - Category: `Navigation`
+- Retried the real-device path after `charlie的iPhone` was wired and unlocked:
+  - `xcrun devicectl device info ddiServices --device E5786BB6-0095-5509-8B85-110C0B5CE6D3` now succeeds and reports the developer disk image `isUsable: true`.
+  - `npm --prefix expo run check:ios-device` now returns `READY`; it reports DDI services available, tunnel connected, USB present, xctrace visibility, and Xcode destination visibility. The script now treats that JSON-only execution-ready state as ready even when the devicectl table state is `unknown`.
+  - The signed Release device build now stops at Apple account/provisioning, not device connectivity: Xcode reports no configured accounts and no iOS App Development provisioning profile for `app.rork.guide-pup-vision-assist`.
+- Real iPhone no-screen validation is still not complete because the app has not been installed/launched on the physical device.
+
 ## Actions taken on 2026-05-22
 
 - Re-ran live staging smoke:
