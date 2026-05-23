@@ -35,6 +35,7 @@ export interface AnalyzeFrameOptions {
   frameId?: string;
   priorGuidance?: string;
   sessionId?: string;
+  updateNavigationMemory?: boolean;
 }
 
 type PreparedFrame = {

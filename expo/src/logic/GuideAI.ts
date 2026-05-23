@@ -331,10 +331,13 @@ export const GuideAI = {
     options?: AnalyzeFrameOptions,
   ): Promise<GuideAIDirection | null> {
     const result = await VisionAI.analyzeFrame(frame, options);
+    const updateNavigationMemory = options?.updateNavigationMemory !== false;
 
     if (!result.success || !result.analysis) {
-      lastDirection = "stop";
-      lastConfidence = 0;
+      if (updateNavigationMemory) {
+        lastDirection = "stop";
+        lastConfidence = 0;
+      }
       return {
         direction: "stop",
         fallbackReason: "analysis-unavailable",
@@ -350,11 +353,16 @@ export const GuideAI = {
 
     const analysis = result.analysis;
 
-    const smoothed = smoothDirection(
-      analysis.direction,
-      analysis.confidence,
-      analysis.obstacle
-    );
+    const smoothed = updateNavigationMemory
+      ? smoothDirection(
+          analysis.direction,
+          analysis.confidence,
+          analysis.obstacle
+        )
+      : {
+          confidence: analysis.confidence,
+          direction: analysis.direction,
+        };
 
     const message =
       smoothed.direction === analysis.direction

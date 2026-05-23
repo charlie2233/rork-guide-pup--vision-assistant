@@ -125,6 +125,6 @@ Results:
 - `test:no-screen-evidence` passed 13 schema tests, including new negative tests for fake settings persistence, missing camera heuristics, and mismatched upload dimensions.
 - `check:no-screen-smoke` passed the static voice/no-screen contract.
 - `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` does not exist.
-- `check:ios-device` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, DDI services are unavailable, the tunnel is disconnected, and no USB iPhone is present.
+- `check:ios-device` still reports `BLOCKED`; `charlie的iPhone` is paired with Developer Mode enabled and visible over USB/Xcode destination discovery, but CoreDevice reports it unavailable, DDI services are unavailable, and the tunnel is disconnected.
 
 This remains schema/static validation only; it does not replace a real iPhone no-screen run.

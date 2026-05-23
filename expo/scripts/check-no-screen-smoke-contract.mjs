@@ -103,6 +103,7 @@ for (const transcript of [
 const navigationScreen = read("../src/screens/NavigationScreen.tsx");
 mustInclude(navigationScreen, "conversationIntent === \"what-do-you-see\"", "Conversation-lane route");
 mustInclude(navigationScreen, "Guidance settings are unchanged", "Scene-query non-mutation confirmation");
+mustInclude(navigationScreen, "updateNavigationMemory: mode === \"guidance\"", "Conversation lane does not mutate navigation smoothing memory");
 mustInclude(navigationScreen, "isStopBargeInCommand(normalizedTranscript)", "Partial STOP cut-through");
 mustInclude(navigationScreen, "lastStopHandledAtRef", "STOP stale-speech guard");
 mustInclude(navigationScreen, "recordStopBargeInSnapshot", "STOP cut-through diagnostic recorder");
@@ -114,6 +115,11 @@ mustInclude(navigationScreen, "playAudioCue(\"error\")", "Error audio cue path")
 mustInclude(navigationScreen, "updateSpeechRate", "Spoken speech-rate setting path");
 mustInclude(navigationScreen, "updateDescriptionMode", "Spoken detail-level setting path");
 mustInclude(navigationScreen, "updateHapticsEnabled", "Spoken haptics setting path");
+
+const homeScreen = read("../src/screens/HomeScreen.tsx");
+mustInclude(homeScreen, "isMountedRef", "Home voice-session mounted guard");
+mustInclude(homeScreen, "resumeListening: false", "Home start-guidance does not restart Home listening after navigation");
+mustInclude(homeScreen, "if (isMountedRef.current)", "Home stale voice-session restart guard");
 
 const settingsProvider = read("../src/providers/SettingsProvider.tsx");
 mustInclude(settingsProvider, "AsyncStorage.getItem", "Settings persistence load");

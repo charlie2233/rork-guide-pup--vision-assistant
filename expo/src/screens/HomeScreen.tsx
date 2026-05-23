@@ -29,6 +29,7 @@ export default function HomeScreen() {
   } = useSettings();
   const lastHandledTranscriptRef = useRef<GuidePupHandledTranscript | null>(null);
   const lastSpokenMessageRef = useRef("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
+  const isMountedRef = useRef(true);
   const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const syncVoiceState = useCallback(async () => {
@@ -115,6 +116,7 @@ export default function HomeScreen() {
     message: string,
     haptic: "success" | "stop" | null = "success",
     rateOverride?: number,
+    options?: { resumeListening?: boolean },
   ) => {
     lastSpokenMessageRef.current = message;
     if (resumeListeningTimerRef.current) {
@@ -145,10 +147,29 @@ export default function HomeScreen() {
       ),
     }).catch(() => undefined);
 
+    if (options?.resumeListening === false || !isMountedRef.current) {
+      return;
+    }
+
     resumeListeningTimerRef.current = setTimeout(() => {
-      void startVoiceSession();
+      if (isMountedRef.current) {
+        void startVoiceSession();
+      }
     }, 600);
   }, [settings.hapticsEnabled, settings.speechRate, startVoiceSession]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      if (resumeListeningTimerRef.current) {
+        clearTimeout(resumeListeningTimerRef.current);
+        resumeListeningTimerRef.current = null;
+      }
+      void GuidePupVoiceControl.stopCommandSession();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isReady) {
@@ -211,7 +232,12 @@ export default function HomeScreen() {
 
       switch (intent) {
         case "start-guidance":
-          void speakVoiceResponse("Guidance starting. Say stop guidance any time to pause.", "success");
+          void speakVoiceResponse(
+            "Guidance starting. Say stop guidance any time to pause.",
+            "success",
+            undefined,
+            { resumeListening: false },
+          );
           router.push('/navigation' as never);
           return;
         case "stop-guidance":

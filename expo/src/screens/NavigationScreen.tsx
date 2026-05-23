@@ -570,6 +570,7 @@ export default function NavigationScreen() {
         frameId: `${guidanceSessionIdRef.current}-${(frameSequenceRef.current += 1)}`,
         priorGuidance: lastSpokenMessageRef.current,
         sessionId: guidanceSessionIdRef.current,
+        updateNavigationMemory: mode === "guidance",
       });
 
       if (!guidingRef.current || !result) {

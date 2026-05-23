@@ -47,6 +47,8 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Haptic attempts now record sanitized diagnostics for type, outcome, execution path, and success/failure counts; physical haptic feedback still requires real-iPhone validation.
 - Native audio cues now mirror key success, STOP, and error moments, with sanitized diagnostics for type, outcome, execution path, and success/failure counts; audible delivery still requires real-iPhone validation.
 - Conversation-lane scene prompts now use exact normalized candidates with wake/polite wrappers and the same negation posture as the command lane. Negated or ambient speech such as "do not describe the scene" and "the phrase what do you see is printed here" no longer triggers `what-do-you-see`.
+- Conversation-lane scene analysis now opts out of `GuideAI` navigation smoothing memory, so `what do you see` answers and failures cannot silently bias the next guidance direction.
+- Home voice responses now guard command-session restarts by component mount state, and the spoken `start guidance` path does not restart Home listening after routing into Navigation.
 
 ## Voice command coverage
 
@@ -195,6 +197,7 @@ Validation for this continuation:
 
 ```bash
 npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run test:guideai-conversation-memory
 npm --prefix expo run check:no-screen-smoke
 npm --prefix expo run check:voice-commands
 npm --prefix expo run typecheck
@@ -206,6 +209,8 @@ npm --prefix backend/guidepup-api run test:privacy
 Results:
 
 - No-screen evidence tests passed, including explicit rejects for missing voice-help proof, help changing settings, missing partial STOP proof, final-only STOP, and STOP after speech ended.
-- Static no-screen contract, voice-command contract, Expo typecheck, Expo lint, backend typecheck, backend privacy tests, and `git diff --check` passed.
-- Build iOS Apps plugin `build_sim` passed for Release `GuidePupVisionAssistant` on `iPhone 16e` with `SENTRY_DISABLE_AUTO_UPLOAD=true`, `CODE_SIGNING_ALLOWED=NO`, `ONLY_ACTIVE_ARCH=YES`, and `COMPILER_INDEX_STORE_ENABLE=NO`; warnings were limited to existing third-party/native warnings and bundle globals.
-- Physical iPhone readiness remains blocked: `charlie的iPhone` is paired with Developer Mode enabled, but CoreDevice reports it unavailable, the tunnel is disconnected, USB is absent, and the last connection was `2026-05-05T22:31:40.881Z`.
+- GuideAI conversation-memory test passed, including positive scene-query answers and scene-query failures that must not mutate guidance smoothing memory.
+- Static no-screen contract, voice-command contract, Expo typecheck, Expo lint, backend typecheck, backend privacy tests, smoke-evidence tests, script syntax checks, and `git diff --check` passed.
+- Build iOS Apps plugin `build_sim` hit the 120 second tool timeout; the explicit Release simulator `xcodebuild` fallback passed for `GuidePupVisionAssistant` on `iPhone 16e` with `SENTRY_DISABLE_AUTO_UPLOAD=true`, `CODE_SIGNING_ALLOWED=NO`, `ONLY_ACTIVE_ARCH=YES`, and `COMPILER_INDEX_STORE_ENABLE=NO`. Warnings were limited to existing third-party/native warnings, Sentry config warnings, and bundle globals.
+- Preview preflight passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env vars. TestFlight preflight still failed on unresolved store metadata, stale production smoke, and missing real-iPhone no-screen evidence.
+- Physical iPhone readiness remains blocked: `charlie的iPhone` is paired with Developer Mode enabled and visible over USB/Xcode destination discovery, but CoreDevice reports it unavailable, DDI services are unavailable, and the tunnel is disconnected.

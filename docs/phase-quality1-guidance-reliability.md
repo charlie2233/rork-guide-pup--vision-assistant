@@ -19,6 +19,19 @@ This phase improves guidance-reliability evidence without changing the app/backe
 
 No provider keys, raw images, raw audio, credentials, or signed URLs were logged. Smoke artifacts record `hasImage: true` and image metadata only, not image content.
 
+## 2026-05-23 conversation-lane isolation continuation
+
+The conversation lane now passes `updateNavigationMemory: false` when answering `what do you see`, while normal guidance continues to update `GuideAI` smoothing memory. This keeps scene answers useful but prevents both successful scene-query directions and scene-query backend failures from silently changing the next navigation guidance decision.
+
+Validation added:
+
+```bash
+npm --prefix expo run test:guideai-conversation-memory
+npm --prefix expo run check:no-screen-smoke
+```
+
+The unit contract uses a mocked vision provider and verifies that scene-query answers and failures do not mutate guidance smoothing state.
+
 ## Code and docs changed
 
 - `backend/guidepup-api/eval/run-live-smoke.mjs`
