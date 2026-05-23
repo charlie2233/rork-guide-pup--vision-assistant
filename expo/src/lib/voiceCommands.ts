@@ -18,77 +18,190 @@ export interface GuidePupHandledTranscript {
 
 const DUPLICATE_TRANSCRIPT_WINDOW_MS = 1500;
 
-const commandMatchers: Array<[GuidePupVoiceCommandIntent, RegExp[]]> = [
+const WAKE_PREFIXES = [
+  "guide pup",
+  "hey guide pup",
+  "hi guide pup",
+  "ok guide pup",
+  "okay guide pup",
+];
+
+const POLITE_PREFIXES = [
+  "please",
+  "can you",
+  "could you",
+  "would you",
+];
+
+const POLITE_SUFFIXES = [
+  "please",
+];
+
+const NEGATION_MATCHER = /\b(don't|dont|do not|never|not|no)\b/;
+
+const commandPhrases: Array<[GuidePupVoiceCommandIntent, Set<string>]> = [
   [
     "start-guidance",
-    [
-      /\b(start|begin|resume|continue)( the)? guidance\b/,
-      /\b(start|begin|resume)\b/,
-      /\blet'?s go\b/,
-    ],
+    new Set([
+      "begin guidance",
+      "continue guidance",
+      "resume guidance",
+      "start guidance",
+    ]),
   ],
   [
     "stop-guidance",
-    [
-      /\b(stop|pause)( the)? guidance\b/,
-      /\b(stop|pause)\b/,
-    ],
+    new Set([
+      "cancel guidance",
+      "end guidance",
+      "pause",
+      "pause guidance",
+      "pause now",
+      "stop",
+      "stop guidance",
+      "stop now",
+    ]),
   ],
   [
     "repeat",
-    [
-      /\b(repeat|again|say that again|repeat that|repeat last)\b/,
-    ],
+    new Set([
+      "again",
+      "repeat",
+      "repeat last",
+      "repeat that",
+      "say that again",
+    ]),
   ],
   [
     "help",
-    [
-      /\b(help|what can i say|what are my commands|voice commands)\b/,
-    ],
+    new Set([
+      "help",
+      "voice commands",
+      "what are my commands",
+      "what can i say",
+    ]),
   ],
   [
     "slower-speech",
-    [
-      /\b(slown?er speech|speak slower|slow down|slower)\b/,
-    ],
+    new Set([
+      "slow speech",
+      "slow voice",
+      "slower speech",
+      "slower voice",
+      "speak slower",
+    ]),
   ],
   [
     "faster-speech",
-    [
-      /\b(fast(?:er)? speech|speak faster|speed up|faster)\b/,
-    ],
+    new Set([
+      "fast speech",
+      "faster speech",
+      "faster voice",
+      "speak faster",
+      "speed up speech",
+    ]),
   ],
   [
     "more-detail",
-    [
-      /\b(more detail|more details|describe more|be more detailed|detailed)\b/,
-    ],
+    new Set([
+      "be more detailed",
+      "describe more",
+      "detailed guidance",
+      "more detail",
+      "more details",
+    ]),
   ],
   [
     "less-detail",
-    [
-      /\b(less detail|fewer details|shorter|less detailed|short)\b/,
-    ],
+    new Set([
+      "brief guidance",
+      "fewer details",
+      "less detail",
+      "less details",
+      "shorter guidance",
+    ]),
   ],
   [
     "haptics-on",
-    [
-      /\b(haptics on|turn on haptics|enable haptics)\b/,
-    ],
+    new Set([
+      "enable haptics",
+      "haptics on",
+      "turn on haptics",
+    ]),
   ],
   [
     "haptics-off",
-    [
-      /\b(haptics off|turn off haptics|disable haptics)\b/,
-    ],
+    new Set([
+      "disable haptics",
+      "haptics off",
+      "turn off haptics",
+    ]),
   ],
   [
     "status",
-    [
-      /\b(status|current status|current settings|how am i set up)\b/,
-    ],
+    new Set([
+      "current settings",
+      "current status",
+      "how am i set up",
+      "status",
+      "what is my status",
+      "what's my status",
+    ]),
   ],
 ];
+
+const stopBargeInCommands = new Set([
+  "cancel guidance",
+  "end guidance",
+  "pause",
+  "pause guidance",
+  "pause now",
+  "stop",
+  "stop guidance",
+  "stop now",
+]);
+
+function stripLeadingPhrase(value: string, phrases: string[]) {
+  for (const phrase of phrases) {
+    if (value === phrase) {
+      return "";
+    }
+    if (value.startsWith(`${phrase} `)) {
+      return value.slice(phrase.length + 1).trim();
+    }
+  }
+
+  return value;
+}
+
+function stripTrailingPhrase(value: string, phrases: string[]) {
+  for (const phrase of phrases) {
+    if (value === phrase) {
+      return "";
+    }
+    if (value.endsWith(` ${phrase}`)) {
+      return value.slice(0, -phrase.length - 1).trim();
+    }
+  }
+
+  return value;
+}
+
+function getCommandCandidate(transcript: string) {
+  const normalized = normalizeVoiceTranscript(transcript);
+  if (!normalized || NEGATION_MATCHER.test(normalized)) {
+    return null;
+  }
+
+  let candidate = normalized;
+  for (let index = 0; index < 2; index += 1) {
+    candidate = stripLeadingPhrase(candidate, POLITE_PREFIXES);
+    candidate = stripLeadingPhrase(candidate, WAKE_PREFIXES);
+  }
+  candidate = stripTrailingPhrase(candidate, POLITE_SUFFIXES);
+
+  return candidate || null;
+}
 
 export function normalizeVoiceTranscript(value: string) {
   return value
@@ -99,13 +212,13 @@ export function normalizeVoiceTranscript(value: string) {
 }
 
 export function parseVoiceCommand(transcript: string): GuidePupVoiceCommandIntent | null {
-  const normalized = normalizeVoiceTranscript(transcript);
-  if (!normalized) {
+  const candidate = getCommandCandidate(transcript);
+  if (!candidate) {
     return null;
   }
 
-  for (const [intent, matchers] of commandMatchers) {
-    if (matchers.some((matcher) => matcher.test(normalized))) {
+  for (const [intent, phrases] of commandPhrases) {
+    if (phrases.has(candidate)) {
       return intent;
     }
   }
@@ -113,21 +226,9 @@ export function parseVoiceCommand(transcript: string): GuidePupVoiceCommandInten
   return null;
 }
 
-const stopBargeInCommands = new Set([
-  "guide pup stop",
-  "guide pup stop guidance",
-  "pause",
-  "pause guidance",
-  "please pause",
-  "please pause guidance",
-  "please stop",
-  "please stop guidance",
-  "stop",
-  "stop guidance",
-]);
-
 export function isStopBargeInCommand(transcript: string) {
-  return stopBargeInCommands.has(normalizeVoiceTranscript(transcript));
+  const candidate = getCommandCandidate(transcript);
+  return candidate ? stopBargeInCommands.has(candidate) : false;
 }
 
 export function isRecentDuplicateTranscript(

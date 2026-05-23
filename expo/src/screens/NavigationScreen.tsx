@@ -20,6 +20,7 @@ import {
   buildVoiceHelpPrompt,
   isRecentDuplicateTranscript,
   isStopBargeInCommand,
+  normalizeVoiceTranscript,
   parseVoiceCommand,
   type GuidePupHandledTranscript,
 } from "@/src/lib/voiceCommands";
@@ -455,7 +456,32 @@ export default function NavigationScreen() {
           }
           return;
         } else {
-          throw captureError;
+          if (mode === "guidance") {
+            const fallbackMessage = "Guide Pup could not capture a camera frame and switched to a safe stop. Check camera access and retry.";
+            setGuidanceStatus({
+              detail: fallbackMessage,
+              tone: "critical",
+              title: "Camera frame unavailable",
+            });
+            setDirection(null);
+            if (!isSpeakingRef.current) {
+              lastSpokenMessageRef.current = fallbackMessage;
+              speakCommandResponse(fallbackMessage);
+            }
+            void GuidePupNavigationCore.announce(fallbackMessage);
+            await refreshNavigationCoreState({
+              executionPath: "js-fallback",
+              lastError: captureErrorMessage,
+              sessionActive: guidingRef.current,
+            });
+          } else if (!isSpeakingRef.current) {
+            speakCommandResponse("I could not capture a camera frame right now. Guidance settings are unchanged.");
+          }
+          void captureAppError(captureError, {
+            screen: "NavigationScreen",
+            stage: "captureFrame.jsFallback",
+          });
+          return;
         }
       }
 
@@ -619,7 +645,7 @@ export default function NavigationScreen() {
 
   useEffect(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
-      const normalizedTranscript = transcript.trim().toLowerCase();
+      const normalizedTranscript = normalizeVoiceTranscript(transcript);
       const nowMs = Date.now();
       if (!normalizedTranscript || isRecentDuplicateTranscript(normalizedTranscript, lastHandledTranscriptRef.current, nowMs)) {
         return;

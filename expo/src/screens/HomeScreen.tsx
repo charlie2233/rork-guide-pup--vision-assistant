@@ -9,6 +9,7 @@ import { parseConversationPrompt } from '@/src/lib/voiceConversation';
 import {
   buildVoiceHelpPrompt,
   isRecentDuplicateTranscript,
+  normalizeVoiceTranscript,
   parseVoiceCommand,
   type GuidePupHandledTranscript,
 } from '@/src/lib/voiceCommands';
@@ -175,7 +176,7 @@ export default function HomeScreen() {
         return;
       }
 
-      const normalizedTranscript = transcript.trim().toLowerCase();
+      const normalizedTranscript = normalizeVoiceTranscript(transcript);
       const nowMs = Date.now();
       if (!normalizedTranscript || isRecentDuplicateTranscript(normalizedTranscript, lastHandledTranscriptRef.current, nowMs)) {
         return;

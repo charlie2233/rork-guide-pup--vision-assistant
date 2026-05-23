@@ -272,6 +272,14 @@ export default function SettingsScreen() {
               testID="settings-safety-link"
               title="Safety / emergency"
             />
+            <InfoLinkButton
+              accessibilityHint="Double tap to open diagnostics and export sanitized launch evidence"
+              accessibilityLabel="Diagnostics"
+              description="Review backend, voice, camera, and guidance evidence for internal validation."
+              onPress={openDiagnostics}
+              testID="settings-diagnostics-link"
+              title="Diagnostics"
+            />
           </View>
         </View>
 

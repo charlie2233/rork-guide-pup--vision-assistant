@@ -33,6 +33,8 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 
 ## TestFlight smoke plan
 
+Use [No-Screen Smoke Evidence](./no-screen-smoke-evidence.md) as the required evidence packet for physical-device validation. The packet must not include raw images, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
+
 - Launch the app from a clean install.
 - Complete onboarding.
 - Verify the home screen routes to the navigation flow.
@@ -45,6 +47,7 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Confirm the experimental tabs are hidden in the production build.
 - Confirm diagnostics shows `internal-preview` on the ad hoc build and `testflight` on the TestFlight candidate.
 - Confirm diagnostics shows `provider-backed` or `safe fallback` execution path with the last request ID.
+- Confirm diagnostics shows `Speech/listening invariant: PASS`, `Unexpected speech/listening overlap count: 0`, and native path evidence of `native-core` or `js-fallback` for the last analyze event.
 - Capture the app name, version, and build number shown in diagnostics or device settings for reviewer notes.
 
 ## Release blockers
@@ -57,3 +60,4 @@ All unresolved identifiers, URLs, and release notes live in [Launch Inputs](./la
 - Missing backend production `OPENAI_API_KEY`, which hard-blocks `testflight` and `store`.
 - Missing App Store screenshots and metadata.
 - Missing or incorrect public website/privacy/support URLs in `store.config.js`.
+- Missing no-screen smoke evidence packet for the physical iPhone build.

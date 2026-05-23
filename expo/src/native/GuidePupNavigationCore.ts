@@ -72,6 +72,7 @@ async function captureFrame(
     return {
       ...captured,
       executionPath: "native-core",
+      source: "native-core",
     };
   }
 
@@ -101,6 +102,7 @@ async function captureFrame(
     captureLatencyMs,
     executionPath: "js-fallback",
     height: photo.height,
+    source: "js-fallback",
     timestampMs: Date.now(),
     uri: photo.uri,
     width: photo.width,

@@ -31,6 +31,12 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - The voice announcer records `speaking: true` only after pausing the command session when normal speech should not keep the mic open; guidance speech that intentionally keeps recognition active is marked as `stop-barge-in` overlap evidence.
 - Navigation suppresses stale backend-failure speech/announcements if an analyze request fails after the user has already stopped guidance.
 - The native iOS voice controller now associates delegate callbacks with the active `AVSpeechUtterance`, so a canceled old utterance cannot finish the newest speech continuation or flip `speaking` false too early.
+- Voice commands now use exact normalized phrase sets with optional polite/wake prefixes instead of broad substring regexes; ambient phrases such as "pause music", "start timer", "do not stop", and "the sign says stop" stay out of the deterministic command lane.
+- A focused `check:voice-commands` contract script covers accepted launch commands, urgent STOP variants, rejected ambient phrases, STOP barge-in, and duplicate transcript timing.
+- Camera capture results now carry `native-core` or `js-fallback` into the analyze payload, so diagnostics and smoke evidence can prove the actual capture path.
+- JS fallback camera capture failures are labeled as camera-frame failures and do not masquerade as backend/provider failures.
+- Settings exposes a direct VoiceOver-reachable Diagnostics link for sanitized launch evidence export, while preserving the hidden version-row shortcut.
+- The TestFlight checklist now links to a required no-screen smoke evidence packet with the exact voice sequence, diagnostics expectations, pass/fail criteria, and no-raw-media/no-secret evidence rules.
 
 ## Voice command coverage
 
@@ -71,7 +77,9 @@ git fetch --all --prune
 git pull --ff-only
 npm --prefix expo run typecheck
 npm --prefix expo run lint
+npm --prefix expo run check:voice-commands
 npm --prefix backend/guidepup-api run typecheck
+node --check expo/scripts/check-voice-commands.mjs
 git diff --check
 xcodebuildmcp session_show_defaults
 xcodebuildmcp build_sim --extraArgs -quiet CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
@@ -100,6 +108,9 @@ Results:
 - Preview preflight intentionally failed because the iOS bundle identifier is still `TODO_IOS_BUNDLE_IDENTIFIER`; it also warned that staging smoke evidence is still on `gpt-4.1` / `2026-03-31.v1` and lacks the sampled-frame envelope and newer structured fields.
 - TestFlight preflight intentionally failed because the bundle identifier, Apple Team ID, App Store Connect app ID, and copyright holder are unresolved, and production smoke evidence is still on `gpt-4.1` / `2026-03-31.v1` with missing sampled-frame envelope and newer structured fields.
 - `npx wrangler whoami` failed with `Not logged in`, so no Cloudflare deploy or live provider smoke could be run.
+- On the 2026-05-23 command-parser and evidence continuation, `check:voice-commands`, Expo typecheck, Expo lint, backend typecheck, script syntax check, `git diff --check`, and the Build iOS Apps plugin Release simulator build passed.
+- Preview/TestFlight preflight results remain intentionally blocked for the same launch reasons: unresolved Apple bundle/team/app/copyright inputs where applicable, stale staging/production smoke artifacts on `gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope fields, and missing Sentry env vars in this shell.
+- Current device recheck still shows `charlie的iPhone` as unavailable/offline to Xcode and absent from USB, so physical no-screen smoke remains unvalidated.
 
 ## Backend and request IDs
 
