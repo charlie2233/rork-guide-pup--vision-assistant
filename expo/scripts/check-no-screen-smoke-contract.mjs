@@ -108,6 +108,8 @@ mustInclude(diagnostics, "DiagnosticsAudioCueSnapshot", "Audio cue diagnostic sn
 mustInclude(diagnostics, "recordAudioCueSnapshot", "Audio cue diagnostic recorder");
 mustInclude(diagnostics, "DiagnosticsHapticSnapshot", "Haptic diagnostic snapshot");
 mustInclude(diagnostics, "recordHapticSnapshot", "Haptic diagnostic recorder");
+mustInclude(diagnostics, "buildNoScreenSmokeEvidenceDraftJson", "No-screen evidence JSON draft exporter");
+mustInclude(diagnostics, "requestIds", "No-screen evidence backend request ID draft");
 
 const navigationCore = read("../src/native/GuidePupNavigationCore.ts");
 mustInclude(navigationCore, "playAudioCue", "Audio cue path");
@@ -123,6 +125,7 @@ mustInclude(diagnosticsScreen, "VoiceOver running", "Diagnostics screen VoiceOve
 mustInclude(diagnosticsScreen, "Audio cues", "Diagnostics screen audio cue evidence");
 mustInclude(diagnosticsScreen, "Last execution path", "Diagnostics screen haptic execution path");
 mustInclude(diagnosticsScreen, "Frame summary", "Diagnostics screen frame summary");
+mustInclude(diagnosticsScreen, "Export no-screen JSON draft", "Diagnostics screen no-screen JSON draft export");
 
 const noScreenEvidence = read("../docs/no-screen-smoke-evidence.md");
 for (const phrase of [

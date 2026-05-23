@@ -182,6 +182,7 @@ Reasoning:
 - Cloudflare deployment remains blocked because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 - Real iPhone no-screen smoke is still not validated because the paired device is unavailable/offline to Xcode.
 - TestFlight/store preflight now also requires `expo/release/no-screen-smoke.latest.json`, a machine-readable real-iPhone no-screen artifact; static checks and simulator builds no longer satisfy this gate.
+- The Diagnostics screen can now export a sanitized no-screen JSON draft that carries runtime diagnostics, health/bootstrap/analyze request IDs, haptic/audio counts, camera path evidence, and placeholder tester attestations for the real iPhone run.
 - Sentry issue health remains unverified because Sentry auth/org/project env vars are missing.
 
 Commands rerun for this submission review:
@@ -217,6 +218,7 @@ Expected failures in the submission review:
 - `release:preflight:preview` fails on unresolved bundle identifier and stale staging smoke warnings.
 - `release:preflight:testflight` and `release:preflight:store` fail on unresolved Apple release inputs, stale production smoke, and missing `release/no-screen-smoke.latest.json`.
 - `check:no-screen-evidence` fails until real hardware validation produces the sanitized no-screen artifact.
+- The Diagnostics export draft is intentionally not launch evidence by itself; the tester must fill the real no-screen, VoiceOver, haptic/audio, settings-persistence, device-readiness, and privacy attestations after the hardware run.
 - `verify:secrets:staging`, `verify:secrets:production`, and `wrangler whoami` fail because `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 
 Browser, Computer Use, ChatGPT Atlas, and App Store Connect were not used to submit because submission would be invalid before these gates pass. WhatsApp escalation was not needed for this review because the blockers are explicit release/auth/device inputs, not an ambiguous login screen.

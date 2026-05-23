@@ -164,22 +164,22 @@ function buildValidArtifact(overrides = {}) {
       afterRelaunch: {
         descriptionMode: "detailed",
         hapticsEnabled: false,
-        speechRate: 0.42,
+        speechRate: "slow",
       },
       afterRestore: {
-        descriptionMode: "balanced",
+        descriptionMode: "short",
         hapticsEnabled: true,
-        speechRate: 0.52,
+        speechRate: "normal",
       },
       afterVoiceChange: {
         descriptionMode: "detailed",
         hapticsEnabled: false,
-        speechRate: 0.42,
+        speechRate: "slow",
       },
       before: {
-        descriptionMode: "balanced",
+        descriptionMode: "short",
         hapticsEnabled: true,
-        speechRate: 0.52,
+        speechRate: "normal",
       },
       nonDefaultSettingSurvivedRelaunch: true,
       restoredDefaultsAfterValidation: true,

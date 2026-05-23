@@ -52,6 +52,7 @@ export interface DiagnosticsSessionSnapshot {
   deviceIdSuffix?: string;
   error?: string;
   expiresAt?: string;
+  requestId?: string;
   status: DiagnosticsSessionStatus;
   updatedAt: number;
 }
@@ -392,6 +393,7 @@ export function recordSessionBootstrapState(input: {
   deviceId?: string;
   error?: string;
   expiresAt?: string;
+  requestId?: string;
   status: DiagnosticsSessionStatus;
 }) {
   updateSnapshot((current) => ({
@@ -400,6 +402,7 @@ export function recordSessionBootstrapState(input: {
       deviceIdSuffix: input.deviceId ? normalizeDeviceIdSuffix(input.deviceId) : current.session.deviceIdSuffix,
       error: sanitizeMessage(input.error, 120),
       expiresAt: input.expiresAt ?? current.session.expiresAt,
+      requestId: sanitizeMessage(input.requestId, 80) ?? current.session.requestId,
       status: input.status,
       updatedAt: Date.now(),
     },
@@ -665,6 +668,293 @@ export function getAnalyzeExecutionPath(event: DiagnosticsAnalyzeEvent | null) {
   return "request failed";
 }
 
+export interface DiagnosticsEvidenceSettingsSnapshot {
+  descriptionMode?: string;
+  hapticsEnabled?: boolean;
+  speechRate?: string;
+}
+
+function inferEvidenceReleaseTrack(releaseTrack: string) {
+  if (releaseTrack === "testflight") {
+    return "testflight";
+  }
+  if (releaseTrack === "app-store") {
+    return "store";
+  }
+  return "preview";
+}
+
+function inferEvidenceEnvironment(input: DiagnosticsSnapshot) {
+  const apiBaseUrl = input.runtime.apiBaseUrl || "";
+  if (input.lastHealthCheck?.environment === "production" || apiBaseUrl.includes("production")) {
+    return "production";
+  }
+  return "staging";
+}
+
+function analyzeEventHasStructuredFields(event?: DiagnosticsAnalyzeEvent | null) {
+  return Boolean(
+    event?.outcome === "success"
+    && event.confidence !== undefined
+    && event.direction
+    && event.hazardLevel
+    && event.lighting
+    && event.message
+    && event.model
+    && event.obstacle !== undefined
+    && event.promptVersion
+    && event.provider
+    && event.sceneDescription
+    && event.surfaceType,
+  );
+}
+
+function findAnalyzeEventForPath(input: DiagnosticsSnapshot, nativePath: DiagnosticsNavigationExecutionPath) {
+  return input.recentAnalyzeEvents.find((event) => event.nativePath === nativePath && event.outcome === "success")
+    || (input.lastAnalyze?.nativePath === nativePath ? input.lastAnalyze : undefined);
+}
+
+function buildCameraPathEvidence(nativePath: DiagnosticsNavigationExecutionPath, event?: DiagnosticsAnalyzeEvent) {
+  return {
+    captureHeuristics: event?.captureHeuristics || {},
+    frameSummary: event?.frameSummary || "",
+    hasImage: event?.hasImage === true,
+    nativePath,
+    outcome: event?.outcome === "success" ? "success" : "missing",
+    requestId: event?.requestId || "",
+    sampledFrame: event?.sampledFrame === true,
+    sourceHeight: event?.sourceHeight || 0,
+    sourceWidth: event?.sourceWidth || 0,
+    uploadedHeight: event?.captureHeuristics?.uploadedHeight || 0,
+    uploadedWidth: event?.captureHeuristics?.uploadedWidth || 0,
+  };
+}
+
+function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
+  const baseStep = (id: string) => ({
+    id,
+    noScreenRequired: false,
+    notes: "",
+    pass: false,
+    spokenFeedbackConfirmed: false,
+    voiceRecognized: false,
+  });
+
+  return [
+    {
+      ...baseStep("cold-prompt"),
+      voiceRecognized: undefined,
+    },
+    {
+      ...baseStep("start-guidance"),
+      cameraSessionActive: input.navigationLoop.sessionActive,
+    },
+    {
+      ...baseStep("status"),
+      statusIncludesSettings: false,
+    },
+    {
+      ...baseStep("slower-speech"),
+      settingPersisted: false,
+    },
+    {
+      ...baseStep("faster-speech"),
+      settingPersisted: false,
+    },
+    {
+      ...baseStep("more-detail"),
+      settingPersisted: false,
+    },
+    {
+      ...baseStep("less-detail"),
+      settingPersisted: false,
+    },
+    {
+      ...baseStep("haptics-off"),
+      hapticBehaviorConfirmed: false,
+    },
+    {
+      ...baseStep("haptics-on"),
+      hapticBehaviorConfirmed: false,
+    },
+    {
+      ...baseStep("repeat"),
+      repeatedLastUtterance: false,
+    },
+    {
+      ...baseStep("what-do-you-see"),
+      conversationLane: false,
+      sampledFrameUsed: input.lastAnalyze?.sampledFrame === true,
+      settingsChanged: false,
+    },
+    {
+      ...baseStep("stop-guidance"),
+      stopCutThrough: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+    },
+  ];
+}
+
+export function buildNoScreenSmokeEvidenceDraft(
+  input = getDiagnosticsSnapshot(),
+  options: { settings?: DiagnosticsEvidenceSettingsSnapshot; operator?: string } = {},
+) {
+  const generatedAt = new Date().toISOString();
+  const releaseTrack = inferEvidenceReleaseTrack(input.runtime.releaseTrack);
+  const environment = inferEvidenceEnvironment(input);
+  const providerBacked = input.lastAnalyze?.outcome === "success";
+  const nativeCoreEvent = findAnalyzeEventForPath(input, "native-core");
+  const jsFallbackEvent = findAnalyzeEventForPath(input, "js-fallback");
+  const currentSettings = {
+    descriptionMode: options.settings?.descriptionMode || "short",
+    hapticsEnabled: options.settings?.hapticsEnabled ?? true,
+    speechRate: options.settings?.speechRate || "normal",
+  };
+
+  return {
+    artifactVersion: 1,
+    assistiveTech: {
+      audioCuesAudible: false,
+      hapticsFelt: false,
+      speechInputConfirmed: input.voice.microphonePermission === "granted"
+        && input.voice.speechPermission === "granted",
+      spokenOutputConfirmed: input.voice.available,
+      voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
+    },
+    backendSmoke: {
+      analyzeStatusCode: providerBacked ? 200 : 0,
+      apiBaseUrl: input.runtime.apiBaseUrl || "",
+      bootstrapStatusCode: input.session.status === "ready" ? 200 : 0,
+      environment,
+      executionPath: getAnalyzeExecutionPath(input.lastAnalyze),
+      healthStatusCode: input.lastHealthCheck?.ok ? 200 : 0,
+      model: input.lastAnalyze?.model || input.lastHealthCheck?.defaultModel || "",
+      promptVersion: input.lastAnalyze?.promptVersion || input.lastHealthCheck?.promptVersion || "",
+      providerBacked,
+      requestIds: {
+        analyze: input.lastAnalyze?.requestId || "",
+        bootstrap: input.session.requestId || "",
+        health: input.lastHealthCheck?.requestId || "",
+      },
+      structuredOutputValid: analyzeEventHasStructuredFields(input.lastAnalyze),
+    },
+    cameraPaths: {
+      jsFallback: buildCameraPathEvidence("js-fallback", jsFallbackEvent),
+      nativeCore: buildCameraPathEvidence("native-core", nativeCoreEvent),
+    },
+    device: {
+      appVersion: input.runtime.appVersion || "",
+      buildNumber: input.runtime.buildVersion || "",
+      buildProfile: releaseTrack,
+      bundleIdentifier: input.runtime.bundleIdentifier || "",
+      identifierSuffix: input.session.deviceIdSuffix || "",
+      model: "",
+      osVersion: "",
+    },
+    deviceReadiness: {
+      developerModeEnabled: false,
+      paired: false,
+      result: "draft",
+      trusted: false,
+      usbOrSameLan: false,
+      xcodeDestinationAvailable: false,
+    },
+    diagnostics: {
+      audioCues: {
+        failureCount: input.audioCue.failureCount,
+        lastExecutionPath: input.audioCue.lastExecutionPath || "",
+        lastOutcome: input.audioCue.lastOutcome,
+        lastType: input.audioCue.lastType || "",
+        successCount: input.audioCue.successCount,
+      },
+      haptics: {
+        failureCount: input.haptics.failureCount,
+        lastExecutionPath: input.haptics.lastExecutionPath || "",
+        lastOutcome: input.haptics.lastOutcome,
+        lastType: input.haptics.lastType || "",
+        successCount: input.haptics.successCount,
+      },
+      jsFallbackCaptureConfirmed: Boolean(jsFallbackEvent),
+      nativeCameraCaptureConfirmed: Boolean(nativeCoreEvent),
+      noRawMediaOrSecrets: true,
+      settingsPersistedAfterRestart: false,
+      speechListeningInvariant:
+        input.voice.unexpectedSpeechListeningOverlapCount === 0
+        && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
+          ? "PASS"
+          : "FAIL",
+      stopBargeInConfirmed: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+      unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
+      voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
+    },
+    generatedAt,
+    noScreen: {
+      cleanInstallOrReset: false,
+      noScreenUsed: false,
+      screenReadingUsed: false,
+      visualAssistanceUsed: false,
+      voiceOnlyNavigation: false,
+    },
+    operator: options.operator || "Internal tester",
+    privacy: {
+      containsFullDeviceIds: false,
+      containsRawAudio: false,
+      containsRawMedia: false,
+      containsSecrets: false,
+      containsSignedUrls: false,
+    },
+    provenance: {
+      apiBaseUrlLabel: environment,
+      apiEnvironment: environment,
+      appVersion: input.runtime.appVersion || "",
+      artifactType: "real-iphone-no-screen-smoke",
+      buildNumber: input.runtime.buildVersion || "",
+      buildProfile: releaseTrack,
+      bundleIdentifier: input.runtime.bundleIdentifier || "",
+      generatedAt,
+      releaseTrack,
+      runId: `no-screen-smoke-${generatedAt.replace(/[:.]/g, "-")}`,
+      schemaVersion: 1,
+    },
+    screenUse: "draft",
+    sequence: buildNoScreenSequenceDraft(input),
+    settingsPersistence: {
+      afterRelaunch: currentSettings,
+      afterRestore: currentSettings,
+      afterVoiceChange: currentSettings,
+      before: currentSettings,
+      nonDefaultSettingSurvivedRelaunch: false,
+      restoredDefaultsAfterValidation: false,
+    },
+    stopBargeIn: {
+      attemptedDuringSpeech: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+      cutThrough: input.voice.lastSpeechListeningOverlapReason === "stop-barge-in",
+      guidancePaused: !input.navigationLoop.sessionActive,
+      lastSpeechListeningOverlapReason: input.voice.lastSpeechListeningOverlapReason || "",
+      speechListeningInvariant:
+        input.voice.unexpectedSpeechListeningOverlapCount === 0
+        && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
+          ? "PASS"
+          : "FAIL",
+      staleSpeechAfterStop: input.voice.speaking,
+      unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
+    },
+    validationMode: "real-iphone-no-screen",
+    voiceOver: {
+      runningAtExport: input.navigationLoop.voiceOverRunning === true,
+      runningAtStart: false,
+      runningAtStop: false,
+      runningDuringGuidance: input.navigationLoop.voiceOverRunning === true,
+    },
+  };
+}
+
+export function buildNoScreenSmokeEvidenceDraftJson(
+  input = getDiagnosticsSnapshot(),
+  options: { settings?: DiagnosticsEvidenceSettingsSnapshot; operator?: string } = {},
+) {
+  return JSON.stringify(buildNoScreenSmokeEvidenceDraft(input, options), null, 2);
+}
+
 export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   const lines: string[] = [];
   const { runtime, cameraPermission, session, lastHealthCheck, lastAnalyze, recentAnalyzeEvents } = input;
@@ -696,6 +986,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push("## Session bootstrap");
   lines.push(`- Status: ${session.status}`);
   lines.push(`- Device suffix: ${session.deviceIdSuffix || "Not found in repo"}`);
+  lines.push(`- Bootstrap request ID: ${session.requestId || "Not found in repo"}`);
   lines.push(`- Expires at: ${session.expiresAt || "Not found in repo"}`);
   lines.push(`- Error: ${session.error || "None"}`);
   lines.push("");

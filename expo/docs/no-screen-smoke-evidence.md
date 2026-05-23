@@ -4,12 +4,15 @@ Use this packet for internal iPhone validation before TestFlight. The tester sho
 
 The machine-readable evidence artifact for release preflight is `expo/release/no-screen-smoke.latest.json`. The expected shape is documented in `expo/docs/no-screen-smoke-evidence.example.json`; the example is not launch evidence.
 
+The Diagnostics screen can export a sanitized `Export no-screen JSON draft` payload after a device run. That draft intentionally does not pass release validation until the tester fills the real device-readiness and no-screen attestation fields.
+
 ## Required Setup
 
 - Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
 - Backend environment and API base URL label: staging, production, or local.
 - Device state: paired/trusted, Developer Mode enabled, network path confirmed, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
 - Diagnostics export from the app after the run.
+- Sanitized no-screen JSON draft from the Diagnostics screen after the run.
 - Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.
 - Machine-readable artifact fields for device readiness, assistive tech, diagnostics, backend request IDs, and every voice-sequence step.
 

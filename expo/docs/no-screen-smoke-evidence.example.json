@@ -138,23 +138,23 @@
   },
   "settingsPersistence": {
     "before": {
-      "speechRate": 0.52,
-      "descriptionMode": "balanced",
+      "speechRate": "normal",
+      "descriptionMode": "short",
       "hapticsEnabled": true
     },
     "afterVoiceChange": {
-      "speechRate": 0.42,
+      "speechRate": "slow",
       "descriptionMode": "detailed",
       "hapticsEnabled": false
     },
     "afterRelaunch": {
-      "speechRate": 0.42,
+      "speechRate": "slow",
       "descriptionMode": "detailed",
       "hapticsEnabled": false
     },
     "afterRestore": {
-      "speechRate": 0.52,
-      "descriptionMode": "balanced",
+      "speechRate": "normal",
+      "descriptionMode": "short",
       "hapticsEnabled": true
     },
     "nonDefaultSettingSurvivedRelaunch": true,

@@ -51,6 +51,7 @@ Results:
 - Haptic code now records sanitized diagnostics for last type, outcome, execution path, attempt/completion timestamps, and success/failure counts.
 - Audio cue code now records sanitized diagnostics for last cue type, outcome, execution path, attempt/completion timestamps, and success/failure counts. This is code-path evidence only; the tester still must confirm the cue is audible on device.
 - The no-screen evidence schema requires a structured sidecar with provenance, device readiness, no-screen attestation, full voice sequence, STOP barge-in proof, VoiceOver snapshots, haptic/audio confirmations, non-default settings persistence across relaunch, native-core and JS-fallback camera path evidence, provider-backed backend smoke request IDs, and privacy attestations.
+- The Diagnostics screen now records the device bootstrap request ID and exports a sanitized no-screen JSON draft from the current diagnostics snapshot, including bootstrap/analyze/health request IDs when present. The draft remains launch-invalid until a tester fills the real device-readiness and no-screen attestation fields after hardware validation.
 
 ## Latest Validation
 
@@ -77,6 +78,7 @@ xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES
 Results:
 
 - Expo typecheck, Expo lint, voice-command contract, no-screen smoke contract, backend typecheck, ESM syntax checks, and `git diff --check` passed.
+- The no-screen evidence schema tests passed for a valid artifact, a missing STOP barge-in proof, and raw-media/full-identifier rejection.
 - Build iOS Apps plugin Release simulator build passed for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, simulator `iPhone 16e`, with `SENTRY_DISABLE_AUTO_UPLOAD=true`.
 - `npm --prefix expo run check:ios-device` intentionally exits blocked in the current hardware state: paired and Developer Mode enabled, but DDI services are unavailable, the tunnel is unavailable, no USB iPhone is present, and Xcode does not list the phone as a runnable destination.
 - `npm --prefix expo run check:no-screen-evidence` intentionally exits blocked until a real `expo/release/no-screen-smoke.latest.json` artifact is produced from hardware validation.
@@ -94,6 +96,6 @@ Results:
 1. Keep the iPhone unlocked, on the same LAN, with Developer Mode enabled.
 2. Prefer USB for the first install/run if available; otherwise fix the CoreDevice tunnel until `devicectl device info details` returns complete information.
 3. Install a signed internal build once bundle ID, Apple Team ID, App Store Connect app ID, and Expo auth are configured.
-4. Run the exact no-screen sequence, export diagnostics afterward, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
+4. Run the exact no-screen sequence, export diagnostics afterward, use the Diagnostics screen no-screen JSON draft, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
 5. Run `npm --prefix expo run check:no-screen-evidence` before TestFlight preflight.
 6. Attach only sanitized diagnostics and backend smoke request IDs; do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.

@@ -125,11 +125,13 @@ async function bootstrapDevice(existingDeviceId?: string) {
       platform: getPlatform(),
     }),
   });
+  const requestId = response.headers.get("x-request-id")?.trim() || undefined;
 
   if (!response.ok) {
     recordSessionBootstrapState({
       deviceId: existingDeviceId,
       error: `Bootstrap failed (${response.status}).`,
+      requestId,
       status: "failed",
     });
     throw new Error(`Bootstrap failed (${response.status}).`);
@@ -144,6 +146,7 @@ async function bootstrapDevice(existingDeviceId?: string) {
   recordSessionBootstrapState({
     deviceId: parsed.deviceId,
     expiresAt: parsed.expiresAt,
+    requestId,
     status: "ready",
   });
 

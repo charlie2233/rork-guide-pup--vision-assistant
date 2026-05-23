@@ -249,8 +249,8 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("settingsPersistence.nonDefaultSettingSurvivedRelaunch", isBooleanTrue);
   requireField("settingsPersistence.restoredDefaultsAfterValidation", isBooleanTrue);
   for (const snapshot of ["before", "afterVoiceChange", "afterRelaunch", "afterRestore"]) {
-    requireField(`settingsPersistence.${snapshot}.speechRate`, (value) => typeof value === "number" && Number.isFinite(value));
-    requireField(`settingsPersistence.${snapshot}.descriptionMode`, (value) => ["concise", "balanced", "detailed"].includes(value));
+    requireField(`settingsPersistence.${snapshot}.speechRate`, (value) => ["slow", "normal", "fast"].includes(value));
+    requireField(`settingsPersistence.${snapshot}.descriptionMode`, (value) => ["short", "detailed"].includes(value));
     requireField(`settingsPersistence.${snapshot}.hapticsEnabled`, (value) => typeof value === "boolean");
   }
 

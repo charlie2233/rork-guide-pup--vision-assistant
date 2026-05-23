@@ -18,11 +18,13 @@ import Colors from "@/constants/colors";
 import { fetchHealthCheck } from "@/src/lib/api";
 import {
   buildDiagnosticsReport,
+  buildNoScreenSmokeEvidenceDraftJson,
   formatDiagnosticsEventSummary,
   getAnalyzeExecutionPath,
   useDiagnostics,
 } from "@/src/lib/diagnostics";
 import { useGuidePupRouter } from "@/src/lib/router";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 type StateTone = "neutral" | "warning" | "critical";
 
@@ -58,11 +60,16 @@ export default function DiagnosticsScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const diagnostics = useDiagnostics();
+  const { settings } = useSettings();
   const [isRunningHealthCheck, setIsRunningHealthCheck] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [healthMessage, setHealthMessage] = useState<string>("No health check has run yet.");
 
   const report = useMemo(() => buildDiagnosticsReport(diagnostics), [diagnostics]);
+  const noScreenEvidenceDraft = useMemo(
+    () => buildNoScreenSmokeEvidenceDraftJson(diagnostics, { settings }),
+    [diagnostics, settings],
+  );
   const voiceInvariantPass =
     diagnostics.voice.unexpectedSpeechListeningOverlapCount === 0
     && (!diagnostics.voice.speechListeningOverlapActive
@@ -99,26 +106,38 @@ export default function DiagnosticsScreen() {
     }
   }, []);
 
-  const handleShare = useCallback(async () => {
+  const shareText = useCallback(async (message: string, title: string, successMessage: string) => {
     try {
       setShareError(null);
       if (Platform.OS === "web" && globalThis.navigator?.clipboard?.writeText) {
-        await globalThis.navigator.clipboard.writeText(report);
-        setHealthMessage("Diagnostics report copied to clipboard.");
+        await globalThis.navigator.clipboard.writeText(message);
+        setHealthMessage(successMessage);
         return;
       }
 
       await Share.share({
-        message: report,
-        title: "Guide Pup Diagnostics",
+        message,
+        title,
       });
-      setHealthMessage("Diagnostics report opened in the share sheet.");
+      setHealthMessage(successMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to share diagnostics.";
-      setShareError(message);
-      Alert.alert("Share failed", message);
+      const errorMessage = error instanceof Error ? error.message : "Unable to share diagnostics.";
+      setShareError(errorMessage);
+      Alert.alert("Share failed", errorMessage);
     }
-  }, [report]);
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    await shareText(report, "Guide Pup Diagnostics", "Diagnostics report opened in the share sheet.");
+  }, [report, shareText]);
+
+  const handleShareNoScreenEvidence = useCallback(async () => {
+    await shareText(
+      noScreenEvidenceDraft,
+      "Guide Pup No-Screen Evidence Draft",
+      "No-screen evidence draft opened in the share sheet.",
+    );
+  }, [noScreenEvidenceDraft, shareText]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]} testID="diagnostics-screen">
@@ -186,6 +205,7 @@ export default function DiagnosticsScreen() {
         >
           <KeyValue label="Status" value={diagnostics.session.status} />
           <KeyValue label="Device suffix" value={diagnostics.session.deviceIdSuffix || "Not found in repo"} />
+          <KeyValue label="Bootstrap request ID" value={diagnostics.session.requestId || "Not found in repo"} />
           <KeyValue label="Expires at" value={diagnostics.session.expiresAt || "Not found in repo"} />
           <KeyValue label="Error" value={diagnostics.session.error || "None"} />
         </InfoCard>
@@ -549,6 +569,17 @@ export default function DiagnosticsScreen() {
           >
             <FileText color={Colors.palette.textPrimary} size={16} />
             <Text style={styles.secondaryButtonText}>Export sanitized log</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleShareNoScreenEvidence}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Export no-screen evidence draft"
+            accessibilityHint="Double tap to share or copy a sanitized JSON draft for the real iPhone no-screen validation artifact"
+            testID="diagnostics-export-no-screen-evidence"
+          >
+            <FileText color={Colors.palette.textPrimary} size={16} />
+            <Text style={styles.secondaryButtonText}>Export no-screen JSON draft</Text>
           </Pressable>
         </InfoCard>
       </ScrollView>
