@@ -14,6 +14,7 @@ export interface GuideAIDirection {
   sceneDescription?: string;
   surfaceType?: string;
   lighting?: string;
+  walkability?: "clear" | "caution" | "uncertain";
 }
 
 type Direction = GuideAIDirection["direction"];
@@ -341,6 +342,7 @@ export const GuideAI = {
         lighting: "unknown",
         sceneDescription: "Vision guidance is unavailable.",
         surfaceType: "unknown",
+        walkability: "uncertain",
         obstacle: true,
         message: "Stopping: guidance connection unavailable.",
       };
@@ -373,6 +375,7 @@ export const GuideAI = {
       sceneDescription: analysis.sceneDescription,
       surfaceType: analysis.surfaceType,
       lighting: analysis.lighting,
+      walkability: analysis.walkability,
     };
   },
 

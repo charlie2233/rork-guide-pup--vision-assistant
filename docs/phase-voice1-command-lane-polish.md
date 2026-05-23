@@ -46,6 +46,7 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Added an executable no-screen smoke contract check covering deterministic voice commands, the separate scene-query conversation lane, STOP cut-through, settings persistence hooks, VoiceOver/native-path diagnostics, haptic/audio-cue diagnostics, and smoke-evidence gates.
 - Haptic attempts now record sanitized diagnostics for type, outcome, execution path, and success/failure counts; physical haptic feedback still requires real-iPhone validation.
 - Native audio cues now mirror key success, STOP, and error moments, with sanitized diagnostics for type, outcome, execution path, and success/failure counts; audible delivery still requires real-iPhone validation.
+- Conversation-lane scene prompts now use exact normalized candidates with wake/polite wrappers and the same negation posture as the command lane. Negated or ambient speech such as "do not describe the scene" and "the phrase what do you see is printed here" no longer triggers `what-do-you-see`.
 
 ## Voice command coverage
 
@@ -87,6 +88,7 @@ git pull --ff-only
 npm --prefix expo run typecheck
 npm --prefix expo run lint
 npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
 npm --prefix backend/guidepup-api run typecheck
 node --check expo/scripts/check-voice-commands.mjs
 git diff --check
@@ -128,6 +130,7 @@ Results:
 - New iPhone readiness command: `npm --prefix expo run check:ios-device`. It reports paired/trusted/CoreDevice/USB/Xcode destination status with suffix-only identifiers and does not replace app install/run proof.
 - On the audio-cue/device-readiness continuation, Expo typecheck, Expo lint, backend typecheck, `check:voice-commands`, `check:no-screen-smoke`, ESM syntax checks, `git diff --check`, and Build iOS Apps plugin Release simulator build passed.
 - `check:ios-device` now gives a sanitized blocked result for the current hardware state: paired and Developer Mode enabled, but DDI services and the CoreDevice tunnel are unavailable, no USB iPhone is present, and Xcode does not list the phone as a runnable destination.
+- On the scene-query parser hardening continuation, `check:no-screen-smoke` now covers positive wake/polite scene prompts plus negative negated/ambient phrases; `check:no-screen-smoke`, `check:voice-commands`, and Expo typecheck passed.
 
 ## Backend and request IDs
 

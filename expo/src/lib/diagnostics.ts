@@ -14,6 +14,7 @@ export type DiagnosticsAnalyzeOutcome =
 export type DiagnosticsAnalyzeDirection = "turn-left" | "turn-right" | "forward" | "stop";
 export type DiagnosticsHazardLevel = "none" | "low" | "medium" | "high";
 export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright" | "unknown";
+export type DiagnosticsWalkability = "clear" | "caution" | "uncertain";
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
 export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
@@ -167,6 +168,7 @@ export interface DiagnosticsAnalyzeEvent {
   sourceHeight?: number;
   sourceWidth?: number;
   surfaceType?: string;
+  walkability?: DiagnosticsWalkability;
   timestamp: number;
 }
 
@@ -625,6 +627,7 @@ export function recordAnalyzeEvent(
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     sessionId: sanitizeMessage(input.sessionId, 80),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
+    walkability: input.walkability,
     timestamp: input.timestamp ?? Date.now(),
   };
 
@@ -705,7 +708,8 @@ function analyzeEventHasStructuredFields(event?: DiagnosticsAnalyzeEvent | null)
     && event.promptVersion
     && event.provider
     && event.sceneDescription
-    && event.surfaceType,
+    && event.surfaceType
+    && event.walkability,
   );
 }
 
@@ -836,6 +840,7 @@ export function buildNoScreenSmokeEvidenceDraft(
         health: input.lastHealthCheck?.requestId || "",
       },
       structuredOutputValid: analyzeEventHasStructuredFields(input.lastAnalyze),
+      walkability: input.lastAnalyze?.walkability || "",
     },
     cameraPaths: {
       jsFallback: buildCameraPathEvidence("js-fallback", jsFallbackEvent),
@@ -1168,6 +1173,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Hazard level: ${lastAnalyze.hazardLevel || "Not found in repo"}`);
     lines.push(`- Lighting: ${lastAnalyze.lighting || "Not found in repo"}`);
     lines.push(`- Surface type: ${lastAnalyze.surfaceType || "Not found in repo"}`);
+    lines.push(`- Walkability: ${lastAnalyze.walkability || "Not found in repo"}`);
     lines.push(`- Scene description: ${lastAnalyze.sceneDescription || "Not found in repo"}`);
     lines.push(`- Confidence: ${typeof lastAnalyze.confidence === "number" ? `${Math.round(lastAnalyze.confidence * 100)}%` : "Not found in repo"}`);
     lines.push(`- Fallback reason: ${lastAnalyze.fallbackReason || "None"}`);

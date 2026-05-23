@@ -11,6 +11,7 @@ const TEST_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAAK0lEQ
 const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
 const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
 const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
+const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
 
 function parseArgs(argv) {
   const args = {
@@ -137,6 +138,7 @@ function validateStructuredAnalyzeOutput(responseBody) {
   requireField("provider", isNonEmptyString);
   requireField("sceneDescription", isNonEmptyString);
   requireField("surfaceType", isNonEmptyString);
+  requireField("walkability", (value) => WALKABILITY_VALUES.has(value));
 
   if (!("fallbackReason" in responseBody)) {
     missingFields.push("fallbackReason");
@@ -231,6 +233,7 @@ function deriveAnalyzeSummary(result) {
       structuredOutputMissingFields: structuredOutput.missingFields,
       structuredOutputValid: structuredOutput.valid,
       surfaceType: result.json.surfaceType,
+      walkability: result.json.walkability,
     };
   }
 
@@ -268,6 +271,7 @@ function deriveAnalyzeSummary(result) {
     structuredOutputMissingFields: structuredOutput.missingFields,
     structuredOutputValid: structuredOutput.valid,
     surfaceType: safeResponse?.surfaceType,
+    walkability: safeResponse?.walkability,
   };
 }
 
@@ -319,6 +323,7 @@ function toMarkdown(artifact) {
     `  - confidence: \`${typeof artifact.analyze.confidence === "number" ? artifact.analyze.confidence : "not-found"}\``,
     `  - lighting: \`${artifact.analyze.lighting || "not-found"}\``,
     `  - surface type: \`${artifact.analyze.surfaceType || "not-found"}\``,
+    `  - walkability: \`${artifact.analyze.walkability || "not-found"}\``,
     `  - scene description: \`${artifact.analyze.sceneDescription || "not-found"}\``,
     `  - fallback reason: \`${artifact.analyze.fallbackReason || "none"}\``,
     `  - message: \`${artifact.analyze.message || artifact.analyze.errorMessage || "not-found"}\``,

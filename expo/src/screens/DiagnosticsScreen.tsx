@@ -527,6 +527,7 @@ export default function DiagnosticsScreen() {
           />
           <KeyValue label="Lighting" value={diagnostics.lastAnalyze?.lighting || "Not found in repo"} />
           <KeyValue label="Surface" value={diagnostics.lastAnalyze?.surfaceType || "Not found in repo"} />
+          <KeyValue label="Walkability" value={diagnostics.lastAnalyze?.walkability || "Not found in repo"} />
           <KeyValue label="Scene" value={diagnostics.lastAnalyze?.sceneDescription || "Not found in repo"} />
           <KeyValue label="Fallback reason" value={diagnostics.lastAnalyze?.fallbackReason || "None"} />
           <KeyValue label="Error" value={diagnostics.lastAnalyze?.error || "None"} />

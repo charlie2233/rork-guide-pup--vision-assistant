@@ -77,6 +77,28 @@ assert.equal(
   "what-do-you-see",
   "Scene-description alias must be handled by the conversation lane",
 );
+assert.equal(
+  voiceConversation.parseConversationPrompt("please what do you see"),
+  "what-do-you-see",
+  "Polite scene question must be handled by the conversation lane",
+);
+assert.equal(
+  voiceConversation.parseConversationPrompt("guide pup what do you see"),
+  "what-do-you-see",
+  "Wake-prefixed scene question must be handled by the conversation lane",
+);
+for (const transcript of [
+  "do not describe the scene",
+  "please do not answer what do you see",
+  "I did not ask what do you see",
+  "the phrase what do you see is printed here",
+]) {
+  assert.equal(
+    voiceConversation.parseConversationPrompt(transcript),
+    null,
+    `Negated or ambient phrase "${transcript}" must not enter the conversation lane`,
+  );
+}
 
 const navigationScreen = read("../src/screens/NavigationScreen.tsx");
 mustInclude(navigationScreen, "conversationIntent === \"what-do-you-see\"", "Conversation-lane route");
@@ -104,6 +126,7 @@ mustInclude(diagnostics, "voiceOverRunning", "VoiceOver diagnostic");
 mustInclude(diagnostics, "nativePath", "Native camera path diagnostic");
 mustInclude(diagnostics, "frameSummary", "Frame summary diagnostic");
 mustInclude(diagnostics, "captureHeuristics", "Capture heuristics diagnostic");
+mustInclude(diagnostics, "walkability", "Walkability diagnostic");
 mustInclude(diagnostics, "DiagnosticsAudioCueSnapshot", "Audio cue diagnostic snapshot");
 mustInclude(diagnostics, "recordAudioCueSnapshot", "Audio cue diagnostic recorder");
 mustInclude(diagnostics, "DiagnosticsHapticSnapshot", "Haptic diagnostic snapshot");
@@ -125,6 +148,7 @@ mustInclude(diagnosticsScreen, "VoiceOver running", "Diagnostics screen VoiceOve
 mustInclude(diagnosticsScreen, "Audio cues", "Diagnostics screen audio cue evidence");
 mustInclude(diagnosticsScreen, "Last execution path", "Diagnostics screen haptic execution path");
 mustInclude(diagnosticsScreen, "Frame summary", "Diagnostics screen frame summary");
+mustInclude(diagnosticsScreen, "Walkability", "Diagnostics screen walkability");
 mustInclude(diagnosticsScreen, "Export no-screen JSON draft", "Diagnostics screen no-screen JSON draft export");
 
 const noScreenEvidence = read("../docs/no-screen-smoke-evidence.md");
@@ -145,6 +169,7 @@ for (const phrase of [
   "stop guidance",
   "Speech/listening invariant: PASS",
   "Backend smoke artifact request IDs",
+  "walkability",
 ]) {
   mustInclude(noScreenEvidence, phrase, `No-screen evidence phrase "${phrase}"`);
 }
@@ -161,12 +186,14 @@ mustInclude(releasePreflight, "requireHealthField(\"defaultRequestTimeoutMs\"", 
 mustInclude(releasePreflight, "requireHealthField(\"defaultRetryCount\"", "Provider retry preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"frameSummary\"", "Frame summary preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"captureHeuristics\"", "Capture heuristics preflight gate");
+mustInclude(releasePreflight, "requireAnalyzeField(\"walkability\"", "Walkability preflight gate");
 
 const liveSmoke = read("../../backend/guidepup-api/eval/run-live-smoke.mjs");
 mustInclude(liveSmoke, "hasImage: true", "Live smoke sends hasImage");
 mustInclude(liveSmoke, "sampledFrame: true", "Live smoke sends sampledFrame");
 mustInclude(liveSmoke, "frameSummary", "Live smoke records frame summary");
 mustInclude(liveSmoke, "captureHeuristics", "Live smoke records capture heuristics");
+mustInclude(liveSmoke, "walkability", "Live smoke records walkability");
 mustInclude(liveSmoke, "defaultMaxCompletionTokens", "Live smoke records max completion tokens");
 mustInclude(liveSmoke, "defaultRequestTimeoutMs", "Live smoke records provider timeout");
 mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry count");
@@ -177,6 +204,7 @@ mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidenc
 mustInclude(noScreenEvidenceSchema, "settingsPersistence.nonDefaultSettingSurvivedRelaunch", "No-screen evidence settings persistence proof");
 mustInclude(noScreenEvidenceSchema, "nativeCore", "No-screen evidence native-core camera proof");
 mustInclude(noScreenEvidenceSchema, "jsFallback", "No-screen evidence JS fallback camera proof");
+mustInclude(noScreenEvidenceSchema, "backendSmoke.walkability", "No-screen evidence walkability proof");
 mustInclude(noScreenEvidenceSchema, "privacy.containsRawMedia", "No-screen evidence privacy proof");
 
 console.log("No-screen smoke contract passed. Real iPhone validation is still required for hardware proof.");

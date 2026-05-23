@@ -137,6 +137,7 @@ export function createSafeFallbackResponse(
     provider: metadata.provider,
     sceneDescription: "Vision guidance is unavailable.",
     surfaceType: "unknown",
+    walkability: "uncertain",
   });
 }
 
@@ -160,6 +161,7 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
     provider: metadata.provider,
     sceneDescription: raw.sceneDescription,
     surfaceType: raw.surfaceType,
+    walkability: raw.walkability,
   };
 
   const normalized = VisionAnalyzeResponseSchema.parse({

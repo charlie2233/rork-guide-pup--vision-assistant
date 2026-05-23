@@ -34,6 +34,7 @@ Operator:
   - obstacle:
   - lighting:
   - surface type:
+  - walkability:
   - confidence:
   - scene description:
   - fallback reason:

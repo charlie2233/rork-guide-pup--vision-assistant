@@ -27,6 +27,7 @@ export const VisionAnalyzeResponseSchema = z.object({
   provider: z.string().min(1),
   sceneDescription: z.string().trim().min(1),
   surfaceType: z.string().trim().min(1),
+  walkability: z.enum(["clear", "caution", "uncertain"]),
 });
 
 const AnalyzeVisionErrorSchema = z.object({
@@ -185,6 +186,7 @@ function recordAnalyzeTelemetry(
     sourceHeight?: number;
     sourceWidth?: number;
     surfaceType?: string;
+    walkability?: VisionAnalyzeResponse["walkability"];
     confidence?: number;
   },
 ) {
@@ -212,6 +214,7 @@ function recordAnalyzeTelemetry(
     sceneDescription: sanitizeMessage(input.sceneDescription, 160),
     sessionId: sanitizeMessage(input.sessionId, 80),
     surfaceType: sanitizeMessage(input.surfaceType, 80),
+    walkability: input.walkability,
   });
 }
 
@@ -453,6 +456,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
           safeReason: parsedError.data.error.code,
           sceneDescription: safeResponse.sceneDescription,
           surfaceType: safeResponse.surfaceType,
+          walkability: safeResponse.walkability,
         });
         analyzeTelemetryRecorded = true;
         setSentryTag("vision.provider", safeResponse.provider);
@@ -539,6 +543,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       fallbackReason: result.fallbackReason,
       sceneDescription: result.sceneDescription,
       surfaceType: result.surfaceType,
+      walkability: result.walkability,
     });
     analyzeTelemetryRecorded = true;
     setSentryTag("vision.provider", result.provider);

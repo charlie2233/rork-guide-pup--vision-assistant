@@ -22,6 +22,7 @@ export const EvalFixtureSchema = z.object({
   expectedHazardLevel: z.enum(["none", "low", "medium", "high"]).optional(),
   expectedLighting: z.enum(["dark", "dim", "normal", "bright", "unknown"]).optional(),
   expectedSurfaceType: z.string().min(1).max(80).optional(),
+  expectedWalkability: z.enum(["clear", "caution", "uncertain"]).optional(),
   frameId: z.string().min(1).max(80).optional(),
   frameSummary: z.string().min(1).max(280).optional(),
   id: z.string().min(1).max(64),

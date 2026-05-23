@@ -50,6 +50,7 @@ Recommended fields:
 - `expectedHazardLevel`
 - `expectedLighting`
 - `expectedSurfaceType`
+- `expectedWalkability`
 - `frameId`
 - `frameSummary`
 - `captureHeuristics`
@@ -82,6 +83,7 @@ The runner emits:
 - `benchmarkProviders[]` when the benchmark route is enabled
 - `scenarios{}` with per-scenario valid/STOP/false-forward counts
 - `fixtures[]` with per-fixture results, structured-output field validation, and sanitized request-envelope metadata
+- `fixtures[].walkability` and `fixtures[].walkabilityMatches` when an expected walkability label is present
 
 ## Fixture guidance
 

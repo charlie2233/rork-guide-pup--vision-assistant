@@ -65,6 +65,7 @@
     "structuredOutputValid": true,
     "model": "gpt-5.5-2026-05-22",
     "promptVersion": "2026-05-22.v1",
+    "walkability": "clear",
     "requestIds": {
       "health": "11111111-1111-4111-8111-111111111111",
       "bootstrap": "22222222-2222-4222-8222-222222222222",

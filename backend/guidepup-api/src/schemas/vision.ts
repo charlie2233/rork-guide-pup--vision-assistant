@@ -3,6 +3,7 @@ import { z } from "zod";
 export const DirectionSchema = z.enum(["turn-left", "turn-right", "forward", "stop"]);
 export const HazardLevelSchema = z.enum(["none", "low", "medium", "high"]);
 export const LightingSchema = z.enum(["dark", "dim", "normal", "bright", "unknown"]);
+export const WalkabilitySchema = z.enum(["clear", "caution", "uncertain"]);
 export const PositionSchema = z.enum(["left", "center", "right"]);
 export const DistanceSchema = z.enum(["very-close", "close", "medium", "far"]);
 export const CaptureHeuristicsSchema = z.object({
@@ -53,7 +54,7 @@ export const ProviderVisionSchema = z.object({
   sceneDescription: z.string().trim().min(1).max(280),
   shortMessage: z.string().max(120).optional(),
   surfaceType: z.string().trim().min(1).max(80),
-  walkability: z.enum(["clear", "caution", "uncertain"]).optional(),
+  walkability: WalkabilitySchema,
 });
 
 export const VisionAnalyzeResponseSchema = z.object({
@@ -70,6 +71,7 @@ export const VisionAnalyzeResponseSchema = z.object({
   provider: z.string().min(1).max(64),
   sceneDescription: z.string().trim().min(1).max(280),
   surfaceType: z.string().trim().min(1).max(80),
+  walkability: WalkabilitySchema,
 });
 
 export const AnalyzeVisionErrorSchema = z.object({

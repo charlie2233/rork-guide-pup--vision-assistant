@@ -49,6 +49,7 @@ function buildValidArtifact(overrides = {}) {
       model: "gpt-5.5-2026-05-22",
       promptVersion: "2026-05-22.v1",
       providerBacked: true,
+      walkability: "clear",
       requestIds: {
         analyze: "33333333-3333-4333-8333-333333333333",
         bootstrap: "22222222-2222-4222-8222-222222222222",

@@ -9,6 +9,7 @@ const projectRoot = path.resolve(scriptDir, "..");
 const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
 const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
 const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
+const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
 
 function parseArgs(argv) {
   const args = {
@@ -121,6 +122,7 @@ function validateStructuredAnalyzeOutput(responseBody) {
   requireField("provider", isNonEmptyString);
   requireField("sceneDescription", isNonEmptyString);
   requireField("surfaceType", isNonEmptyString);
+  requireField("walkability", (value) => WALKABILITY_VALUES.has(value));
 
   if (!("fallbackReason" in responseBody)) {
     missingFields.push("fallbackReason");
@@ -311,16 +313,20 @@ function summarizeFixtureResult(fixture, result) {
       skipped: false,
       stop: false,
       structuredOutputInvalidFields: [],
-      structuredOutputMissingFields: ["response"],
-      structuredOutputValid: false,
-      valid: false,
-    };
+    structuredOutputMissingFields: ["response"],
+    structuredOutputValid: false,
+    valid: false,
+    walkability: undefined,
+  };
   }
 
   const direction = result.response?.direction;
   const isStop = direction === "stop";
   const isFalseForward = fixture.expectedHazard && direction === "forward";
   const structuredOutput = result.structuredOutput || validateStructuredAnalyzeOutput(result.response);
+  const walkabilityMatches = fixture.expectedWalkability
+    ? result.response?.walkability === fixture.expectedWalkability
+    : undefined;
 
   return {
     falseForward: isFalseForward ? 1 : 0,
@@ -342,7 +348,10 @@ function summarizeFixtureResult(fixture, result) {
     structuredOutputMissingFields: structuredOutput.missingFields,
     structuredOutputValid: structuredOutput.valid,
     surfaceType: result.response?.surfaceType,
-    valid: structuredOutput.valid,
+    walkability: result.response?.walkability,
+    expectedWalkability: fixture.expectedWalkability,
+    walkabilityMatches,
+    valid: structuredOutput.valid && walkabilityMatches !== false,
   };
 }
 
@@ -437,6 +446,12 @@ function renderMarkdown(report) {
       lines.push(`  - missing fields: \`${fixture.structuredOutputMissingFields.join(", ") || "none"}\``);
       lines.push(`  - invalid fields: \`${fixture.structuredOutputInvalidFields.join(", ") || "none"}\``);
     }
+    if (fixture.walkability) {
+      lines.push(`  - walkability: \`${fixture.walkability}\``);
+    }
+    if (fixture.expectedWalkability) {
+      lines.push(`  - expected walkability: \`${fixture.expectedWalkability}\`, match: \`${fixture.walkabilityMatches ? "yes" : "no"}\``);
+    }
   }
   lines.push(``);
   lines.push(`## Scenario Summary`);
@@ -485,14 +500,17 @@ async function main() {
     const requestEnvelope = buildFixtureRequestEnvelope(fixture, session, fixtureIndex);
     const analyzeResult = await analyzeFixture(apiBaseUrl, session, fixture, imageBase64, requestEnvelope);
     const summary = summarizeFixtureResult(fixture, analyzeResult);
+    const fixtureError = analyzeResult.ok
+      ? summary.structuredOutputValid
+        ? summary.walkabilityMatches === false
+          ? `Expected walkability ${summary.expectedWalkability}; got ${summary.walkability || "missing"}`
+          : undefined
+        : `Structured output missing: ${summary.structuredOutputMissingFields.join(", ") || "none"}; invalid: ${summary.structuredOutputInvalidFields.join(", ") || "none"}`
+      : analyzeResult.error;
     fixtureSummaries.push({
       ...summary,
       direction: analyzeResult.ok ? analyzeResult.response.direction : undefined,
-      error: analyzeResult.ok
-        ? summary.structuredOutputValid
-          ? undefined
-          : `Structured output missing: ${summary.structuredOutputMissingFields.join(", ") || "none"}; invalid: ${summary.structuredOutputInvalidFields.join(", ") || "none"}`
-        : analyzeResult.error,
+      error: fixtureError,
       requestEnvelope: sanitizeRequestEnvelope(requestEnvelope),
       scenario: fixture.scenario,
     });

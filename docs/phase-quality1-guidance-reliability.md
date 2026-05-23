@@ -14,6 +14,8 @@ This phase improves guidance-reliability evidence without changing the app/backe
 - iOS diagnostics now exports the same non-secret analyze metadata that the app sends to the cloud: session ID, frame ID, native path, source size, prior guidance summary, and structured response fields.
 - The compact frame context now includes sanitized frame summary and capture heuristics so GPT receives explicit sampled-frame provenance without moving camera/session control out of iOS.
 - Backend provider runtime now has bounded launch controls for output tokens, request timeout, retry count, and retry delay; health, smoke artifacts, and release preflight must expose those controls before submission evidence is accepted.
+- Backend prompt instructions now explicitly keep GPT in the cloud analysis lane: sampled-frame judgment, walkability/hazard/surface/lighting/confidence scoring, and concise spoken guidance only. Camera sessions, route navigation, STOP behavior, haptics, VoiceOver, speech rate, detail level, and timing stay deterministic on iOS.
+- `walkability` is now first-class launch evidence instead of prompt-only intent: the backend response schema, normalizer, live smoke, eval harness, release preflight, client API validation, diagnostics, and no-screen evidence schema all require or carry it.
 
 No provider keys, raw images, raw audio, credentials, or signed URLs were logged. Smoke artifacts record `hasImage: true` and image metadata only, not image content.
 
@@ -52,6 +54,14 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
   - Surface the configured values in `/health` provider summary without exposing provider secrets.
 - `backend/guidepup-api/test/provider-runtime-controls.test.mjs`, `expo/scripts/release-preflight.mjs`, and `expo/scripts/check-no-screen-smoke-contract.mjs`
   - Assert the runtime controls are present in Worker config, health, live smoke evidence, and TestFlight preflight gates.
+- `backend/guidepup-api/src/lib/prompts.ts` and `backend/guidepup-api/test/vision-prompt-contract.test.mjs`
+  - Tighten the launch prompt so provider guidance treats the input as one sampled frame, uses prior guidance only to avoid repetition, recommends forward only with clear walkability, and never suggests changing iOS-owned controls.
+  - Add a prompt contract test for deterministic-lane boundaries, concise spoken `shortMessage` requirements, and compact frame context without raw image data.
+- `backend/guidepup-api/src/schemas/vision.ts`, `backend/guidepup-api/src/lib/normalize.ts`, `backend/guidepup-api/eval/*`, `expo/scripts/release-preflight.mjs`, `expo/src/lib/api.ts`, `expo/src/lib/diagnostics.ts`, `expo/src/screens/DiagnosticsScreen.tsx`, and `expo/scripts/no-screen-smoke-evidence.mjs`
+  - Promote `walkability` to required structured output and launch evidence.
+  - Set safe fallback walkability to `uncertain`.
+  - Add eval fixture `expectedWalkability` labels and mismatch reporting.
+  - Show walkability in Diagnostics and no-screen evidence drafts without raw media.
 
 ## Live smoke evidence
 
@@ -101,6 +111,28 @@ Runtime-control continuation smoke on 2026-05-23, also written only to `/tmp` ar
 - Production `/v1/vision/analyze`: request ID `289ef798-9c70-41db-b1e6-d6886a11711f`
 - Production execution path: `provider-backed`, but launch-invalid for the same stale model, prompt, missing `fallbackReason`, and missing runtime-control health fields.
 
+Prompt-boundary continuation smoke on 2026-05-23, also written only to `/tmp` artifacts after the local prompt contract change:
+
+- Staging `/health`: request ID `abb36035-bc61-4ae9-b930-26d269d9be43`
+- Staging `/v1/device/bootstrap`: request ID `538c8bae-3e5c-4714-abd9-8066596a45c3`
+- Staging `/v1/vision/analyze`: request ID `9e0b0643-f427-4a19-82d2-c59040c8faf9`
+- Staging execution path: `provider-backed`, but launch-invalid because the live Worker still reports `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, omits `fallbackReason`, and does not expose the new prompt/runtime contract.
+- Production `/health`: request ID `1e97aa89-6422-4466-b887-8b2c36d95fa1`
+- Production `/v1/device/bootstrap`: request ID `d23f2f31-67e9-413e-bb08-e60aa8fbec5c`
+- Production `/v1/vision/analyze`: request ID `8c62b27b-0320-489f-8dea-19f3a583997d`
+- Production execution path: `provider-backed`, but launch-invalid for the same stale model, prompt, missing `fallbackReason`, and missing runtime-control health fields.
+
+Walkability contract continuation smoke on 2026-05-23, also written only to `/tmp` artifacts after `walkability` became required launch evidence:
+
+- Staging `/health`: request ID `9165bf62-9c02-46b3-90de-381611c8daf8`
+- Staging `/v1/device/bootstrap`: request ID `139e323a-278d-474d-8e9b-f4500daef376`
+- Staging `/v1/vision/analyze`: request ID `a5001b5c-8379-446c-b72c-566bb1133b18`
+- Staging execution path: `provider-backed`, but launch-invalid because the live Worker still reports `gpt-4.1-2025-04-14`, prompt `2026-03-31.v1`, and now misses both `walkability` and `fallbackReason`.
+- Production `/health`: request ID `8c7664de-ec1f-4ad6-9eb8-3338db8c62bd`
+- Production `/v1/device/bootstrap`: request ID `8006381d-1e7d-4dac-a787-00cbe7e4253a`
+- Production `/v1/vision/analyze`: request ID `c99d1628-b06c-451d-b04d-5aeb5ddce41b`
+- Production execution path: `provider-backed`, but launch-invalid for the same stale model, prompt, missing `walkability`, missing `fallbackReason`, and missing runtime-control health fields.
+
 ## Validation
 
 Commands run:
@@ -111,9 +143,14 @@ node --check backend/guidepup-api/eval/run-eval.mjs
 node --check backend/guidepup-api/eval/manifest.schema.mjs
 node --check expo/scripts/check-no-screen-smoke-contract.mjs
 node --check expo/scripts/release-preflight.mjs
+npm --prefix backend/guidepup-api run test:privacy
 npm --prefix backend/guidepup-api run typecheck
+node --check backend/guidepup-api/eval/run-eval.mjs
+node --check backend/guidepup-api/eval/run-live-smoke.mjs
+node --check backend/guidepup-api/eval/manifest.schema.mjs
 npm --prefix expo run check:no-screen-smoke
 npm --prefix expo run check:voice-commands
+npm --prefix expo run test:no-screen-evidence
 npm --prefix expo run typecheck
 npm --prefix expo run lint
 npx wrangler deploy --dry-run --env staging
@@ -133,6 +170,11 @@ Results:
 
 - ESM syntax checks passed.
 - Backend typecheck passed.
+- Backend privacy/runtime/prompt contract tests passed, including the new prompt boundary checks for sampled-frame analysis, deterministic iOS controls, concise spoken guidance, and compact context without raw image data.
+- Backend privacy/runtime/prompt contract tests passed after promoting `walkability`; the prompt contract test now asserts `walkability` remains required in provider and launch response contracts.
+- Backend typecheck and eval/live-smoke/manifest syntax checks passed after the `walkability` contract change.
+- Expo typecheck, lint, voice-command contract, no-screen smoke contract, no-screen evidence schema tests, staging/production dry-run Worker bundles, and Build iOS Apps Release simulator build passed after the `walkability` contract change.
+- Preview/TestFlight/store preflight still fails as expected, and the stale smoke evidence now explicitly reports missing `analyze.walkability` in addition to the previous missing fields.
 - Expo typecheck passed.
 - Expo lint passed.
 - `git diff --check` passed.
@@ -178,7 +220,7 @@ Results:
 - Physical iPhone remains paired with Developer Mode enabled, but unavailable/offline to Xcode in prior device checks.
 - Cloudflare deploy/auth is blocked in this shell: `CLOUDFLARE_API_TOKEN` is missing and Wrangler is not logged in.
 - Live staging and production Workers are still on `gpt-4.1` / prompt `2026-03-31.v1`; they need redeploy and fresh smoke before TestFlight.
-- Production smoke now fails the structured launch gate because the live raw analyze response omits `fallbackReason`.
+- Production smoke now fails the structured launch gate because the live raw analyze response omits `walkability` and `fallbackReason`.
 - Provider runtime controls are local and dry-run validated, but not launch evidence until staging and production Workers are deployed and fresh smoke artifacts contain the new `/health` runtime fields.
 - Expo/EAS build and submission remain blocked by missing `EXPO_TOKEN` and unresolved iOS bundle ID, Apple Team ID, App Store Connect App ID, and copyright holder.
 - The eval harness still lacks real local fixture images; `eval/sample-manifest.json` is a placeholder and is not blind-validation proof.

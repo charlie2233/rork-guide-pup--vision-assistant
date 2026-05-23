@@ -216,6 +216,7 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("backendSmoke.providerBacked", isBooleanTrue);
   requireField("backendSmoke.executionPath", (value) => value === "provider-backed");
   requireField("backendSmoke.structuredOutputValid", isBooleanTrue);
+  requireField("backendSmoke.walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
   requireField("backendSmoke.model", (value) => modelMatchesExpected(value, options.expectedVisionModel));
   requireField("backendSmoke.promptVersion", (value) => isNonEmptyString(value) && (!options.expectedPromptVersion || value === options.expectedPromptVersion));
   requireField("backendSmoke.requestIds.health", isUuidLike);

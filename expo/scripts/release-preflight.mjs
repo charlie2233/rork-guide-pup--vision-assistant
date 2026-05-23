@@ -189,6 +189,7 @@ function validateSmokeEvidenceShape(artifact) {
   requireAnalyzeField("provider", isNonEmptyString);
   requireAnalyzeField("sceneDescription", isNonEmptyString);
   requireAnalyzeField("surfaceType", isNonEmptyString);
+  requireAnalyzeField("walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
 
   if (!analyze || !("fallbackReason" in analyze)) {
     missing.push("analyze.fallbackReason");
