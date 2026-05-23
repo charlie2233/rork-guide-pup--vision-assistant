@@ -425,3 +425,26 @@ Results:
   - `No Accounts: Add a new account in Accounts settings.`
   - `No profiles for 'app.rork.guide-pup-vision-assist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'app.rork.guide-pup-vision-assist'.`
 - Next action is Apple-side: sign Xcode in with an account that can provision team `SBSJ3MX9GZ`, create/download an iOS App Development profile for `app.rork.guide-pup-vision-assist`, then rerun the device build/install and no-screen smoke.
+
+## Public support-copy continuation on 2026-05-23
+
+This continuation removed public-site wording that was still written as an internal launch checklist without inventing the unresolved support email or safety metadata.
+
+Changes:
+
+- Replaced the support page's launch-rehearsal notice with public-safe guidance to use the support contact from TestFlight or the App Store listing and to avoid sending raw camera frames, raw audio, credentials, signed URLs, or emergency details.
+- Reworded the home page label and support/safety card so the public site no longer says "Public launch surface" or "What to verify before launch."
+- Reworded the safety page's "Launch note" heading to "Behavior note."
+
+Commands and results:
+
+```bash
+npm --prefix expo run release:preflight:testflight
+rg -n "launch rehearsal|before submitting|finalized during launch|What to verify before launch|Public launch surface|Launch note" site -S
+```
+
+Results:
+
+- TestFlight preflight no longer fails on public support page placeholder phrases.
+- The support email, copyright holder, and emergency/safety disclaimer remain intentionally unresolved in `expo/release/launch-inputs.js`; those still block TestFlight/store.
+- Production smoke evidence, real-iPhone no-screen evidence, EAS auth, Sentry env, and Apple provisioning remain blockers.

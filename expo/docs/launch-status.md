@@ -64,17 +64,23 @@ Last updated: 2026-05-23
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
   - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
-  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 - Latest local validation on 2026-05-23:
   - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
   - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env
-  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and missing Sentry env
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`
+
+## Public site copy update on 2026-05-23
+
+- Removed launch-internal wording from the public home, support, and safety pages.
+- Re-ran `npm --prefix expo run release:preflight:testflight`; the previous support-page placeholder phrase failures are gone.
+- The support page still cannot be considered App Store-ready until the real support email is provided in `expo/release/launch-inputs.js`.
 
 ## Actions taken on 2026-04-01
 
