@@ -20,12 +20,12 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Staging API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
 - Production API base URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
 - Production Worker name: `guidepup-api-production`
+- iOS bundle identifier: `dev.guidepup.visionassist`
+- Apple Team ID: `SBSJ3MX9GZ`
 
 ## Unresolved Inputs
 
-- iOS bundle identifier: `TODO_IOS_BUNDLE_IDENTIFIER`
 - Android application id / package: `TODO_ANDROID_PACKAGE`
-- Apple Team ID: `TODO_APPLE_TEAM_ID`
 - App Store Connect App ID: `TODO_APP_STORE_CONNECT_APP_ID`
 - Website URL override / custom domain: optional
 - Privacy policy URL: `https://guidepup-site.pages.dev/privacy`
@@ -42,6 +42,12 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Production backend bootstrap secret: configured as a Wrangler secret on `2026-04-01`
 - Production backend provider key: `OPENAI_API_KEY`
 
+## Identifier Evidence
+
+- iOS bundle identifier `dev.guidepup.visionassist` is present in `expo/app.config.ts`, the generated native Xcode project `PRODUCT_BUNDLE_IDENTIFIER`, and the iOS URL schemes in `Info.plist`.
+- Apple Team ID `SBSJ3MX9GZ` is present in the local Apple Development signing identity `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- App Store Connect was checked in the side-panel browser on 2026-05-23, but it redirected to Apple sign-in. The App Store Connect App ID still requires Apple login / 2FA or a value from Charlie.
+
 ## Final Values To Mirror
 
 When Charlie fills these in, mirror the same value in the matching release docs and build config:
@@ -49,7 +55,6 @@ When Charlie fills these in, mirror the same value in the matching release docs 
 - App name
 - Expo slug
 - Expo scheme
-- iOS bundle identifier
 - Android package name
 - Website URL or custom domain
 - Privacy policy URL
@@ -57,7 +62,6 @@ When Charlie fills these in, mirror the same value in the matching release docs 
 - Support email
 - Copyright holder
 - Emergency / safety disclaimer copy
-- Apple Team ID
 - App Store Connect App ID
 - Production API base URL
 - Production Sentry DSN

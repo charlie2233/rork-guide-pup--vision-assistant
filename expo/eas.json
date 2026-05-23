@@ -70,14 +70,14 @@
     "testflight": {
       "metadataPath": "store.config.js",
       "ios": {
-        "appleTeamId": "TODO_APPLE_TEAM_ID",
+        "appleTeamId": "SBSJ3MX9GZ",
         "ascAppId": "TODO_APP_STORE_CONNECT_APP_ID"
       }
     },
     "store": {
       "metadataPath": "store.config.js",
       "ios": {
-        "appleTeamId": "TODO_APPLE_TEAM_ID",
+        "appleTeamId": "SBSJ3MX9GZ",
         "ascAppId": "TODO_APP_STORE_CONNECT_APP_ID"
       }
     }

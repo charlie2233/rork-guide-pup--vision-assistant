@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-05-22
+Last updated: 2026-05-23
 
 ## Public site
 
@@ -56,16 +56,25 @@ Last updated: 2026-05-22
 - Store API target: production
 - EAS Metadata config: `expo/store.config.js`
 - Release preflight: track-aware, with preview warning on fallback-only staging smoke and a hard provider-backed gate for `testflight` and `store`
+- iOS bundle identifier: `dev.guidepup.visionassist`
+- Apple Team ID: `SBSJ3MX9GZ`
+- App Store Connect App ID: unresolved because App Store Connect redirected to Apple sign-in in the side-panel browser on 2026-05-23
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
-  - `preview`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`; staging provider reachability is present, but the launch contract remains stale until smoke shows `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract
-  - `store`: still blocked by `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract
+  - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
+  - `testflight`: still blocked by `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `store`: still blocked by `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, unresolved support/safety copy, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
+- Latest local validation on 2026-05-23:
+  - `npx expo config --type public` shows `ios.bundleIdentifier: dev.guidepup.visionassist`
+  - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, missing no-screen evidence, and missing Sentry env
+  - `npm run release:preflight:testflight`: failed on unresolved App Store Connect App ID, copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env
+  - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
+  - Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`
 
 ## Actions taken on 2026-04-01
 

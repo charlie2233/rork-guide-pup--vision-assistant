@@ -251,6 +251,55 @@ Results:
 - TestFlight/store preflight now also fail on public support-page readiness: the support page still contains launch-internal placeholder phrases and the configured support email is unresolved.
 - TestFlight/store remain blocked on unresolved Apple identifiers, copyright holder, emergency/safety disclaimer, stale production smoke contract, missing no-screen evidence, and Sentry env warnings.
 
+## Identifier resolution continuation on 2026-05-23
+
+App Store Connect was opened in the side-panel browser at `https://appstoreconnect.apple.com/apps`, but it redirected to Apple sign-in with no active session. A WhatsApp note was sent to Charlie.H requesting login / 2FA or the App Store Connect App ID.
+
+Local Xcode evidence resolved two release identifiers without using secrets:
+
+- iOS bundle identifier: `dev.guidepup.visionassist`
+  - Evidence: `expo/app.config.ts`, `expo/app.json`, `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`, and `expo/ios/GuidePupVisionAssistant/Info.plist`.
+- Apple Team ID: `SBSJ3MX9GZ`
+  - Evidence: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+
+The release source of truth was updated for those two values only. The App Store Connect App ID remains unresolved because it requires Apple login / 2FA or a value from Charlie.
+
+Validation after resolving local identifiers:
+
+```bash
+npx expo config --type public
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run test:smoke-evidence
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run check:ios-device
+npx --yes eas-cli whoami
+npx --yes wrangler whoami
+xcodebuildmcp session_show_defaults
+xcodebuildmcp build_sim --extraArgs CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO
+```
+
+Results:
+
+- Evaluated Expo config now shows `ios.bundleIdentifier: dev.guidepup.visionassist`.
+- Preview preflight now passes with warnings only; stale staging smoke, missing no-screen evidence, and missing Sentry env remain warnings for preview.
+- TestFlight/store preflight no longer fail on bundle identifier or Apple Team ID.
+- TestFlight/store still fail on unresolved App Store Connect App ID, copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke contract, missing no-screen evidence, and missing Sentry env.
+- Expo typecheck, Expo lint, voice command contract, no-screen contract, no-screen evidence tests, smoke evidence tests, backend typecheck, and backend privacy tests passed.
+- `check:no-screen-evidence` still fails because `expo/release/no-screen-smoke.latest.json` is missing.
+- `check:ios-device` still reports `charlie的iPhone` blocked: paired and Developer Mode enabled, but unavailable to CoreDevice, DDI unavailable, tunnel disconnected, and no USB iPhone present.
+- EAS remains blocked: `npx --yes eas-cli whoami` returns `Not logged in`.
+- Cloudflare remains blocked locally: `npx --yes wrangler whoami` returns `Not logged in`.
+- Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`.
+
 ## Smoke evidence privacy continuation
 
 Release preflight now also scans provider-backed smoke artifacts for raw media and secret-bearing fields before they can support TestFlight/store readiness. The shared privacy scanner flags provider keys, bearer tokens, session tokens, raw image/audio fields, signed URLs, data-URL media, and long base64-like payloads.
