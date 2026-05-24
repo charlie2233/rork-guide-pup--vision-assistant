@@ -16,6 +16,7 @@ export function getProviderSummary(env: Env) {
     requestTimeoutMs: runtimeConfig.requestTimeoutMs,
     retryCount: runtimeConfig.retryCount,
     retryDelayMs: runtimeConfig.retryDelayMs,
+    structuredOutputMode: runtimeConfig.structuredOutputMode,
   };
 }
 

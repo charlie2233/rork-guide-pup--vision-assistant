@@ -281,6 +281,7 @@ function validateSmokeEvidenceShape(artifact) {
   requireHealthField("defaultRequestTimeoutMs", (value) => Number.isInteger(value) && value >= 3000 && value <= 30000);
   requireHealthField("defaultRetryCount", (value) => Number.isInteger(value) && value >= 0 && value <= 2);
   requireHealthField("defaultRetryDelayMs", (value) => Number.isInteger(value) && value >= 0 && value <= 2000);
+  requireHealthField("structuredOutputMode", (value) => value === "json_schema_strict");
 
   requireAnalyzeField("structuredOutputValid", (value) => value === true);
   requireAnalyzeField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
@@ -298,6 +299,7 @@ function validateSmokeEvidenceShape(artifact) {
 
   requireLaunchContractField("runtimeControlsPresent", (value) => value === true);
   requireLaunchContractField("sampledFrameEnvelopeValid", (value) => value === true);
+  requireLaunchContractField("strictStructuredOutputsPresent", (value) => value === true);
   requireLaunchContractField("structuredOutputValid", (value) => value === true);
   requireLaunchContractField("valid", (value) => value === true);
 
@@ -373,7 +375,7 @@ function validateSmokeArtifact(artifact, options) {
   const modelContractMessage = `${description} smoke artifact must use launch vision model "${expectedVisionModel}", found health "${artifact.health?.defaultModel ?? "missing"}" and analyze "${artifact.analyze?.model ?? "missing"}".`;
   const promptContractMessage = `${description} smoke artifact must use prompt version "${expectedPromptVersion}", found health "${artifact.health?.promptVersion ?? "missing"}" and analyze "${artifact.analyze?.promptVersion ?? "missing"}".`;
   const evidenceShape = validateSmokeEvidenceShape(artifact);
-  const evidenceShapeMessage = `${description} smoke artifact must include launch contract, sampled-frame envelope, runtime controls, and structured analyze fields. Missing: ${
+  const evidenceShapeMessage = `${description} smoke artifact must include launch contract, sampled-frame envelope, runtime controls, strict Structured Outputs mode, and structured analyze fields. Missing: ${
     evidenceShape.missing.join(", ") || "none"
   }. Invalid: ${evidenceShape.invalid.join(", ") || "none"}.`;
 

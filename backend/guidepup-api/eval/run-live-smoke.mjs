@@ -245,6 +245,10 @@ function hasBoundedRuntimeControls(healthJson) {
   );
 }
 
+function hasStrictStructuredOutputs(healthJson) {
+  return healthJson?.structuredOutputMode === "json_schema_strict";
+}
+
 function hasSampledFrameEnvelope(envelope) {
   return (
     envelope?.sampledFrame === true &&
@@ -280,13 +284,15 @@ function hasSampledFrameEnvelope(envelope) {
 function buildLaunchContract({ analyzeSummary, healthJson, requestEnvelope }) {
   const runtimeControlsPresent = hasBoundedRuntimeControls(healthJson);
   const sampledFrameEnvelopeValid = hasSampledFrameEnvelope(requestEnvelope);
+  const strictStructuredOutputsPresent = hasStrictStructuredOutputs(healthJson);
   const structuredOutputValid = analyzeSummary.structuredOutputValid === true;
 
   return {
     runtimeControlsPresent,
     sampledFrameEnvelopeValid,
+    strictStructuredOutputsPresent,
     structuredOutputValid,
-    valid: runtimeControlsPresent && sampledFrameEnvelopeValid && structuredOutputValid,
+    valid: runtimeControlsPresent && sampledFrameEnvelopeValid && strictStructuredOutputsPresent && structuredOutputValid,
   };
 }
 
@@ -299,6 +305,10 @@ function validateLaunchReadinessArtifact(artifact, { expectedModel, expectedProm
 
   if (!artifact.launchContract.valid) {
     issues.push("launch contract is not valid");
+  }
+
+  if (artifact.launchContract.strictStructuredOutputsPresent !== true) {
+    issues.push(`strict Structured Outputs mode is "${artifact.health.structuredOutputMode || "missing"}"`);
   }
 
   if (expectedModel) {
@@ -422,6 +432,7 @@ function toMarkdown(artifact) {
     `  - request timeout: \`${artifact.health.defaultRequestTimeoutMs ?? "not-found"}ms\``,
     `  - retry count: \`${artifact.health.defaultRetryCount ?? "not-found"}\``,
     `  - retry delay: \`${artifact.health.defaultRetryDelayMs ?? "not-found"}ms\``,
+    `  - structured output mode: \`${artifact.health.structuredOutputMode || "not-found"}\``,
     `  - prompt version: \`${artifact.health.promptVersion || "not-found"}\``,
     `  - latency: \`${artifact.health.roundTripLatencyMs}ms\``,
     "- `POST /v1/device/bootstrap`",
@@ -456,6 +467,7 @@ function toMarkdown(artifact) {
     `- provider backed: \`${artifact.providerBacked ? "yes" : "no"}\``,
     `- launch contract valid: \`${artifact.launchContract.valid ? "yes" : "no"}\``,
     `- structured output valid: \`${artifact.launchContract.structuredOutputValid ? "yes" : "no"}\``,
+    `- strict Structured Outputs present: \`${artifact.launchContract.strictStructuredOutputsPresent ? "yes" : "no"}\``,
     `- sampled-frame envelope valid: \`${artifact.launchContract.sampledFrameEnvelopeValid ? "yes" : "no"}\``,
     `- runtime controls present: \`${artifact.launchContract.runtimeControlsPresent ? "yes" : "no"}\``,
     "",
@@ -564,6 +576,7 @@ async function main() {
       roundTripLatencyMs: health.roundTripLatencyMs,
       statusCode: health.response.status,
       statusText: health.response.statusText || "",
+      structuredOutputMode: health.json?.structuredOutputMode,
     },
     launchContract,
     operator: args.operator,

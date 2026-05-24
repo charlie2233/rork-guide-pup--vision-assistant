@@ -246,3 +246,41 @@ Results:
 - Staging strict smoke wrote `/tmp/guidepup-strict-smoke-staging.json` and `/tmp/guidepup-strict-smoke-staging.md`, then exited nonzero as intended. Request IDs: `/health` `d8e0a68d-74d8-4214-bad4-8288dfe885b7`, `/v1/device/bootstrap` `f0e42eec-5732-4288-af55-d0dd34f28bc1`, `/v1/vision/analyze` `fec32c44-691c-4e9a-92fc-2b891316fd65`.
 - Production strict smoke wrote `/tmp/guidepup-strict-smoke-production.json` and `/tmp/guidepup-strict-smoke-production.md`, then exited nonzero as intended. Request IDs: `/health` `6b849601-987f-4ab2-b9af-682533fb67e7`, `/v1/device/bootstrap` `658e9b09-49d6-4272-a62c-ef377dec94b2`, `/v1/vision/analyze` `4e436b40-8cb4-424d-9bcc-7cac46b72660`.
 - Both strict smoke runs are provider-backed but launch-invalid because the live Workers still report `gpt-4.1` / `2026-03-31.v1`, lack runtime-control health fields, and omit `walkability` and `fallbackReason`.
+
+## 2026-05-23 strict Structured Outputs evidence gate
+
+The backend already sends OpenAI-compatible analyze requests with strict JSON Schema Structured Outputs. This continuation makes that mode visible and release-gated so smoke evidence can prove the deployed Worker is using the launch contract, not just provider-backed reachability.
+
+Changes:
+
+- Added a provider runtime marker `structuredOutputMode: "json_schema_strict"`.
+- Reused a single strict response-format helper for the OpenAI-compatible request body.
+- Surfaced `structuredOutputMode` through provider summary and `/health`.
+- Added `launchContract.strictStructuredOutputsPresent` to live-smoke artifacts and Markdown output.
+- Updated Expo release preflight and static no-screen contract checks to reject staging/production smoke that does not prove `health.structuredOutputMode === "json_schema_strict"`.
+- Updated backend eval docs and the smoke-results template so operators record this field.
+
+Validation:
+
+```bash
+node --check backend/guidepup-api/eval/run-live-smoke.mjs
+node --check expo/scripts/release-preflight.mjs
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+git diff --check
+Build iOS Apps plugin build_sim, Release, iPhone 16e, CODE_SIGNING_ALLOWED=NO, ONLY_ACTIVE_ARCH=YES, COMPILER_INDEX_STORE_ENABLE=NO
+```
+
+Results:
+
+- Backend syntax, typecheck, privacy/runtime/prompt tests, and staging Worker dry-run passed.
+- Expo no-screen smoke contract, typecheck, lint, preview preflight, `git diff --check`, and Build iOS Apps Release simulator build passed.
+- Preview preflight now warns that the checked-in staging smoke is stale until it includes `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent`.
+- TestFlight preflight still fails, now also naming missing strict Structured Outputs evidence in the stale production smoke artifact.
+- No live staging/production Worker deploy or provider-backed re-smoke was performed in this continuation because `npx --yes wrangler whoami` still returns `Not logged in` and `CLOUDFLARE_API_TOKEN` is not available in this shell.

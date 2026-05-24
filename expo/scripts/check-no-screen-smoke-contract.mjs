@@ -216,10 +216,12 @@ mustInclude(releasePreflight, "artifact.analyze?.requestId", "Analyze request ID
 mustInclude(releasePreflight, "requireHealthField(\"defaultMaxCompletionTokens\"", "Max completion token preflight gate");
 mustInclude(releasePreflight, "requireHealthField(\"defaultRequestTimeoutMs\"", "Provider timeout preflight gate");
 mustInclude(releasePreflight, "requireHealthField(\"defaultRetryCount\"", "Provider retry preflight gate");
+mustInclude(releasePreflight, "requireHealthField(\"structuredOutputMode\"", "Strict Structured Outputs health preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"frameSummary\"", "Frame summary preflight gate");
 mustInclude(releasePreflight, "requireEnvelopeField(\"captureHeuristics\"", "Capture heuristics preflight gate");
 mustInclude(releasePreflight, "requireAnalyzeField(\"walkability\"", "Walkability preflight gate");
 mustInclude(releasePreflight, "requireLaunchContractField(\"valid\"", "Launch contract preflight gate");
+mustInclude(releasePreflight, "requireLaunchContractField(\"strictStructuredOutputsPresent\"", "Strict Structured Outputs launch contract preflight gate");
 mustInclude(releasePreflight, "validatePublicSupportPageForStore", "Public support page App Store preflight gate");
 mustInclude(releasePreflight, "Public support page must include the configured support email", "Public support contact preflight gate");
 mustInclude(releasePreflight, "validateAppReviewMetadataForStore", "App Review metadata preflight gate");

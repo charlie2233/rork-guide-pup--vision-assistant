@@ -570,3 +570,52 @@ Results:
 - `check:no-screen-evidence` still exits blocked because the real hardware evidence artifact is missing.
 - Preview preflight passes with warnings; TestFlight preflight fails on the intended unresolved store metadata, stale production launch-smoke contract, and missing no-screen evidence.
 - Expo typecheck, lint, smoke-evidence privacy tests, backend typecheck, `git diff --check`, and Build iOS Apps Release simulator build passed.
+
+## Submission readiness review continuation on 2026-05-23
+
+Decision: still do not submit to TestFlight or App Store, and do not merge/update `main` as launch-ready yet.
+
+Read-only App Store Connect browser evidence from `https://appstoreconnect.apple.com/apps/6756947790/distribution/info`:
+
+- App name: `Guide Pup: Vision Assistant`
+- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
+- SKU: `EX1766553072106`
+- Apple ID / App Store Connect App ID: `6756947790`
+- Category: `Navigation`
+
+Fresh volatile status checks:
+
+```bash
+npm --prefix expo run check:ios-device -- --json
+npx --yes eas-cli whoami
+npx --yes wrangler whoami
+```
+
+Results:
+
+- `check:ios-device -- --json` still exits blocked. It reports suffix-only device identifiers for `charlie的iPhone`, paired/trusted `true`, Developer Mode `true`, last connection `2026-05-23T19:58:57.734Z`, but `ddiServicesAvailable: false`, `tunnelConnected: false`, `usbOrSameLan: false`, and `xcodeDestinationAvailable: false`.
+- `npx --yes eas-cli whoami`: `Not logged in`, so no EAS build/submit can be started.
+- `npx --yes wrangler whoami`: `Not logged in`, so staging/production Workers cannot be redeployed from this shell.
+
+Validation in this continuation:
+
+```bash
+node --check backend/guidepup-api/eval/run-live-smoke.mjs
+node --check expo/scripts/release-preflight.mjs
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+git diff --check
+Build iOS Apps plugin build_sim, Release, iPhone 16e
+```
+
+Results:
+
+- Backend typecheck/tests, staging dry-run, Expo static checks, preview preflight, and Release simulator build passed.
+- TestFlight preflight still fails on unresolved copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, and missing real-iPhone no-screen evidence.
+- The stale smoke contract now explicitly blocks missing strict Structured Outputs proof: `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent`.

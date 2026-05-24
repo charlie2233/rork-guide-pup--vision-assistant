@@ -33,8 +33,9 @@ npm run smoke:production
 
 The smoke scripts write the latest JSON and Markdown artifacts before returning. They now also require the launch
 contract by default: provider-backed analyze, the configured launch model and prompt version, bounded runtime controls,
-sampled-frame envelope proof, and structured analyze output. A stale Worker can still leave useful request IDs in the
-artifact, but the command exits nonzero until the evidence is launch-valid.
+strict Structured Outputs mode (`json_schema_strict`), sampled-frame envelope proof, and structured analyze output. A
+stale Worker can still leave useful request IDs in the artifact, but the command exits nonzero until the evidence is
+launch-valid.
 
 Override the API target if needed:
 

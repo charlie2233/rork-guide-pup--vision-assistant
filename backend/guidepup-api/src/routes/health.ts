@@ -20,5 +20,6 @@ export function handleHealth(request: Request, env: Env, requestId: string) {
     promptVersion: getPromptVersion(env),
     requestId,
     service: "guidepup-api",
+    structuredOutputMode: providerSummary.structuredOutputMode,
   });
 }

@@ -23,14 +23,18 @@ test("OpenAI-compatible provider has bounded launch runtime controls", () => {
   assert.match(providerSource, /AbortController/);
   assert.match(providerSource, /isRetryableStatus/);
   assert.match(providerSource, /retryCount:\s*parseBoundedInteger/);
+  assert.match(providerSource, /type:\s*"json_schema"/);
+  assert.match(providerSource, /strict:\s*true/);
+  assert.match(providerSource, /structuredOutputMode:\s*STRUCTURED_OUTPUT_MODE/);
 });
 
-test("runtime controls are surfaced in health, smoke, and release evidence gates", () => {
+test("runtime controls and strict Structured Outputs are surfaced in health, smoke, and release evidence gates", () => {
   for (const field of [
     "defaultMaxCompletionTokens",
     "defaultRequestTimeoutMs",
     "defaultRetryCount",
     "defaultRetryDelayMs",
+    "structuredOutputMode",
   ]) {
     assert.match(healthSource, new RegExp(field));
     assert.match(liveSmokeSource, new RegExp(field));
@@ -39,4 +43,7 @@ test("runtime controls are surfaced in health, smoke, and release evidence gates
   assert.match(preflightSource, /requireHealthField\("defaultMaxCompletionTokens"/);
   assert.match(preflightSource, /requireHealthField\("defaultRequestTimeoutMs"/);
   assert.match(preflightSource, /requireHealthField\("defaultRetryCount"/);
+  assert.match(preflightSource, /requireHealthField\("structuredOutputMode"/);
+  assert.match(preflightSource, /requireLaunchContractField\("strictStructuredOutputsPresent"/);
+  assert.match(liveSmokeSource, /strictStructuredOutputsPresent/);
 });

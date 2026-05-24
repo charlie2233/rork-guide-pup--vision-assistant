@@ -64,20 +64,30 @@ Last updated: 2026-05-23
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
-  - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, and missing no-screen evidence
-  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, and missing no-screen evidence
+  - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, strict Structured Outputs mode, sampled-frame envelope fields, and nullable `fallbackReason`
+  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 - Latest local validation on 2026-05-23:
   - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
-  - `npm run release:preflight:preview`: passed with warnings for stale staging smoke and missing no-screen evidence
-  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, and missing no-screen evidence
+  - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, including missing `health.structuredOutputMode` / `launchContract.strictStructuredOutputsPresent`, and missing no-screen evidence
+  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Strict staging smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Strict production smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Build iOS Apps plugin Release simulator build passed for `GuidePupVisionAssistant` on `iPhone 16e`
+
+## Strict Structured Outputs gate update on 2026-05-23
+
+- The backend now exposes `structuredOutputMode: "json_schema_strict"` through `/health` and smoke artifacts.
+- Release preflight now requires both `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent` in staging/production evidence.
+- Fresh local validation passed: backend typecheck, backend privacy/runtime tests, staging Worker dry-run, Expo typecheck, Expo lint, no-screen smoke contract, preview preflight, `git diff --check`, and Build iOS Apps Release simulator build.
+- Fresh TestFlight preflight still fails because the checked-in production smoke is stale and does not yet prove strict Structured Outputs on the deployed Worker.
+- `npm --prefix expo run check:ios-device -- --json` still reports `blocked` for `charlie的iPhone`: paired/trusted and Developer Mode enabled, but DDI services, CoreDevice tunnel, USB/same-LAN execution, and Xcode destination visibility are not available.
+- `npx --yes eas-cli whoami` and `npx --yes wrangler whoami` still report not logged in.
+- Read-only side-panel App Store Connect check still confirms app ID `6756947790`, bundle ID `app.rork.guide-pup-vision-assist`, SKU `EX1766553072106`, and category `Navigation`.
 
 ## Strict smoke command update on 2026-05-23
 

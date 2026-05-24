@@ -14,6 +14,8 @@ type OpenAIChatCompletionResponse = {
   model?: string;
 };
 
+const STRUCTURED_OUTPUT_MODE = "json_schema_strict";
+
 class ProviderHttpError extends Error {
   readonly retryable: boolean;
 
@@ -58,6 +60,18 @@ export function getOpenAIProviderRuntimeConfig(env: Env) {
     requestTimeoutMs: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_REQUEST_TIMEOUT_MS"), 12000, 3000, 30000),
     retryCount: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_RETRY_COUNT"), 1, 0, 2),
     retryDelayMs: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_RETRY_DELAY_MS"), 250, 0, 2000),
+    structuredOutputMode: STRUCTURED_OUTPUT_MODE,
+  };
+}
+
+function buildOpenAIResponseFormat() {
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "guidepup_navigation_vision",
+      strict: true,
+      schema: ProviderVisionJsonSchema,
+    },
   };
 }
 
@@ -134,14 +148,7 @@ async function analyzeWithAttempt(
         },
         body: JSON.stringify({
           model: runtimeConfig.model,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "guidepup_navigation_vision",
-              strict: true,
-              schema: ProviderVisionJsonSchema,
-            },
-          },
+          response_format: buildOpenAIResponseFormat(),
           max_completion_tokens: runtimeConfig.maxCompletionTokens,
           ...(runtimeConfig.reasoningEffort ? { reasoning_effort: runtimeConfig.reasoningEffort } : {}),
           messages: [

@@ -14,6 +14,7 @@ Operator:
 - `GET /health`
   - status:
   - request id:
+  - structured output mode:
   - notes:
 - `POST /v1/device/bootstrap`
   - status:
@@ -56,6 +57,15 @@ Operator:
 - dimensions:
 - capture heuristics:
 - prior guidance:
+
+## Launch contract
+
+- provider backed:
+- launch contract valid:
+- structured output valid:
+- strict Structured Outputs present:
+- sampled-frame envelope valid:
+- runtime controls present:
 
 ## Eval harness
 
