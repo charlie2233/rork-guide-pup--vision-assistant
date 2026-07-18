@@ -211,7 +211,7 @@ Minimum launch steps:
 
 ## Safety and release TODOs
 
-- TODO: finalize the emergency / safety disclaimer copy with legal review.
+- TODO: keep the finalized emergency / safety disclaimer copy available for legal review before store submission.
 - TODO: add App Store metadata copy for camera usage and third-party AI image processing.
 - TODO: replace placeholder SOS behavior with a real emergency flow and legal review.
 - TODO: if microphone capture is ever added, add the matching permission string and privacy disclosures before shipping.

@@ -485,6 +485,18 @@ Changes:
 - Updated `site/support/index.html` to expose the same mailto contact while preserving the no-raw-audio/images/secrets guidance.
 - Updated launch-input and fill-these-now docs so support email is no longer listed as unresolved.
 
+## Emergency disclaimer resolution on 2026-07-17
+
+The emergency / safety disclaimer is now resolved from existing public safety and App Review copy:
+
+`Guide Pup provides assistive guidance, not guaranteed hazard detection or emergency response. If the app cannot confidently analyze the scene, it stops and tells the user to pause and reorient. If you are in immediate danger, stop using the app and contact local emergency services or nearby people directly.`
+
+Changes:
+
+- Replaced `TODO_EMERGENCY_SAFETY_DISCLAIMER` in `expo/release/launch-inputs.js`.
+- Mirrored the same copy into preview, TestFlight, and store EAS profile envs.
+- Updated launch-input, launch-status, and fill-these-now docs so the emergency disclaimer is no longer listed as unresolved.
+
 This does not change App Store Connect directly; EAS and Apple authentication are still required before metadata can be pushed. It prevents the local release source of truth from silently preserving the previously observed App Store Connect mismatch where sign-in was checked despite no account flow.
 
 Validation:
@@ -628,5 +640,5 @@ Build iOS Apps plugin build_sim, Release, iPhone 16e
 Results:
 
 - Backend typecheck/tests, staging dry-run, Expo static checks, preview preflight, and Release simulator build passed.
-- TestFlight preflight still fails on unresolved copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, and missing real-iPhone no-screen evidence.
+- TestFlight preflight still fails on unresolved copyright holder, App Review contact fields, stale production smoke contract, and missing real-iPhone no-screen evidence.
 - The stale smoke contract now explicitly blocks missing strict Structured Outputs proof: `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent`.

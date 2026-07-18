@@ -26,6 +26,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - App Review sign-in required / demo account required: `false`
 - Sentry mode: `disabled`
 - Support email: `charliehan112@gmail.com`
+- Emergency / safety disclaimer: `Guide Pup provides assistive guidance, not guaranteed hazard detection or emergency response. If the app cannot confidently analyze the scene, it stops and tells the user to pause and reorient. If you are in immediate danger, stop using the app and contact local emergency services or nearby people directly.`
 
 ## Unresolved Inputs
 
@@ -35,7 +36,6 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Support URL: `https://guidepup-site.pages.dev/support`
 - Derived safety URL: `${WEBSITE_URL}/safety`
 - Copyright holder: `TODO_COPYRIGHT_HOLDER`
-- Emergency / safety disclaimer final copy: `TODO_EMERGENCY_SAFETY_DISCLAIMER`
 - App Review first name: `TODO_APP_REVIEW_FIRST_NAME`
 - App Review last name: `TODO_APP_REVIEW_LAST_NAME`
 - App Review email: `TODO_APP_REVIEW_EMAIL`

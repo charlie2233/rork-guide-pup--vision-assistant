@@ -13,7 +13,8 @@ const launchInputs = {
   supportUrl: "https://guidepup-site.pages.dev/support",
   supportEmail: "charliehan112@gmail.com",
   copyright: "TODO_COPYRIGHT_HOLDER",
-  emergencyDisclaimer: "TODO_EMERGENCY_SAFETY_DISCLAIMER",
+  emergencyDisclaimer:
+    "Guide Pup provides assistive guidance, not guaranteed hazard detection or emergency response. If the app cannot confidently analyze the scene, it stops and tells the user to pause and reorient. If you are in immediate danger, stop using the app and contact local emergency services or nearby people directly.",
   appReviewFirstName: "TODO_APP_REVIEW_FIRST_NAME",
   appReviewLastName: "TODO_APP_REVIEW_LAST_NAME",
   appReviewEmail: "TODO_APP_REVIEW_EMAIL",

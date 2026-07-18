@@ -6,7 +6,6 @@ Charlie still needs to set these values before launch execution can finish:
 - Final public privacy policy URL if it should not be derived from `${WEBSITE_URL}/privacy`
 - Final public support URL if it should not be derived from `${WEBSITE_URL}/support`
 - Copyright holder string for App Store metadata
-- Final emergency / safety disclaimer copy
 - App Review contact first name
 - App Review contact last name
 - App Review contact email, as a valid email address
@@ -30,6 +29,8 @@ Charlie still needs to set these values before launch execution can finish:
   - Evidence: `expo/release/launch-inputs.js` now carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight requires TestFlight/store EAS profiles to keep `EXPO_PUBLIC_SENTRY_DSN` blank while disabled.
 - Support email: `charliehan112@gmail.com`
   - Evidence: provided by Charlie on 2026-07-17 and mirrored into `expo/release/launch-inputs.js`, `expo/eas.json`, and `site/support/index.html`.
+- Emergency / safety disclaimer: resolved on 2026-07-17
+  - Evidence: final copy is derived from the existing app fallback, public safety page, and App Review notes, then mirrored into `expo/release/launch-inputs.js` and `expo/eas.json`.
 
 ## Backend by environment
 
