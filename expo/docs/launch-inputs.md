@@ -25,6 +25,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - App Store Connect App ID: `6756947790`
 - App Review sign-in required / demo account required: `false`
 - Sentry mode: `disabled`
+- Support email: `charliehan112@gmail.com`
 
 ## Unresolved Inputs
 
@@ -33,7 +34,6 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Privacy policy URL: `https://guidepup-site.pages.dev/privacy`
 - Support URL: `https://guidepup-site.pages.dev/support`
 - Derived safety URL: `${WEBSITE_URL}/safety`
-- Support email: `TODO_SUPPORT_EMAIL`
 - Copyright holder: `TODO_COPYRIGHT_HOLDER`
 - Emergency / safety disclaimer final copy: `TODO_EMERGENCY_SAFETY_DISCLAIMER`
 - App Review first name: `TODO_APP_REVIEW_FIRST_NAME`

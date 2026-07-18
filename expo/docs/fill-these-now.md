@@ -5,7 +5,6 @@ Charlie still needs to set these values before launch execution can finish:
 - Optional website custom domain override
 - Final public privacy policy URL if it should not be derived from `${WEBSITE_URL}/privacy`
 - Final public support URL if it should not be derived from `${WEBSITE_URL}/support`
-- Final support email
 - Copyright holder string for App Store metadata
 - Final emergency / safety disclaimer copy
 - App Review contact first name
@@ -29,6 +28,8 @@ Charlie still needs to set these values before launch execution can finish:
   - Evidence: Guide Pup has no account sign-in flow; `expo/store.config.js` now sets `apple.review.demoRequired` from `expo/release/launch-inputs.js`.
 - Sentry mode: `disabled`
   - Evidence: `expo/release/launch-inputs.js` now carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight requires TestFlight/store EAS profiles to keep `EXPO_PUBLIC_SENTRY_DSN` blank while disabled.
+- Support email: `charliehan112@gmail.com`
+  - Evidence: provided by Charlie on 2026-07-17 and mirrored into `expo/release/launch-inputs.js`, `expo/eas.json`, and `site/support/index.html`.
 
 ## Backend by environment
 

@@ -11,7 +11,7 @@ const launchInputs = {
   websiteUrl: "https://guidepup-site.pages.dev",
   privacyPolicyUrl: "https://guidepup-site.pages.dev/privacy",
   supportUrl: "https://guidepup-site.pages.dev/support",
-  supportEmail: "TODO_SUPPORT_EMAIL",
+  supportEmail: "charliehan112@gmail.com",
   copyright: "TODO_COPYRIGHT_HOLDER",
   emergencyDisclaimer: "TODO_EMERGENCY_SAFETY_DISCLAIMER",
   appReviewFirstName: "TODO_APP_REVIEW_FIRST_NAME",

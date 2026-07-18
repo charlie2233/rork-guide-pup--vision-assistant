@@ -1,6 +1,6 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-05-23
+Last updated: 2026-07-17
 
 ## Public site
 
@@ -59,21 +59,22 @@ Last updated: 2026-05-23
 - iOS bundle identifier: `app.rork.guide-pup-vision-assist`
 - Apple Team ID: `SBSJ3MX9GZ`
 - App Store Connect App ID: `6756947790`
+- Support email: `charliehan112@gmail.com`
 - Sentry mode: `disabled`
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
   - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, strict Structured Outputs mode, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
-  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved support email and emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved emergency/safety disclaimer, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
 - Latest local validation on 2026-05-23:
   - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
   - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, including missing `health.structuredOutputMode` / `launchContract.strictStructuredOutputsPresent`, and missing no-screen evidence
-  - `npm run release:preflight:testflight`: failed on copyright holder, support email, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - `npm run release:preflight:testflight`: failed on copyright holder, emergency/safety disclaimer, App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Strict staging smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Strict production smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
@@ -100,7 +101,7 @@ Last updated: 2026-05-23
 
 - Removed launch-internal wording from the public home, support, and safety pages.
 - Re-ran `npm --prefix expo run release:preflight:testflight`; the previous support-page placeholder phrase failures are gone.
-- The support page still cannot be considered App Store-ready until the real support email is provided in `expo/release/launch-inputs.js`.
+- Support email was resolved to `charliehan112@gmail.com` on 2026-07-17 and mirrored into release inputs, EAS envs, and the public support page.
 
 ## Actions taken on 2026-04-01
 

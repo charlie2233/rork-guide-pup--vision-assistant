@@ -474,6 +474,17 @@ Results:
 
 Expo EAS Metadata supports App Review Information through `apple.review`, including `demoRequired`. The launch metadata now sets `demoRequired: false` from `expo/release/launch-inputs.js` because Guide Pup has no account sign-in flow, and release preflight rejects demo credentials for this shipping path. The gate also requires App Review contact name, email, and phone before TestFlight/store metadata can be considered ready.
 
+## Support email resolution on 2026-07-17
+
+Charlie provided the launch support email `charliehan112@gmail.com`.
+
+Changes:
+
+- Replaced `TODO_SUPPORT_EMAIL` in `expo/release/launch-inputs.js`.
+- Mirrored the same value into preview, TestFlight, and store EAS profile envs.
+- Updated `site/support/index.html` to expose the same mailto contact while preserving the no-raw-audio/images/secrets guidance.
+- Updated launch-input and fill-these-now docs so support email is no longer listed as unresolved.
+
 This does not change App Store Connect directly; EAS and Apple authentication are still required before metadata can be pushed. It prevents the local release source of truth from silently preserving the previously observed App Store Connect mismatch where sign-in was checked despite no account flow.
 
 Validation:
