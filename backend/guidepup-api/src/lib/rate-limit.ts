@@ -11,6 +11,7 @@ type RateLimitState = {
 export type RateLimitDecision = {
   allowed: boolean;
   limit: number;
+  reason: "allowed" | "limit-exceeded" | "infrastructure-unavailable";
   remaining: number;
   resetAt: string;
 };
@@ -22,6 +23,50 @@ function getWindowDurationMs() {
 export function getRateLimitPerMinute(env: Env) {
   const parsed = Number.parseInt(env.RATE_LIMIT_PER_MINUTE || "20", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+}
+
+export function getBootstrapRateLimitPerMinute() {
+  return 10;
+}
+
+function unavailableDecision(limit: number): RateLimitDecision {
+  return {
+    allowed: false,
+    limit,
+    reason: "infrastructure-unavailable",
+    remaining: 0,
+    resetAt: new Date(Date.now() + getWindowDurationMs()).toISOString(),
+  };
+}
+
+function parseRateLimitDecision(value: unknown): RateLimitDecision {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Rate limiter returned an invalid decision.");
+  }
+
+  const candidate = value as Partial<RateLimitDecision>;
+  const { allowed, limit, remaining, resetAt } = candidate;
+  if (
+    typeof allowed !== "boolean" ||
+    typeof limit !== "number" ||
+    !Number.isInteger(limit) ||
+    limit <= 0 ||
+    typeof remaining !== "number" ||
+    !Number.isInteger(remaining) ||
+    remaining < 0 ||
+    typeof resetAt !== "string" ||
+    Number.isNaN(Date.parse(resetAt))
+  ) {
+    throw new Error("Rate limiter returned an invalid decision.");
+  }
+
+  return {
+    allowed,
+    limit,
+    reason: allowed ? "allowed" : "limit-exceeded",
+    remaining,
+    resetAt,
+  };
 }
 
 export class DeviceRateLimiter extends DurableObject<Env> {
@@ -41,6 +86,7 @@ export class DeviceRateLimiter extends DurableObject<Env> {
     const decision: RateLimitDecision = {
       allowed: nextState.count <= payload.limit,
       limit: payload.limit,
+      reason: nextState.count <= payload.limit ? "allowed" : "limit-exceeded",
       remaining: Math.max(payload.limit - nextState.count, 0),
       resetAt: new Date(windowStartMs + getWindowDurationMs()).toISOString(),
     };
@@ -57,40 +103,66 @@ export class DeviceRateLimiter extends DurableObject<Env> {
   }
 }
 
-export async function enforceRateLimit(deviceId: string, env: Env) {
+async function enforceRateLimitForSubject(subject: string, env: Env, limit: number) {
   if (!env.RATE_LIMITER) {
-    return {
-      allowed: true,
-      limit: getRateLimitPerMinute(env),
-      remaining: getRateLimitPerMinute(env),
-      resetAt: new Date(Date.now() + getWindowDurationMs()).toISOString(),
-    };
+    logWarn("rate_limit.unavailable", {
+      deviceId: subject,
+      message: "Rate limiter binding is unavailable.",
+    });
+    return unavailableDecision(limit);
   }
 
   try {
-    const stub = env.RATE_LIMITER.getByName(deviceId);
+    const stub = env.RATE_LIMITER.getByName(subject);
     const response = await stub.fetch("https://rate-limit.internal/check", {
       method: "POST",
       headers: {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        limit: getRateLimitPerMinute(env),
+        limit,
       }),
     });
 
-    return (await response.json()) as RateLimitDecision;
+    if (!response.ok) {
+      throw new Error(`Rate limiter failed (${response.status}).`);
+    }
+
+    return parseRateLimitDecision(await response.json());
   } catch (error) {
     logWarn("rate_limit.unavailable", {
-      deviceId,
+      deviceId: subject,
       message: error instanceof Error ? error.message : String(error),
     });
 
-    return {
-      allowed: true,
-      limit: getRateLimitPerMinute(env),
-      remaining: getRateLimitPerMinute(env),
-      resetAt: new Date(Date.now() + getWindowDurationMs()).toISOString(),
-    };
+    return unavailableDecision(limit);
   }
+}
+
+export async function enforceRateLimit(deviceId: string, env: Env) {
+  return enforceRateLimitForSubject(deviceId, env, getRateLimitPerMinute(env));
+}
+
+async function hashBootstrapSubject(value: string, env: Env) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(env.BOOTSTRAP_SIGNING_SECRET || "guidepup-bootstrap-rate-limit-v1"),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function enforceBootstrapRateLimit(request: Request, env: Env) {
+  const clientAddress = request.headers.get("cf-connecting-ip")?.trim() || "unavailable";
+  const subjectHash = await hashBootstrapSubject(`guidepup-bootstrap:${clientAddress}`, env);
+  return enforceRateLimitForSubject(
+    `bootstrap:${subjectHash}`,
+    env,
+    getBootstrapRateLimitPerMinute(),
+  );
 }

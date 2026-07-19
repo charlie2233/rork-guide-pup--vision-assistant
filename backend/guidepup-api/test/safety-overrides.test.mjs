@@ -85,7 +85,7 @@ function clearPath(overrides = {}) {
 }
 
 test("low-visibility provider guidance is forced to safe stop", () => {
-  for (const lighting of ["dark", "unknown"]) {
+  for (const lighting of ["dark", "dim", "unknown"]) {
     const normalized = normalizeProviderVision(clearPath({ lighting }), metadata);
 
     assert.equal(normalized.direction, "stop");
@@ -96,6 +96,81 @@ test("low-visibility provider guidance is forced to safe stop", () => {
     assert.equal(normalized.lighting, lighting);
     assert.ok(normalized.confidence <= 0.45);
   }
+});
+
+test("contradictory provider safety fields always replace forward or turn speech with STOP", () => {
+  const cases = [
+    {
+      name: "very-close obstacle",
+      overrides: {
+        obstacles: [{ confidence: 0.92, distance: "very-close", position: "center", type: "chair" }],
+      },
+    },
+    {
+      name: "close obstacle while turning",
+      overrides: {
+        obstacles: [{ confidence: 0.9, distance: "close", position: "left", type: "bollard" }],
+        recommendedDirection: "turn-right",
+        shortMessage: "Turn right now.",
+      },
+    },
+    {
+      name: "path not clear",
+      overrides: { pathClear: false },
+    },
+    {
+      name: "caution walkability",
+      overrides: { walkability: "caution" },
+    },
+    {
+      name: "uncertain walkability",
+      overrides: { walkability: "uncertain" },
+    },
+    {
+      name: "medium hazard",
+      overrides: { hazardLevel: "medium" },
+    },
+    {
+      name: "high hazard while turning",
+      overrides: {
+        hazardLevel: "high",
+        recommendedDirection: "turn-left",
+        shortMessage: "Turn left now.",
+      },
+    },
+    {
+      name: "low confidence",
+      overrides: { confidence: 0.6 },
+    },
+  ];
+
+  for (const { name, overrides } of cases) {
+    const providerSpeech = overrides.shortMessage || "Continue forward.";
+    const normalized = normalizeProviderVision(clearPath(overrides), metadata);
+
+    assert.equal(normalized.direction, "stop", name);
+    assert.equal(normalized.hazardLevel, "high", name);
+    assert.equal(normalized.obstacle, true, name);
+    assert.match(normalized.message, /^Stop\./, name);
+    assert.notEqual(normalized.message, providerSpeech, name);
+    assert.ok(normalized.fallbackReason, name);
+  }
+});
+
+test("scene-query facts survive normalization while contradictory safety fields remain STOP-consistent", () => {
+  const sceneDescription = "A chair is close in the center of the walkway.";
+  const normalized = normalizeProviderVision(clearPath({
+    obstacles: [{ confidence: 0.94, distance: "close", position: "center", type: "chair" }],
+    sceneDescription,
+    shortMessage: "Continue forward.",
+  }), metadata);
+
+  assert.equal(normalized.sceneDescription, sceneDescription);
+  assert.equal(normalized.direction, "stop");
+  assert.equal(normalized.hazardLevel, "high");
+  assert.equal(normalized.obstacle, true);
+  assert.match(normalized.message, /^Stop\./);
+  assert.notEqual(normalized.message, "Continue forward.");
 });
 
 test("clear normally lit provider guidance can remain forward", () => {

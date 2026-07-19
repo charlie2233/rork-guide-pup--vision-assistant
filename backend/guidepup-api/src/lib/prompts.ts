@@ -14,6 +14,7 @@ type VisionPromptInput = {
   frameId?: string;
   frameSummary?: string;
   hasImage?: boolean;
+  interactionMode?: "guidance" | "scene-query";
   nativePath?: "native-core" | "js-fallback";
   platform?: "ios" | "android" | "web" | "unknown";
   priorGuidance?: string;
@@ -28,7 +29,14 @@ export function getPromptVersion(env: Env) {
   return env.PROMPT_VERSION || DEFAULT_PROMPT_VERSION;
 }
 
-export function buildVisionSystemPrompt(promptVersion: string) {
+export function buildVisionSystemPrompt(
+  promptVersion: string,
+  interactionMode: "guidance" | "scene-query" = "guidance",
+) {
+  const modeInstruction = interactionMode === "scene-query"
+    ? "This is a bounded scene query. The sceneDescription field is spoken aloud, so make it a concise description of visible facts while still assessing hazards and returning a safety direction. Do not issue commands or propose control changes."
+    : "This is active guidance. The shortMessage field is spoken aloud; keep it under 12 words and make it an immediate, concrete navigation instruction while still describing the visible scene accurately.";
+
   return [
     `You are Guide Pup's navigation vision assistant. Prompt version: ${promptVersion}.`,
     "You must prioritize user safety over speed, optimism, or smoothness.",
@@ -38,8 +46,9 @@ export function buildVisionSystemPrompt(promptVersion: string) {
     "Judge walkability, hazard clarity, surface type, lighting, and confidence before choosing direction.",
     "If the scene is ambiguous, low-quality, dark, blurry, backlit, or partially occluded, recommend stop.",
     "Only recommend forward when the visible walking surface, lighting, and path are clearly safe.",
+    modeInstruction,
     "Do not change or suggest changing camera sessions, route navigation, STOP behavior, haptics, VoiceOver, speech rate, detail level, or timing; iOS controls those deterministically.",
-    "The shortMessage field is spoken aloud; keep it under 12 words, concrete, and free of request IDs, frame IDs, provider names, or technical jargon.",
+    "Keep spoken fields free of request IDs, frame IDs, provider names, or technical jargon.",
     "Return only the structured fields requested by the API schema.",
     "Use notes for brief internal rationale, not spoken user guidance.",
   ].join("\n");
@@ -154,6 +163,7 @@ function buildCompactFrameContext(input?: VisionPromptInput) {
     frameId: input.frameId,
     frameSummary: input.frameSummary,
     hasImage: input.hasImage,
+    interactionMode: input.interactionMode ?? "guidance",
     nativePath: input.nativePath,
     platform: input.platform,
     priorGuidance: input.priorGuidance,
@@ -166,8 +176,14 @@ function buildCompactFrameContext(input?: VisionPromptInput) {
 }
 
 export function buildVisionUserPrompt(input?: VisionPromptInput) {
+  const interactionMode = input?.interactionMode ?? "guidance";
+  const modeInstruction = interactionMode === "scene-query"
+    ? "Answer the bounded what-do-you-see request through sceneDescription using concise visible facts; keep hazard assessment active."
+    : "Provide concise active guidance through shortMessage.";
+
   return [
     "Analyze this single camera frame for safe pedestrian navigation.",
+    modeInstruction,
     "Keep the spoken message short enough for real-time audio guidance.",
     "Use prior guidance only to avoid repetition; base safety on the current frame.",
     "Only recommend forward if the path looks confidently walkable.",

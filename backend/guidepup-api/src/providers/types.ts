@@ -1,5 +1,7 @@
 import type { ProviderVision } from "../schemas/vision";
 
+export type VisionInteractionMode = "guidance" | "scene-query";
+
 export type CaptureHeuristics = {
   captureLatencyMs?: number;
   frameAgeMs?: number;
@@ -17,11 +19,13 @@ export type ProviderInput = {
   frameSummary?: string;
   hasImage?: boolean;
   imageBase64: string;
+  interactionMode: VisionInteractionMode;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
   nativePath?: "native-core" | "js-fallback";
   platform?: "ios" | "android" | "web" | "unknown";
   promptVersion: string;
   priorGuidance?: string;
+  requestId: string;
   sampledFrame?: boolean;
   sessionId?: string;
   sourceHeight?: number;

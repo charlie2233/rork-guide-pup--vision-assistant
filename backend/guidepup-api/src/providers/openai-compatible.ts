@@ -15,6 +15,9 @@ type OpenAIChatCompletionResponse = {
 };
 
 const STRUCTURED_OUTPUT_MODE = "json_schema_strict";
+const DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS = 8_500;
+const MAX_PROVIDER_REQUEST_TIMEOUT_MS = 9_000;
+const MAX_PROVIDER_OUTBOUND_CALLS = 3;
 
 class ProviderHttpError extends Error {
   readonly retryable: boolean;
@@ -55,9 +58,15 @@ export function getOpenAIProviderRuntimeConfig(env: Env) {
   const model = getModel(env);
   return {
     maxCompletionTokens: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_MAX_COMPLETION_TOKENS"), 700, 128, 1200),
+    maxOutboundCalls: MAX_PROVIDER_OUTBOUND_CALLS,
     model,
     reasoningEffort: getReasoningEffort(env, model),
-    requestTimeoutMs: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_REQUEST_TIMEOUT_MS"), 12000, 3000, 30000),
+    requestTimeoutMs: parseBoundedInteger(
+      readRuntimeEnv(env, "OPENAI_REQUEST_TIMEOUT_MS"),
+      DEFAULT_PROVIDER_REQUEST_TIMEOUT_MS,
+      3000,
+      MAX_PROVIDER_REQUEST_TIMEOUT_MS,
+    ),
     retryCount: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_RETRY_COUNT"), 1, 0, 2),
     retryDelayMs: parseBoundedInteger(readRuntimeEnv(env, "OPENAI_RETRY_DELAY_MS"), 250, 0, 2000),
     structuredOutputMode: STRUCTURED_OUTPUT_MODE,
@@ -129,10 +138,38 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+type ProviderRequestBudget = {
+  deadlineAt: number;
+  maxOutboundCalls: number;
+  outboundCalls: number;
+};
+
+function remainingBudgetMs(budget: ProviderRequestBudget) {
+  return Math.max(0, budget.deadlineAt - Date.now());
+}
+
+function hasOutboundBudget(budget: ProviderRequestBudget) {
+  return budget.outboundCalls < budget.maxOutboundCalls && remainingBudgetMs(budget) > 0;
+}
+
+function claimOutboundCall(budget: ProviderRequestBudget) {
+  const timeoutMs = remainingBudgetMs(budget);
+  if (budget.outboundCalls >= budget.maxOutboundCalls) {
+    throw new Error("Provider outbound call budget exhausted.");
+  }
+  if (timeoutMs <= 0) {
+    throw new Error("Provider request deadline exhausted.");
+  }
+
+  budget.outboundCalls += 1;
+  return timeoutMs;
+}
+
 async function analyzeWithAttempt(
   input: ProviderInput,
   attempt: ReturnType<typeof getOpenAIProviderAttempts>[number],
   runtimeConfig: ReturnType<typeof getOpenAIProviderRuntimeConfig>,
+  budget: ProviderRequestBudget,
 ) {
   const startedAt = Date.now();
   const maxAttempts = runtimeConfig.retryCount + 1;
@@ -140,6 +177,7 @@ async function analyzeWithAttempt(
 
   for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
     try {
+      const timeoutMs = claimOutboundCall(budget);
       const response = await fetchWithTimeout(`${attempt.baseUrl}${attempt.path}`, {
         method: "POST",
         headers: {
@@ -154,7 +192,7 @@ async function analyzeWithAttempt(
           messages: [
             {
               role: "system",
-              content: buildVisionSystemPrompt(input.promptVersion),
+              content: buildVisionSystemPrompt(input.promptVersion, input.interactionMode),
             },
             {
               role: "user",
@@ -174,7 +212,7 @@ async function analyzeWithAttempt(
             },
           ],
         }),
-      }, runtimeConfig.requestTimeoutMs);
+      }, timeoutMs);
 
       if (!response.ok) {
         throw new ProviderHttpError(`${attempt.name} failed (${response.status}).`, isRetryableStatus(response.status));
@@ -197,7 +235,11 @@ async function analyzeWithAttempt(
       } satisfies Omit<ProviderResult, "provider">;
     } catch (error) {
       lastError = error;
-      if (attemptIndex >= maxAttempts - 1 || !isRetryableProviderError(error)) {
+      if (
+        attemptIndex >= maxAttempts - 1 ||
+        !isRetryableProviderError(error) ||
+        !hasOutboundBudget(budget)
+      ) {
         throw error;
       }
 
@@ -205,9 +247,13 @@ async function analyzeWithAttempt(
         attempt: attempt.name,
         attemptIndex: attemptIndex + 1,
         message: error instanceof Error ? error.message : String(error),
+        outboundCalls: budget.outboundCalls,
         provider: "openai-compatible",
+        remainingBudgetMs: remainingBudgetMs(budget),
+        requestId: input.requestId,
       });
-      await sleep(runtimeConfig.retryDelayMs);
+      const retryDelayMs = Math.min(runtimeConfig.retryDelayMs, Math.max(remainingBudgetMs(budget) - 1, 0));
+      await sleep(retryDelayMs);
     }
   }
 
@@ -225,11 +271,20 @@ export class OpenAICompatibleProvider implements VisionProvider {
   async analyze(input: ProviderInput, env: Env): Promise<ProviderResult> {
     const attempts = getOpenAIProviderAttempts(env);
     const runtimeConfig = getOpenAIProviderRuntimeConfig(env);
+    const budget: ProviderRequestBudget = {
+      deadlineAt: Date.now() + runtimeConfig.requestTimeoutMs,
+      maxOutboundCalls: runtimeConfig.maxOutboundCalls,
+      outboundCalls: 0,
+    };
     let lastError: unknown;
 
     for (const attempt of attempts) {
+      if (!hasOutboundBudget(budget)) {
+        break;
+      }
+
       try {
-        const result = await analyzeWithAttempt(input, attempt, runtimeConfig);
+        const result = await analyzeWithAttempt(input, attempt, runtimeConfig, budget);
         return {
           ...result,
           provider: this.name,
@@ -238,7 +293,10 @@ export class OpenAICompatibleProvider implements VisionProvider {
         logWarn("vision.provider_attempt_failed", {
           attempt: attempt.name,
           message: error instanceof Error ? error.message : String(error),
+          outboundCalls: budget.outboundCalls,
           provider: this.name,
+          remainingBudgetMs: remainingBudgetMs(budget),
+          requestId: input.requestId,
         });
         lastError = error;
       }

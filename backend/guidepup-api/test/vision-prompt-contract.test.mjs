@@ -20,7 +20,7 @@ async function importPromptModule() {
 
 test("vision prompt keeps cloud analysis out of deterministic iOS controls", async () => {
   const { buildVisionSystemPrompt } = await importPromptModule();
-  const prompt = buildVisionSystemPrompt("test-prompt-version");
+  const prompt = buildVisionSystemPrompt("test-prompt-version", "scene-query");
 
   assert.match(prompt, /one sampled frame/i);
   assert.match(prompt, /STOP behavior/);
@@ -29,6 +29,10 @@ test("vision prompt keeps cloud analysis out of deterministic iOS controls", asy
   assert.match(prompt, /speech rate/);
   assert.match(prompt, /iOS controls those deterministically/);
   assert.match(prompt, /Return only the structured fields/);
+  assert.match(prompt, /bounded scene query/i);
+  assert.match(prompt, /sceneDescription field is spoken aloud/i);
+  assert.match(prompt, /visible facts/i);
+  assert.match(prompt, /Do not issue commands/i);
 });
 
 test("vision prompt requires walkability, surface, lighting, confidence, and concise spoken guidance", async () => {
@@ -46,6 +50,8 @@ test("vision prompt requires walkability, surface, lighting, confidence, and con
   ]) {
     assert.match(prompt, new RegExp(requiredText, "i"));
   }
+  assert.match(prompt, /active guidance/i);
+  assert.doesNotMatch(prompt, /bounded scene query/i);
 });
 
 test("vision user prompt carries compact sampled-frame context without raw image data", async () => {
@@ -63,6 +69,8 @@ test("vision user prompt carries compact sampled-frame context without raw image
     frameId: "frame-123",
     frameSummary: "Native sampled frame, resized for upload.",
     hasImage: true,
+    imageBase64: "test-image-payload",
+    interactionMode: "scene-query",
     nativePath: "native-core",
     platform: "ios",
     priorGuidance: "Stop. Chair ahead.",
@@ -77,12 +85,15 @@ test("vision user prompt carries compact sampled-frame context without raw image
   assert.match(prompt, /prior guidance only to avoid repetition/i);
   assert.match(prompt, /prefer stop/i);
   assert.match(prompt, /"sampledFrame":true/);
+  assert.match(prompt, /"interactionMode":"scene-query"/);
+  assert.match(prompt, /what-do-you-see/i);
   assert.match(prompt, /"nativePath":"native-core"/);
   assert.match(prompt, /"frameId":"frame-123"/);
   assert.match(prompt, /"sessionId":"session-123"/);
   assert.match(prompt, /"priorGuidance":"Stop\. Chair ahead\."/);
   assert.doesNotMatch(prompt, /imageBase64/i);
   assert.doesNotMatch(prompt, /data:image/i);
+  assert.doesNotMatch(prompt, /test-image-payload/i);
 });
 
 test("walkability is first-class in provider and launch response contracts", async () => {

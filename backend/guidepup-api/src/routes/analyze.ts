@@ -24,6 +24,20 @@ function getBearerToken(request: Request) {
   return authorization.replace(/^Bearer /, "").trim();
 }
 
+function invalidRequestResponse(request: Request, env: Env, requestId: string) {
+  return jsonResponse(request, env, {
+    error: {
+      code: "invalid_request",
+      message: "Request payload is invalid.",
+    },
+  }, {
+    headers: {
+      "x-request-id": requestId,
+    },
+    status: 400,
+  });
+}
+
 export async function handleAnalyze(
   request: Request,
   env: Env,
@@ -63,21 +77,39 @@ export async function handleAnalyze(
     });
   }
 
-  const body = AnalyzeVisionRequestSchema.parse(await request.json());
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return invalidRequestResponse(request, env, requestId);
+  }
+
+  const parsedBody = AnalyzeVisionRequestSchema.safeParse(rawBody);
+  if (!parsedBody.success) {
+    return invalidRequestResponse(request, env, requestId);
+  }
+
+  const body = parsedBody.data;
   const promptVersion = getPromptVersion(env);
   const rateLimit = await enforceRateLimit(deviceId, env);
 
   if (!rateLimit.allowed) {
+    const infrastructureUnavailable = rateLimit.reason === "infrastructure-unavailable";
     const providerSummary = getProviderSummary(env);
     const safeResponse = createSafeFallbackResponse({
       latencyMs: 0,
       model: providerSummary.model,
       promptVersion,
       provider: providerSummary.provider,
-    }, "Stop. Guidance is cooling down.", "rate-limited");
+    }, infrastructureUnavailable
+      ? "Stop. Safety controls are unavailable."
+      : "Stop. Guidance is cooling down.", infrastructureUnavailable
+      ? "rate-limit-unavailable"
+      : "rate-limited");
 
-    logWarn("vision.rate_limited", {
+    logWarn(infrastructureUnavailable ? "vision.rate_limit_unavailable" : "vision.rate_limited", {
       deviceId,
+      interactionMode: body.interactionMode,
       latencyMs: Date.now() - startedAt,
       requestId,
       resetAt: rateLimit.resetAt,
@@ -86,12 +118,14 @@ export async function handleAnalyze(
 
     return jsonResponse(request, env, AnalyzeVisionErrorSchema.parse({
       error: {
-        code: "rate_limited",
-        message: "Too many analyze requests for this device.",
+        code: infrastructureUnavailable ? "safety_control_unavailable" : "rate_limited",
+        message: infrastructureUnavailable
+          ? "Vision safety controls are temporarily unavailable."
+          : "Too many analyze requests for this device.",
       },
       safeResponse,
     }), {
-      status: 429,
+      status: infrastructureUnavailable ? 503 : 429,
       headers: {
         "x-rate-limit-limit": String(rateLimit.limit),
         "x-rate-limit-remaining": String(rateLimit.remaining),
@@ -112,11 +146,13 @@ export async function handleAnalyze(
       frameSummary: body.frameSummary,
       hasImage: body.hasImage,
       imageBase64: body.imageBase64,
+      interactionMode: body.interactionMode,
       mimeType: body.mimeType,
       nativePath: body.nativePath,
       platform: body.platform,
       promptVersion,
       priorGuidance: body.priorGuidance,
+      requestId,
       sampledFrame: body.sampledFrame,
       sessionId: body.sessionId,
       sourceHeight: body.sourceHeight,
@@ -136,6 +172,7 @@ export async function handleAnalyze(
       deviceId,
       direction: normalized.direction,
       hazardLevel: normalized.hazardLevel,
+      interactionMode: body.interactionMode,
       latencyMs: Date.now() - startedAt,
       model: normalized.model,
       promptVersion: normalized.promptVersion,
@@ -164,6 +201,7 @@ export async function handleAnalyze(
 
     logError("vision.analyze_failed", {
       deviceId,
+      interactionMode: body.interactionMode,
       latencyMs,
       message: error instanceof Error ? error.message : String(error),
       provider: providerSummary.provider,

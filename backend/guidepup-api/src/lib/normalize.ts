@@ -171,7 +171,10 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
 
   return applySafetyOverrides(normalized, {
     confidence,
+    hasCloseObstacle: raw.obstacles.some((obstacle) =>
+      obstacle.distance === "very-close" || obstacle.distance === "close"),
     lighting: raw.lighting,
+    pathClear: raw.pathClear,
     safetyTags,
     walkability: raw.walkability,
   });
