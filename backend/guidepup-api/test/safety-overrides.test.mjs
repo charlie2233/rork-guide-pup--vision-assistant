@@ -184,3 +184,16 @@ test("clear normally lit provider guidance can remain forward", () => {
   assert.equal(normalized.lighting, "normal");
   assert.equal(normalized.walkability, "clear");
 });
+
+test("a low, non-immediate hazard never produces a STOP haptic contradiction", () => {
+  const normalized = normalizeProviderVision(clearPath({
+    hazardLevel: "low",
+    obstacles: [{ confidence: 0.75, distance: "far", position: "right", type: "trash can" }],
+    sceneDescription: "A trash can is far ahead on the right, outside the current path.",
+  }), metadata);
+
+  assert.equal(normalized.direction, "forward");
+  assert.equal(normalized.hazardLevel, "low");
+  assert.equal(normalized.message, "Continue forward.");
+  assert.equal(normalized.obstacle, false);
+});

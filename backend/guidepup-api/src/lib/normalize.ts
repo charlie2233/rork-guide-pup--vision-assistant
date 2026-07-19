@@ -45,7 +45,7 @@ function deriveHazardLevel(raw: ProviderVision, tags: string[]) {
     return "medium";
   }
 
-  return "low";
+  return raw.pathClear === true ? "none" : "low";
 }
 
 function deriveDirection(raw: ProviderVision, hazardLevel: VisionAnalyzeResponse["hazardLevel"]) {
@@ -146,7 +146,13 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
   const hazardLevel = deriveHazardLevel(raw, safetyTags);
   const confidence = clamp(deriveConfidence(raw));
   const direction = deriveDirection(raw, hazardLevel);
-  const obstacle = hazardLevel !== "none" || raw.obstacles.length > 0 || direction === "stop";
+  const hasCloseObstacle = raw.obstacles.some((obstacle) =>
+    obstacle.distance === "very-close" || obstacle.distance === "close");
+  const obstacle =
+    direction === "stop"
+    || hasCloseObstacle
+    || hazardLevel === "medium"
+    || hazardLevel === "high";
 
   const normalizedBase: Omit<VisionAnalyzeResponse, "message"> = {
     confidence,
@@ -171,8 +177,7 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
 
   return applySafetyOverrides(normalized, {
     confidence,
-    hasCloseObstacle: raw.obstacles.some((obstacle) =>
-      obstacle.distance === "very-close" || obstacle.distance === "close"),
+    hasCloseObstacle,
     lighting: raw.lighting,
     pathClear: raw.pathClear,
     safetyTags,
