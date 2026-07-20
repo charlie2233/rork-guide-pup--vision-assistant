@@ -39,7 +39,14 @@ export type ProviderResult = {
   parsed: ProviderVision;
   provider: string;
   transport: string;
-  rawText: string;
+  upstreamRequestId?: string;
+  usage?: ProviderTokenUsage;
+};
+
+export type ProviderTokenUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
 };
 
 export interface VisionProvider {

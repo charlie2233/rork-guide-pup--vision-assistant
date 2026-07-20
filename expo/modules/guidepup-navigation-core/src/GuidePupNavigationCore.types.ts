@@ -1,4 +1,10 @@
 export type GuidePupNavigationCoreSessionState = "idle" | "running" | "paused" | "stopped";
+export type GuidePupNavigationCoreRecoveryState =
+  | "idle"
+  | "recovering"
+  | "interrupted"
+  | "background"
+  | "exhausted";
 
 export type GuidePupNavigationCoreHapticType =
   | "stop"
@@ -33,7 +39,15 @@ export interface GuidePupNavigationCoreState {
   lastCaptureLatencyMs?: number;
   lastError?: string | null;
   permissionStatus?: string;
+  recoveryState?: GuidePupNavigationCoreRecoveryState;
   sessionActive: boolean;
   sessionState: GuidePupNavigationCoreSessionState;
   voiceOverRunning?: boolean;
 }
+
+export type GuidePupNavigationCoreEvents = {
+  onStateChanged(event: Pick<
+    GuidePupNavigationCoreState,
+    "lastError" | "recoveryState" | "sessionActive" | "sessionState"
+  >): void;
+};

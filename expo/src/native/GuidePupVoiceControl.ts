@@ -8,6 +8,7 @@ import type {
   GuidePupVoiceControlPermissions,
   GuidePupVoiceControlSpeakOptions,
   GuidePupVoiceControlState,
+  GuidePupVoiceControlStopSessionOptions,
   GuidePupVoiceRecognitionEvent,
 } from "@/modules/guidepup-voice-control";
 
@@ -20,8 +21,8 @@ interface GuidePupVoiceControlNativeModule {
   isAvailable(): Promise<boolean>;
   requestPermissions(): Promise<GuidePupVoiceControlPermissions>;
   speak(text: string, locale?: string | null, interrupt?: boolean | null, rate?: number | null): Promise<void>;
-  startCommandSession(locale?: string | null, partialResults?: boolean | null): Promise<GuidePupVoiceControlState>;
-  stopCommandSession(): Promise<GuidePupVoiceControlState>;
+  startCommandSession(locale?: string | null, partialResults?: boolean | null, ownerToken?: string | null): Promise<GuidePupVoiceControlState>;
+  stopCommandSession(ownerToken?: string | null): Promise<GuidePupVoiceControlState>;
   stopSpeaking(): Promise<void>;
 }
 
@@ -35,18 +36,31 @@ const fallbackState: GuidePupVoiceControlState = {
   lastError: null,
   listening: false,
   microphonePermission: Platform.OS === "web" ? "unsupported" : "undetermined",
+  recoveryState: "idle",
   speaking: false,
   speechPermission: Platform.OS === "web" ? "unsupported" : "undetermined",
+  voiceProcessingEnabled: false,
 };
 
-function fallbackSpeak(text: string, options?: GuidePupVoiceControlSpeakOptions) {
+let voiceSessionOwnerSequence = 0;
+
+export function createGuidePupVoiceSessionOwnerToken(scope: string) {
+  voiceSessionOwnerSequence += 1;
+  return `${scope}-${Date.now().toString(36)}-${voiceSessionOwnerSequence.toString(36)}`;
+}
+
+async function fallbackSpeak(text: string, options?: GuidePupVoiceControlSpeakOptions) {
   const trimmed = text.trim();
   if (!trimmed) {
-    return Promise.resolve();
+    return;
   }
 
   if (Platform.OS === "ios") {
-    AccessibilityInfo.announceForAccessibility(trimmed);
+    const voiceOverRunning = await AccessibilityInfo.isScreenReaderEnabled().catch(() => false);
+    if (voiceOverRunning) {
+      await AccessibilityInfo.announceForAccessibility(trimmed);
+      return;
+    }
   }
 
   return new Promise<void>((resolve) => {
@@ -66,6 +80,7 @@ export type {
   GuidePupVoiceControlPermissions,
   GuidePupVoiceControlSpeakOptions,
   GuidePupVoiceControlState,
+  GuidePupVoiceControlStopSessionOptions,
   GuidePupVoiceRecognitionEvent,
 };
 
@@ -129,15 +144,20 @@ export const GuidePupVoiceControl = {
     return fallbackSpeak(text, options);
   },
   async startCommandSession(options?: GuidePupVoiceControlCommandSessionOptions) {
+    const ownerToken = options?.ownerToken ?? createGuidePupVoiceSessionOwnerToken("voice");
     if (nativeModule) {
-      return nativeModule.startCommandSession(options?.locale ?? null, options?.partialResults ?? false);
+      return nativeModule.startCommandSession(
+        options?.locale ?? null,
+        options?.partialResults ?? false,
+        ownerToken,
+      );
     }
 
     return fallbackState;
   },
-  async stopCommandSession() {
+  async stopCommandSession(options?: GuidePupVoiceControlStopSessionOptions) {
     if (nativeModule) {
-      return nativeModule.stopCommandSession();
+      return nativeModule.stopCommandSession(options?.ownerToken ?? null);
     }
 
     return fallbackState;

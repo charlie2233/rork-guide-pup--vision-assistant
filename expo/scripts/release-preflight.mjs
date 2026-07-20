@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { validateEvidencePrivacy } from "./evidence-privacy.mjs";
 import {
@@ -9,9 +12,21 @@ import {
   readNoScreenSmokeEvidenceArtifact,
   validateNoScreenSmokeEvidenceArtifact,
 } from "./no-screen-smoke-evidence.mjs";
+import {
+  DEFAULT_RELEASE_CANDIDATE_PATH,
+  validateReleaseCandidateEvidence,
+} from "./release-candidate-evidence.mjs";
+import { resolveReleaseSourceState } from "./release-source-state.mjs";
+import {
+  isGitRevision,
+  validateSmokeArtifactContract,
+} from "../../backend/guidepup-api/eval/smoke-contract.mjs";
+import { resolveWorkerProvenance } from "../../backend/guidepup-api/eval/run-live-smoke.mjs";
 
 const require = createRequire(import.meta.url);
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const { getConfig: getExpoConfig } = require("@expo/config");
+const plist = require("@expo/plist").default;
 const { getPublicUrls, isPlaceholderValue, launchInputs } = require("../release/launch-inputs");
 
 function readJson(relativePath) {
@@ -34,9 +49,15 @@ const validSentryModes = new Set(["disabled", "enabled"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
+const releaseCandidateArtifactPath = path.resolve(projectDir, DEFAULT_RELEASE_CANDIDATE_PATH);
 const supportPagePath = path.resolve(projectDir, "../site/support/index.html");
+const expoAppConfigPath = path.resolve(projectDir, "app.config.ts");
 const iosInfoPlistPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/Info.plist");
+const iosProjectFilePath = path.resolve(projectDir, "ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj");
 const iosPrivacyManifestPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy");
+const iosXcodeEnvPath = path.resolve(projectDir, "ios/.xcode.env");
+const runtimeConfigPath = path.resolve(projectDir, "src/lib/config.ts");
+const iosAppTargetName = "GuidePupVisionAssistant";
 
 const errors = [];
 const warnings = [];
@@ -96,6 +117,55 @@ function readTextFileAbsolute(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+function readCurrentGitSourceRevision() {
+  const result = spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+    cwd: path.resolve(projectDir, ".."),
+    encoding: "utf8",
+  });
+  const sourceRevision = result.status === 0 ? result.stdout.trim().toLowerCase() : undefined;
+  return isGitRevision(sourceRevision) ? sourceRevision : undefined;
+}
+
+function validateReleaseSourceState(expectedSourceRevision) {
+  try {
+    const state = resolveReleaseSourceState({ cwd: path.resolve(projectDir, "..") });
+    expect(
+      state.sourceRevision === expectedSourceRevision,
+      `Release source revision must match Git HEAD ${expectedSourceRevision ?? "unavailable"}, found ${state.sourceRevision}.`,
+    );
+    return state;
+  } catch (error) {
+    expect(
+      false,
+      `Release source must be clean outside the exact generated-evidence allowlist: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+}
+
+function validateReleaseCandidateArtifact(artifact, expectedSourceRevision) {
+  if (!artifact) {
+    expect(
+      false,
+      `Release candidate evidence is missing: ${path.relative(projectDir, releaseCandidateArtifactPath)}. Generate it from the signed archive before TestFlight or store submission.`,
+    );
+    return undefined;
+  }
+
+  const result = validateReleaseCandidateEvidence(artifact, {
+    appVersion: launchInputs.iosMarketingVersion,
+    buildNumber: launchInputs.iosBuildNumber,
+    bundleIdentifier: launchInputs.iosBundleIdentifier,
+    sourceRevision: expectedSourceRevision,
+    teamIdentifier: launchInputs.appleTeamId,
+  });
+  expect(
+    result.valid,
+    `Release candidate evidence must match the current signed archive, source revision, bundle, version/build, and Apple team. Invalid: ${result.errors.join(", ") || "none"}.`,
+  );
+  return result.valid ? artifact : undefined;
+}
+
 function loadMetadataConfig() {
   if (cachedMetadataConfig !== undefined) {
     return cachedMetadataConfig;
@@ -125,20 +195,672 @@ function isLikelyInternationalPhone(value) {
   return isNonEmptyString(value) && /^\+[0-9][0-9\s().-]{6,}$/.test(value);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function plistStringUsesBuildSetting(xml, keyName, settingName) {
+  const pattern = new RegExp(
+    `<key>${escapeRegExp(keyName)}</key>\\s*<string>\\$\\(${escapeRegExp(settingName)}\\)</string>`,
+  );
+  return pattern.test(xml);
+}
+
+function getPbxObjectBlock(projectText, objectId) {
+  const pattern = new RegExp(
+    `^\\t\\t${escapeRegExp(objectId)} \\/\\*[^\\n]*\\*\\/ = \\{([\\s\\S]*?)^\\t\\t\\};$`,
+    "m",
+  );
+  return projectText.match(pattern)?.[1];
+}
+
+function getPbxBuildSetting(configurationBlock, settingName, configurationName) {
+  const pattern = new RegExp(
+    `^[ \\t]*${escapeRegExp(settingName)}[ \\t]*=[ \\t]*([^;\\n]+);[ \\t]*$`,
+    "gm",
+  );
+  const matches = [...configurationBlock.matchAll(pattern)];
+  expect(
+    matches.length === 1,
+    `Native iOS app target ${configurationName} must define ${settingName} exactly once.`,
+  );
+
+  const rawValue = matches[0]?.[1]?.trim();
+  if (!rawValue) {
+    return undefined;
+  }
+
+  return rawValue.startsWith('"') && rawValue.endsWith('"') ? rawValue.slice(1, -1) : rawValue;
+}
+
+function getPbxShellScript(projectText, phaseName) {
+  const phasePattern = new RegExp(
+    `^\\t\\t[A-F0-9]+ \\/\\* ${escapeRegExp(phaseName)} \\*\\/ = \\{([\\s\\S]*?)^\\t\\t\\};$`,
+    "m",
+  );
+  const phaseBlock = projectText.match(phasePattern)?.[1];
+  if (!phaseBlock) {
+    return undefined;
+  }
+
+  const quotedScript = phaseBlock.match(/^[ \t]*shellScript = ("(?:\\.|[^"\\])*");[ \t]*$/m)?.[1];
+  if (!quotedScript) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(quotedScript);
+  } catch {
+    return undefined;
+  }
+}
+
+function validateIosVersionOwnership() {
+  const marketingVersion = launchInputs.iosMarketingVersion;
+  const buildNumber = launchInputs.iosBuildNumber;
+
+  expect(
+    typeof marketingVersion === "string" && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(marketingVersion),
+    `launchInputs.iosMarketingVersion must contain three period-separated integers, found "${marketingVersion ?? "undefined"}".`,
+  );
+  expect(
+    typeof buildNumber === "string" && /^[1-9][0-9]*$/.test(buildNumber),
+    `launchInputs.iosBuildNumber must be a positive integer string, found "${buildNumber ?? "undefined"}".`,
+  );
+  compare(appJson.expo.version, marketingVersion, "app.json iOS marketing version");
+  compare(appJson.expo.ios?.buildNumber, buildNumber, "app.json iOS build number");
+  compare(easJson.cli?.appVersionSource, "local", "EAS app version source");
+
+  const infoPlistXml = readTextFileAbsolute(iosInfoPlistPath);
+  expect(Boolean(infoPlistXml), "Native iOS Info.plist is missing: ios/GuidePupVisionAssistant/Info.plist.");
+  if (infoPlistXml) {
+    expect(
+      plistStringUsesBuildSetting(infoPlistXml, "CFBundleShortVersionString", "MARKETING_VERSION"),
+      "Native iOS Info.plist CFBundleShortVersionString must reference $(MARKETING_VERSION).",
+    );
+    expect(
+      plistStringUsesBuildSetting(infoPlistXml, "CFBundleVersion", "CURRENT_PROJECT_VERSION"),
+      "Native iOS Info.plist CFBundleVersion must reference $(CURRENT_PROJECT_VERSION).",
+    );
+  }
+
+  const projectText = readTextFileAbsolute(iosProjectFilePath);
+  expect(Boolean(projectText), "Native iOS Xcode project is missing: ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj.");
+  if (!projectText) {
+    return;
+  }
+
+  const configurationListReference = projectText.match(
+    new RegExp(
+      `buildConfigurationList = ([A-F0-9]+) \\/\\* Build configuration list for PBXNativeTarget "${escapeRegExp(iosAppTargetName)}" \\*\\/;`,
+    ),
+  );
+  expect(Boolean(configurationListReference), `Native iOS app target ${iosAppTargetName} configuration list is missing.`);
+  const configurationListId = configurationListReference?.[1];
+  if (!configurationListId) {
+    return;
+  }
+
+  const configurationListBlock = getPbxObjectBlock(projectText, configurationListId);
+  expect(Boolean(configurationListBlock), `Native iOS app target ${iosAppTargetName} configuration list cannot be parsed.`);
+  if (!configurationListBlock) {
+    return;
+  }
+
+  for (const configurationName of ["Debug", "Release"]) {
+    const configurationReference = configurationListBlock.match(
+      new RegExp(`^[ \\t]*([A-F0-9]+) \\/\\* ${configurationName} \\*\\/,[ \\t]*$`, "m"),
+    );
+    expect(Boolean(configurationReference), `Native iOS app target ${configurationName} configuration is missing.`);
+    const configurationId = configurationReference?.[1];
+    if (!configurationId) {
+      continue;
+    }
+
+    const configurationBlock = getPbxObjectBlock(projectText, configurationId);
+    expect(Boolean(configurationBlock), `Native iOS app target ${configurationName} configuration cannot be parsed.`);
+    if (!configurationBlock) {
+      continue;
+    }
+
+    compare(
+      getPbxBuildSetting(configurationBlock, "MARKETING_VERSION", configurationName),
+      marketingVersion,
+      `Native iOS app target ${configurationName} MARKETING_VERSION`,
+    );
+    compare(
+      getPbxBuildSetting(configurationBlock, "CURRENT_PROJECT_VERSION", configurationName),
+      buildNumber,
+      `Native iOS app target ${configurationName} CURRENT_PROJECT_VERSION`,
+    );
+    compare(
+      getPbxBuildSetting(configurationBlock, "DEVELOPMENT_TEAM", configurationName),
+      launchInputs.appleTeamId,
+      `Native iOS app target ${configurationName} DEVELOPMENT_TEAM`,
+    );
+    compare(
+      getPbxBuildSetting(configurationBlock, "PRODUCT_BUNDLE_IDENTIFIER", configurationName),
+      launchInputs.iosBundleIdentifier,
+      `Native iOS app target ${configurationName} PRODUCT_BUNDLE_IDENTIFIER`,
+    );
+    compare(
+      getPbxBuildSetting(configurationBlock, "CODE_SIGN_STYLE", configurationName),
+      "Automatic",
+      `Native iOS app target ${configurationName} CODE_SIGN_STYLE`,
+    );
+  }
+}
+
 function getOptionalEnvValue(profile, key) {
   const value = profile?.env?.[key];
   return typeof value === "string" ? value : undefined;
 }
 
+const directXcodeEnvironmentKeys = [
+  "EXPO_PUBLIC_API_BASE_URL",
+  "EXPO_PUBLIC_APP_ENV",
+  "EXPO_PUBLIC_RELEASE_TRACK",
+  "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS",
+  "EXPO_PUBLIC_WEBSITE_URL",
+  "EXPO_PUBLIC_PRIVACY_POLICY_URL",
+  "EXPO_PUBLIC_SUPPORT_URL",
+  "EXPO_PUBLIC_SUPPORT_EMAIL",
+  "EXPO_PUBLIC_EMERGENCY_DISCLAIMER",
+  "EXPO_PUBLIC_SENTRY_DSN",
+  "SENTRY_DISABLE_AUTO_UPLOAD",
+];
+
+const expectedReactNativeBundleInvocation = [
+  "/bin/sh",
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"`",
+  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`",
+].join(" ");
+const expectedEntryFileAssignment =
+  'export ENTRY_FILE="$("$NODE_BINARY" -e "require(\'expo/scripts/resolveAppEntry\')" "$PROJECT_ROOT" ios absolute | tail -n 1)"';
+const expectedCliPathAssignment =
+  'export CLI_PATH="$("$NODE_BINARY" --print "require.resolve(\'@expo/cli\', { paths: [require.resolve(\'expo/package.json\')] })")"';
+
+function instrumentBundleScript(bundleScript) {
+  const lines = bundleScript.split(/\r?\n/);
+  const wrapperIndexes = lines.flatMap((line, index) =>
+    line.trim() === expectedReactNativeBundleInvocation ? [index] : [],
+  );
+  expect(
+    wrapperIndexes.length === 1,
+    "Native iOS React Native bundle phase must contain exactly one canonical executable react-native-xcode.sh invocation.",
+  );
+  const entryFileAssignmentCount = lines.filter((line) => line.trim() === expectedEntryFileAssignment).length;
+  const cliPathAssignmentCount = lines.filter((line) => line.trim() === expectedCliPathAssignment).length;
+  expect(
+    entryFileAssignmentCount === 1,
+    "Native iOS React Native bundle phase must contain exactly one canonical Expo ENTRY_FILE assignment.",
+  );
+  expect(
+    cliPathAssignmentCount === 1,
+    "Native iOS React Native bundle phase must contain exactly one canonical Expo CLI_PATH assignment.",
+  );
+  if (wrapperIndexes.length !== 1 || entryFileAssignmentCount !== 1 || cliPathAssignmentCount !== 1) {
+    return undefined;
+  }
+
+  const randomProbeKey = () => `GUIDE_PUP_${randomUUID().replaceAll("-", "").toUpperCase()}`;
+  const probeKeys = {
+    cliPathAssignmentReached: randomProbeKey(),
+    cliPathResolvedAtWrapper: randomProbeKey(),
+    entryFileAssignmentReached: randomProbeKey(),
+    entryFileResolvedAtWrapper: randomProbeKey(),
+    localSourceCount: randomProbeKey(),
+    updatesSourceCount: randomProbeKey(),
+    versionedSourceCount: randomProbeKey(),
+    bundleWrapperReached: randomProbeKey(),
+  };
+  const instrumentedLines = lines.map((line) => {
+    const indentation = line.match(/^\s*/)?.[0] || "";
+    const trimmed = line.trim();
+    if (trimmed === expectedEntryFileAssignment) {
+      return `${line}\n${indentation}export ${probeKeys.entryFileAssignmentReached}=true`;
+    }
+    if (trimmed === expectedCliPathAssignment) {
+      return `${line}\n${indentation}export ${probeKeys.cliPathAssignmentReached}=true`;
+    }
+    switch (trimmed) {
+      case 'source "$PODS_ROOT/../.xcode.env"':
+        return `${line}\n${indentation}export ${probeKeys.versionedSourceCount}=$((\${${probeKeys.versionedSourceCount}:-0} + 1))`;
+      case 'source "$PODS_ROOT/../.xcode.env.local"':
+        return `${line}\n${indentation}export ${probeKeys.localSourceCount}=$((\${${probeKeys.localSourceCount}:-0} + 1))`;
+      case 'source "$PODS_ROOT/../.xcode.env.updates"':
+        return `${line}\n${indentation}export ${probeKeys.updatesSourceCount}=$((\${${probeKeys.updatesSourceCount}:-0} + 1))`;
+      case expectedReactNativeBundleInvocation:
+        return [
+          `${indentation}export ${probeKeys.bundleWrapperReached}=true`,
+          `${indentation}if [ "\${${probeKeys.entryFileAssignmentReached}:-false}" = "true" ] && [ -n "\${ENTRY_FILE:-}" ] && [ -f "$ENTRY_FILE" ]; then`,
+          `${indentation}  export ${probeKeys.entryFileResolvedAtWrapper}=true`,
+          `${indentation}else`,
+          `${indentation}  export ${probeKeys.entryFileResolvedAtWrapper}=false`,
+          `${indentation}fi`,
+          `${indentation}if [ "\${${probeKeys.cliPathAssignmentReached}:-false}" = "true" ] && [ -n "\${CLI_PATH:-}" ] && [ -f "$CLI_PATH" ]; then`,
+          `${indentation}  export ${probeKeys.cliPathResolvedAtWrapper}=true`,
+          `${indentation}else`,
+          `${indentation}  export ${probeKeys.cliPathResolvedAtWrapper}=false`,
+          `${indentation}fi`,
+        ].join("\n");
+      default:
+        return line;
+    }
+  });
+
+  return { lines: instrumentedLines, probeKeys };
+}
+
+function createDirectXcodeProbeRoot() {
+  const probeRoot = fs.mkdtempSync(path.join(tmpdir(), "guidepup-xcode-env-"));
+  fs.mkdirSync(path.join(probeRoot, "Pods"));
+  fs.copyFileSync(iosXcodeEnvPath, path.join(probeRoot, ".xcode.env"));
+
+  for (const fileName of [".xcode.env.local", ".xcode.env.updates"]) {
+    const sourcePath = path.join(projectDir, "ios", fileName);
+    const probePath = path.join(probeRoot, fileName);
+    if (fileExistsAbsolute(sourcePath)) {
+      fs.copyFileSync(sourcePath, probePath);
+    } else {
+      fs.writeFileSync(probePath, "", "utf8");
+    }
+  }
+
+  return probeRoot;
+}
+
+function readDirectXcodeEnvironment(
+  configuration,
+  environmentOverrides,
+  instrumentedBundleScript,
+  environmentLabel,
+  probeRoot,
+) {
+  if (!instrumentedBundleScript) {
+    return {};
+  }
+
+  const outputKeys = ["BUNDLE_COMMAND", ...directXcodeEnvironmentKeys, ...Object.values(instrumentedBundleScript.probeKeys)];
+  const outputDelimiter = `GUIDE_PUP_ENV_${randomUUID().replaceAll("-", "").toUpperCase()}`;
+  const delimiterMarker = `\n${outputDelimiter}\n`;
+  const printEnvironment = [
+    ...instrumentedBundleScript.lines,
+    `printf '\\n%s\\n' '${outputDelimiter}'`,
+    "/usr/bin/env -0",
+  ].join("\n");
+  const result = spawnSync(
+    "/bin/sh",
+    ["-c", printEnvironment, "guidepup-xcode-env"],
+    {
+      encoding: "utf8",
+      env: {
+        CONFIGURATION: configuration,
+        HOME: process.env.HOME || "",
+        PATH: process.env.PATH || "/usr/bin:/bin",
+        PODS_ROOT: path.join(probeRoot, "Pods"),
+        PROJECT_DIR: path.join(projectDir, "ios"),
+        SRCROOT: path.join(projectDir, "ios"),
+        ...environmentOverrides,
+      },
+    },
+  );
+
+  expect(
+    result.status === 0,
+    `Direct Xcode ${environmentLabel} environment could not be resolved through the native bundle phase.`,
+  );
+  if (result.status !== 0) {
+    return {};
+  }
+
+  const delimiterIndex = result.stdout.lastIndexOf(delimiterMarker);
+  if (delimiterIndex === -1) {
+    expect(false, `Direct Xcode ${environmentLabel} environment did not reach its isolated output boundary.`);
+    return {};
+  }
+
+  const environmentEntries = result.stdout
+    .slice(delimiterIndex + delimiterMarker.length)
+    .split("\0")
+    .filter(Boolean)
+    .map((entry) => {
+      const separatorIndex = entry.indexOf("=");
+      return separatorIndex === -1 ? [entry, ""] : [entry.slice(0, separatorIndex), entry.slice(separatorIndex + 1)];
+    });
+  const resolvedEnvironment = Object.fromEntries(environmentEntries);
+  return Object.fromEntries(outputKeys.map((key) => [key, resolvedEnvironment[key]]));
+}
+
+function validateDirectXcodeProbeExecution(environment, label, probeKeys) {
+  compare(environment.BUNDLE_COMMAND, "export:embed", `Direct Xcode ${label} BUNDLE_COMMAND`);
+  compare(
+    environment[probeKeys.versionedSourceCount],
+    "1",
+    `Direct Xcode ${label} versioned environment source count`,
+  );
+  compare(
+    environment[probeKeys.localSourceCount],
+    "2",
+    `Direct Xcode ${label} local environment source count`,
+  );
+  compare(
+    environment[probeKeys.updatesSourceCount],
+    "1",
+    `Direct Xcode ${label} updates environment source count`,
+  );
+  compare(
+    environment[probeKeys.bundleWrapperReached],
+    "true",
+    `Direct Xcode ${label} bundle wrapper reachability`,
+  );
+  compare(
+    environment[probeKeys.entryFileResolvedAtWrapper],
+    "true",
+    `Direct Xcode ${label} Expo entry resolution before bundle wrapper`,
+  );
+  compare(
+    environment[probeKeys.cliPathResolvedAtWrapper],
+    "true",
+    `Direct Xcode ${label} Expo CLI resolution before bundle wrapper`,
+  );
+}
+
+function validateDirectXcodeLaunchEnvironment() {
+  expect(Boolean(readTextFileAbsolute(iosXcodeEnvPath)), "Local Xcode environment source is missing: ios/.xcode.env.");
+  if (!fileExistsAbsolute(iosXcodeEnvPath)) {
+    return;
+  }
+
+  const projectText = readTextFileAbsolute(iosProjectFilePath);
+  expect(Boolean(projectText), "Native iOS Xcode project is missing: ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj.");
+  if (!projectText) {
+    return;
+  }
+
+  const bundleScript = getPbxShellScript(projectText, "Bundle React Native code and images");
+  expect(Boolean(bundleScript), "Native iOS React Native bundle phase cannot be parsed.");
+  if (!bundleScript) {
+    return;
+  }
+
+  const instrumentedBundleScript = instrumentBundleScript(bundleScript);
+  if (!instrumentedBundleScript) {
+    return;
+  }
+
+  const probeRoot = createDirectXcodeProbeRoot();
+  let debugEnvironment;
+  let releaseEnvironment;
+  const resolvedEasEnvironments = [];
+  try {
+    debugEnvironment = readDirectXcodeEnvironment("Debug", {}, instrumentedBundleScript, "Debug", probeRoot);
+    releaseEnvironment = readDirectXcodeEnvironment("Release", {}, instrumentedBundleScript, "Release", probeRoot);
+    validateDirectXcodeProbeExecution(debugEnvironment, "Debug", instrumentedBundleScript.probeKeys);
+    validateDirectXcodeProbeExecution(releaseEnvironment, "Release", instrumentedBundleScript.probeKeys);
+
+    for (const [profileName, profile] of [
+      ["preview", easJson.build?.preview],
+      ["testflight", easJson.build?.testflight],
+      ["store", easJson.build?.store],
+    ]) {
+      const profileEnvironment = profile?.env || {};
+      const resolvedEnvironment = readDirectXcodeEnvironment(
+        "Release",
+        {
+          ...profileEnvironment,
+          CI: "1",
+          EAS_BUILD: "true",
+          EAS_BUILD_COCOAPODS_CACHE_URL: "https://cache.invalid/cocoapods",
+          EAS_BUILD_GIT_COMMIT_HASH: "0000000000000000000000000000000000000000",
+          EAS_BUILD_ID: "00000000-0000-4000-8000-000000000000",
+          EAS_BUILD_MAVEN_CACHE_URL: "https://cache.invalid/maven",
+          EAS_BUILD_NPM_CACHE_URL: "https://cache.invalid/npm",
+          EAS_BUILD_PLATFORM: "ios",
+          EAS_BUILD_PROFILE: profileName,
+          EAS_BUILD_PROJECT_ID: "00000000-0000-4000-8000-000000000000",
+          EAS_BUILD_RUNNER: "eas-build",
+          EAS_BUILD_USERNAME: "guidepup-preflight",
+          EAS_BUILD_WORKINGDIR: projectDir,
+        },
+        instrumentedBundleScript,
+        `EAS ${profileName}`,
+        probeRoot,
+      );
+      validateDirectXcodeProbeExecution(
+        resolvedEnvironment,
+        `EAS ${profileName}`,
+        instrumentedBundleScript.probeKeys,
+      );
+      resolvedEasEnvironments.push([profileName, profileEnvironment, resolvedEnvironment]);
+    }
+  } finally {
+    fs.rmSync(probeRoot, { force: true, recursive: true });
+  }
+  compare(
+    debugEnvironment.EXPO_PUBLIC_API_BASE_URL,
+    launchInputs.stagingApiBaseUrl,
+    "Direct Xcode Debug EXPO_PUBLIC_API_BASE_URL",
+  );
+  compare(debugEnvironment.EXPO_PUBLIC_APP_ENV, "preview", "Direct Xcode Debug EXPO_PUBLIC_APP_ENV");
+  compare(
+    debugEnvironment.EXPO_PUBLIC_RELEASE_TRACK,
+    "internal-preview",
+    "Direct Xcode Debug EXPO_PUBLIC_RELEASE_TRACK",
+  );
+  compare(
+    releaseEnvironment.EXPO_PUBLIC_API_BASE_URL,
+    launchInputs.productionApiBaseUrl,
+    "Direct Xcode Release EXPO_PUBLIC_API_BASE_URL",
+  );
+  compare(releaseEnvironment.EXPO_PUBLIC_APP_ENV, "production", "Direct Xcode Release EXPO_PUBLIC_APP_ENV");
+  compare(
+    releaseEnvironment.EXPO_PUBLIC_RELEASE_TRACK,
+    "app-store",
+    "Direct Xcode Release EXPO_PUBLIC_RELEASE_TRACK",
+  );
+  for (const [configuration, environment] of [
+    ["Debug", debugEnvironment],
+    ["Release", releaseEnvironment],
+  ]) {
+    compare(
+      environment.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS,
+      "false",
+      `Direct Xcode ${configuration} experimental tabs flag`,
+    );
+    compare(environment.EXPO_PUBLIC_WEBSITE_URL, publicUrls.websiteUrl, `Direct Xcode ${configuration} website URL`);
+    compare(
+      environment.EXPO_PUBLIC_PRIVACY_POLICY_URL,
+      publicUrls.privacyPolicyUrl,
+      `Direct Xcode ${configuration} privacy policy URL`,
+    );
+    compare(environment.EXPO_PUBLIC_SUPPORT_URL, publicUrls.supportUrl, `Direct Xcode ${configuration} support URL`);
+    compare(
+      environment.EXPO_PUBLIC_SUPPORT_EMAIL,
+      launchInputs.supportEmail,
+      `Direct Xcode ${configuration} support email`,
+    );
+    compare(
+      environment.EXPO_PUBLIC_EMERGENCY_DISCLAIMER,
+      launchInputs.emergencyDisclaimer,
+      `Direct Xcode ${configuration} emergency disclaimer`,
+    );
+    compare(environment.EXPO_PUBLIC_SENTRY_DSN, "", `Direct Xcode ${configuration} EXPO_PUBLIC_SENTRY_DSN`);
+    compare(
+      environment.SENTRY_DISABLE_AUTO_UPLOAD,
+      "true",
+      `Direct Xcode ${configuration} SENTRY_DISABLE_AUTO_UPLOAD`,
+    );
+  }
+
+  for (const [profileName, profileEnvironment, resolvedEnvironment] of resolvedEasEnvironments) {
+    for (const key of directXcodeEnvironmentKeys) {
+      if (typeof profileEnvironment[key] === "string") {
+        compare(resolvedEnvironment[key], profileEnvironment[key], `Direct Xcode EAS ${profileName} effective ${key}`);
+      }
+    }
+  }
+
+  const bundleLines = bundleScript.split(/\r?\n/);
+  const executableExactIndexes = (expectedLine) => bundleLines.flatMap((line, index) => {
+    const trimmed = line.trim();
+    return trimmed === expectedLine && !trimmed.startsWith("#") ? [index] : [];
+  });
+  const versionedEnvironmentIndexes = executableExactIndexes('source "$PODS_ROOT/../.xcode.env"');
+  const localEnvironmentIndexes = executableExactIndexes('source "$PODS_ROOT/../.xcode.env.local"');
+  const bundleCommandIndexes = executableExactIndexes('export BUNDLE_COMMAND="export:embed"');
+  const entryFileAssignmentIndexes = executableExactIndexes(expectedEntryFileAssignment);
+  const cliPathAssignmentIndexes = executableExactIndexes(expectedCliPathAssignment);
+  const updatesEnvironmentIndexes = executableExactIndexes('source "$PODS_ROOT/../.xcode.env.updates"');
+  const reactNativeBundleIndexes = bundleLines.flatMap((line, index) =>
+    line.trim() === expectedReactNativeBundleInvocation ? [index] : [],
+  );
+  const versionedEnvironmentIndex = versionedEnvironmentIndexes[0] ?? -1;
+  const firstLocalEnvironmentIndex = localEnvironmentIndexes[0] ?? -1;
+  const bundleCommandIndex = bundleCommandIndexes[0] ?? -1;
+  const entryFileAssignmentIndex = entryFileAssignmentIndexes[0] ?? -1;
+  const cliPathAssignmentIndex = cliPathAssignmentIndexes[0] ?? -1;
+  const updatesEnvironmentIndex = updatesEnvironmentIndexes[0] ?? -1;
+  const finalLocalEnvironmentIndex = localEnvironmentIndexes.at(-1) ?? -1;
+  const reactNativeBundleIndex = reactNativeBundleIndexes[0] ?? -1;
+  expect(
+    versionedEnvironmentIndexes.length === 1 && versionedEnvironmentIndex < bundleCommandIndex,
+    "Native iOS React Native bundle phase must source ios/.xcode.env before selecting Expo export:embed.",
+  );
+  expect(
+    localEnvironmentIndexes.length === 2 && firstLocalEnvironmentIndex > versionedEnvironmentIndex,
+    "Native iOS React Native bundle phase must apply .xcode.env.local after the versioned launch defaults.",
+  );
+  expect(bundleCommandIndexes.length === 1, 'Native iOS React Native bundle phase must use Expo "export:embed" exactly once.');
+  expect(
+    entryFileAssignmentIndexes.length === 1
+      && entryFileAssignmentIndex > firstLocalEnvironmentIndex
+      && entryFileAssignmentIndex < cliPathAssignmentIndex
+      && entryFileAssignmentIndex < bundleCommandIndex,
+    "Native iOS React Native bundle phase must resolve the Expo entry after launch defaults and before the Expo CLI.",
+  );
+  expect(
+    cliPathAssignmentIndexes.length === 1
+      && cliPathAssignmentIndex > entryFileAssignmentIndex
+      && cliPathAssignmentIndex < bundleCommandIndex,
+    "Native iOS React Native bundle phase must resolve the Expo CLI before selecting the bundle command.",
+  );
+  expect(
+    updatesEnvironmentIndexes.length === 1
+      && updatesEnvironmentIndex > bundleCommandIndex
+      && finalLocalEnvironmentIndex > updatesEnvironmentIndex,
+    "Native iOS React Native bundle phase environment update/local override order has changed.",
+  );
+  expect(
+    reactNativeBundleIndexes.length === 1 && reactNativeBundleIndex > finalLocalEnvironmentIndex,
+    "Native iOS React Native bundle phase must resolve all Xcode environment files before bundling JavaScript.",
+  );
+}
+
+function validateSentryRuntimeWiring(sentryMode) {
+  const appConfigSource = readTextFileAbsolute(expoAppConfigPath);
+  const projectText = readTextFileAbsolute(iosProjectFilePath);
+  const runtimeConfigSource = readTextFileAbsolute(runtimeConfigPath);
+
+  expect(Boolean(appConfigSource), "Expo dynamic app config is missing: app.config.ts.");
+  if (appConfigSource) {
+    expect(
+      /require\(["']\.\/release\/launch-inputs\.js["']\)/.test(appConfigSource),
+      "app.config.ts must load the checked-in release launch inputs.",
+    );
+    expect(
+      /launchSentryMode\s*:\s*launchInputs\.sentryMode/.test(appConfigSource),
+      "app.config.ts must inject launchInputs.sentryMode as extra.launchSentryMode.",
+    );
+  }
+
+  try {
+    const resolvedConfig = getExpoConfig(projectDir, {
+      isPublicConfig: true,
+      skipPlugins: true,
+      skipSDKVersionRequirement: true,
+    }).exp;
+    compare(resolvedConfig.extra?.launchSentryMode, sentryMode, "Resolved Expo extra.launchSentryMode");
+    compare(
+      resolvedConfig.ios?.bundleIdentifier,
+      launchInputs.iosBundleIdentifier,
+      "Resolved Expo iOS bundle identifier",
+    );
+  } catch (error) {
+    expect(false, `Expo dynamic app config could not be resolved: ${error instanceof Error ? error.message : String(error)}.`);
+  }
+
+  expect(Boolean(runtimeConfigSource), "Runtime app config is missing: src/lib/config.ts.");
+  if (!runtimeConfigSource) {
+    return;
+  }
+
+  expect(
+    /Constants\.expoConfig\?\.extra\?\.launchSentryMode\s*===\s*["']enabled["']/.test(runtimeConfigSource),
+    "Runtime config must fail closed unless immutable extra.launchSentryMode is enabled.",
+  );
+  expect(
+    /return\s+mode\s*===\s*["']enabled["']\s*\?\s*trimToUndefined\(value\)\s*:\s*undefined;/.test(runtimeConfigSource),
+    "Runtime config must expose a Sentry DSN only when launchSentryMode is enabled.",
+  );
+  expect(
+    /sentryDsn\s*:\s*resolveSentryDsn\(launchSentryMode,\s*rawConfig\.sentryDsn\)/.test(runtimeConfigSource),
+    "appConfig.sentryDsn must be derived through the immutable launch-mode gate.",
+  );
+
+  expect(Boolean(projectText), "Native iOS Xcode project is missing: ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj.");
+  if (!projectText) {
+    return;
+  }
+
+  const sentryUploadScript = getPbxShellScript(projectText, "Upload Debug Symbols to Sentry");
+  expect(Boolean(sentryUploadScript), "Native iOS Sentry debug-symbol upload phase cannot be parsed.");
+  if (!sentryUploadScript) {
+    return;
+  }
+
+  const sourceEnvIndex = sentryUploadScript.indexOf('. "$SRCROOT/.xcode.env"');
+  const disableGuardIndex = sentryUploadScript.indexOf('if [ "${SENTRY_DISABLE_AUTO_UPLOAD:-}" = "true" ]; then');
+  const exitIndex = sentryUploadScript.indexOf("exit 0", disableGuardIndex);
+  const uploadIndex = sentryUploadScript.indexOf("sentry-xcode-debug-files.sh");
+  expect(
+    sourceEnvIndex >= 0,
+    "Native iOS Sentry upload phase must source the versioned .xcode.env launch defaults.",
+  );
+  expect(
+    disableGuardIndex > sourceEnvIndex && exitIndex > disableGuardIndex,
+    "Native iOS Sentry upload phase must exit before upload when SENTRY_DISABLE_AUTO_UPLOAD is true.",
+  );
+  expect(
+    uploadIndex > exitIndex,
+    "Native iOS Sentry upload invocation must occur after the disabled-upload guard.",
+  );
+}
+
 function validateSentryLaunchDecision({ previewProfile, testflightProfile, storeProfile }) {
   const sentryMode = launchInputs.sentryMode;
   expect(validSentryModes.has(sentryMode), 'launchInputs.sentryMode must be either "disabled" or "enabled".');
+  if (!validSentryModes.has(sentryMode)) {
+    return;
+  }
+  validateSentryRuntimeWiring(sentryMode);
 
   const selectedProfiles = [
     ["preview", previewProfile, requiresPreview],
     ["testflight", testflightProfile, requiresTestflight],
     ["store", storeProfile, requiresStore],
   ].filter(([, profile, shouldCheck]) => shouldCheck && profile);
+  const xcodeEnv = readTextFileAbsolute(iosXcodeEnvPath);
+  expect(Boolean(xcodeEnv), "Local Xcode environment source is missing: ios/.xcode.env.");
+  const xcodeDefaultsAutoUploadDisabled = Boolean(
+    xcodeEnv?.match(/^export SENTRY_DISABLE_AUTO_UPLOAD="\$\{SENTRY_DISABLE_AUTO_UPLOAD:-true\}"[ \t]*$/m),
+  );
+  if (xcodeEnv) {
+    expect(
+      !xcodeEnv.includes("SENTRY_ALLOW_FAILURE"),
+      "ios/.xcode.env must not use SENTRY_ALLOW_FAILURE; upload behavior must match the explicit launch mode.",
+    );
+  }
 
   if (sentryMode === "disabled") {
     expect(
@@ -148,11 +870,17 @@ function validateSentryLaunchDecision({ previewProfile, testflightProfile, store
 
     for (const [profileName, profile] of selectedProfiles) {
       const profileDsn = getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN");
-      expect(
-        !isNonEmptyString(profileDsn),
-        `${profileName} EXPO_PUBLIC_SENTRY_DSN must be blank or omitted while launchInputs.sentryMode is disabled.`,
+      compare(profileDsn, "", `${profileName} EXPO_PUBLIC_SENTRY_DSN`);
+      compare(
+        getOptionalEnvValue(profile, "SENTRY_DISABLE_AUTO_UPLOAD"),
+        "true",
+        `${profileName} SENTRY_DISABLE_AUTO_UPLOAD`,
       );
     }
+    expect(
+      xcodeDefaultsAutoUploadDisabled,
+      "ios/.xcode.env must default SENTRY_DISABLE_AUTO_UPLOAD to true while launchInputs.sentryMode is disabled.",
+    );
     return;
   }
 
@@ -163,7 +891,15 @@ function validateSentryLaunchDecision({ previewProfile, testflightProfile, store
 
   for (const [profileName, profile] of selectedProfiles) {
     compare(getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN"), launchInputs.productionSentryDsn, `${profileName} Sentry DSN`);
+    expect(
+      getOptionalEnvValue(profile, "SENTRY_DISABLE_AUTO_UPLOAD")?.trim().toLowerCase() !== "true",
+      `${profileName} SENTRY_DISABLE_AUTO_UPLOAD must not be true while launchInputs.sentryMode is enabled.`,
+    );
   }
+  expect(
+    !xcodeDefaultsAutoUploadDisabled,
+    "ios/.xcode.env must not default SENTRY_DISABLE_AUTO_UPLOAD to true while launchInputs.sentryMode is enabled.",
+  );
 
   if (requiresStoreBackedDistribution) {
     expect(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is required when launchInputs.sentryMode is enabled for TestFlight/store.");
@@ -176,166 +912,11 @@ function validateSentryLaunchDecision({ previewProfile, testflightProfile, store
   }
 }
 
-function modelMatchesExpected(value, expected) {
-  return typeof value === "string" && (value === expected || value.startsWith(`${expected}-`));
-}
-
-function validateSmokeEvidenceShape(artifact) {
-  const missing = [];
-  const invalid = [];
-  const launchContract =
-    artifact?.launchContract && typeof artifact.launchContract === "object" && !Array.isArray(artifact.launchContract)
-      ? artifact.launchContract
-      : undefined;
-  const envelope =
-    artifact?.requestEnvelope && typeof artifact.requestEnvelope === "object" && !Array.isArray(artifact.requestEnvelope)
-      ? artifact.requestEnvelope
-      : undefined;
-  const analyze =
-    artifact?.analyze && typeof artifact.analyze === "object" && !Array.isArray(artifact.analyze)
-      ? artifact.analyze
-      : undefined;
-  const health =
-    artifact?.health && typeof artifact.health === "object" && !Array.isArray(artifact.health)
-      ? artifact.health
-      : undefined;
-
-  const requireEnvelopeField = (fieldName, validator) => {
-    if (!envelope || !(fieldName in envelope) || envelope[fieldName] === undefined || envelope[fieldName] === null) {
-      missing.push(`requestEnvelope.${fieldName}`);
-      return;
-    }
-
-    if (!validator(envelope[fieldName])) {
-      invalid.push(`requestEnvelope.${fieldName}`);
-    }
-  };
-
-  const requireAnalyzeField = (fieldName, validator) => {
-    if (!analyze || !(fieldName in analyze) || analyze[fieldName] === undefined || analyze[fieldName] === null) {
-      missing.push(`analyze.${fieldName}`);
-      return;
-    }
-
-    if (!validator(analyze[fieldName])) {
-      invalid.push(`analyze.${fieldName}`);
-    }
-  };
-
-  const requireHealthField = (fieldName, validator) => {
-    if (!health || !(fieldName in health) || health[fieldName] === undefined || health[fieldName] === null) {
-      missing.push(`health.${fieldName}`);
-      return;
-    }
-
-    if (!validator(health[fieldName])) {
-      invalid.push(`health.${fieldName}`);
-    }
-  };
-
-  const requireLaunchContractField = (fieldName, validator) => {
-    if (!launchContract || !(fieldName in launchContract) || launchContract[fieldName] === undefined || launchContract[fieldName] === null) {
-      missing.push(`launchContract.${fieldName}`);
-      return;
-    }
-
-    if (!validator(launchContract[fieldName])) {
-      invalid.push(`launchContract.${fieldName}`);
-    }
-  };
-
-  const isCaptureHeuristics = (value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      return false;
-    }
-
-    return (
-      ["uri", "base64", "unknown"].includes(value.imageSource) &&
-      typeof value.resizedForUpload === "boolean" &&
-      Number.isInteger(value.uploadedHeight) &&
-      value.uploadedHeight > 0 &&
-      Number.isInteger(value.uploadedWidth) &&
-      value.uploadedWidth > 0 &&
-      typeof value.frameAgeMs === "number" &&
-      Number.isFinite(value.frameAgeMs) &&
-      value.frameAgeMs >= 0
-    );
-  };
-
-  requireEnvelopeField("sampledFrame", (value) => value === true);
-  requireEnvelopeField("hasImage", (value) => value === true);
-  requireEnvelopeField("appVersion", isNonEmptyString);
-  requireEnvelopeField("captureHeuristics", isCaptureHeuristics);
-  requireEnvelopeField("sessionId", isNonEmptyString);
-  requireEnvelopeField("frameId", isNonEmptyString);
-  requireEnvelopeField("frameSummary", isNonEmptyString);
-  requireEnvelopeField("timestampMs", (value) => Number.isInteger(value) && value > 0);
-  requireEnvelopeField("nativePath", (value) => value === "native-core" || value === "js-fallback");
-  requireEnvelopeField("platform", (value) => ["ios", "android", "web", "unknown"].includes(value));
-  requireEnvelopeField("priorGuidance", isNonEmptyString);
-  requireEnvelopeField("detail", (value) => value === "low" || value === "high");
-  requireEnvelopeField("sourceHeight", (value) => Number.isInteger(value) && value > 0);
-  requireEnvelopeField("sourceWidth", (value) => Number.isInteger(value) && value > 0);
-
-  requireHealthField("defaultMaxCompletionTokens", (value) => Number.isInteger(value) && value >= 128 && value <= 1200);
-  requireHealthField("defaultRequestTimeoutMs", (value) => Number.isInteger(value) && value >= 3000 && value <= 30000);
-  requireHealthField("defaultRetryCount", (value) => Number.isInteger(value) && value >= 0 && value <= 2);
-  requireHealthField("defaultRetryDelayMs", (value) => Number.isInteger(value) && value >= 0 && value <= 2000);
-  requireHealthField("structuredOutputMode", (value) => value === "json_schema_strict");
-
-  requireAnalyzeField("structuredOutputValid", (value) => value === true);
-  requireAnalyzeField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
-  requireAnalyzeField("direction", (value) => ["turn-left", "turn-right", "forward", "stop"].includes(value));
-  requireAnalyzeField("hazardLevel", (value) => ["none", "low", "medium", "high"].includes(value));
-  requireAnalyzeField("lighting", (value) => ["dark", "dim", "normal", "bright", "unknown"].includes(value));
-  requireAnalyzeField("message", isNonEmptyString);
-  requireAnalyzeField("model", isNonEmptyString);
-  requireAnalyzeField("obstacle", (value) => typeof value === "boolean");
-  requireAnalyzeField("promptVersion", isNonEmptyString);
-  requireAnalyzeField("provider", isNonEmptyString);
-  requireAnalyzeField("sceneDescription", isNonEmptyString);
-  requireAnalyzeField("surfaceType", isNonEmptyString);
-  requireAnalyzeField("walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
-
-  requireLaunchContractField("runtimeControlsPresent", (value) => value === true);
-  requireLaunchContractField("sampledFrameEnvelopeValid", (value) => value === true);
-  requireLaunchContractField("strictStructuredOutputsPresent", (value) => value === true);
-  requireLaunchContractField("structuredOutputValid", (value) => value === true);
-  requireLaunchContractField("valid", (value) => value === true);
-
-  if (!analyze || !("fallbackReason" in analyze)) {
-    missing.push("analyze.fallbackReason");
-  } else if (analyze.fallbackReason !== null && analyze.fallbackReason !== undefined && !isNonEmptyString(analyze.fallbackReason)) {
-    invalid.push("analyze.fallbackReason");
-  }
-
-  if (Array.isArray(analyze?.structuredOutputMissingFields) && analyze.structuredOutputMissingFields.length > 0) {
-    invalid.push(`analyze.structuredOutputMissingFields:${analyze.structuredOutputMissingFields.join(",")}`);
-  }
-
-  if (Array.isArray(analyze?.structuredOutputInvalidFields) && analyze.structuredOutputInvalidFields.length > 0) {
-    invalid.push(`analyze.structuredOutputInvalidFields:${analyze.structuredOutputInvalidFields.join(",")}`);
-  }
-
-  const privacy = validateEvidencePrivacy(artifact);
-  for (const fieldPath of privacy.disallowedKeys) {
-    invalid.push(`disallowedKey:${fieldPath}`);
-  }
-  for (const pattern of privacy.sensitivePatterns) {
-    invalid.push(`sensitivePattern:${pattern}`);
-  }
-
-  return {
-    invalid,
-    missing,
-    valid: missing.length === 0 && invalid.length === 0,
-  };
-}
-
 function validateSmokeArtifact(artifact, options) {
   const {
     allowWarning,
     description,
+    expectedEnvironment,
     filePath,
     expectedPromptVersion,
     expectedVisionModel,
@@ -358,48 +939,98 @@ function validateSmokeArtifact(artifact, options) {
   expect(isNonEmptyString(artifact.health?.requestId), `${description} smoke artifact must include /health request ID.`);
   expect(artifact.bootstrap?.statusCode === 200, `${description} smoke artifact must show /v1/device/bootstrap 200.`);
   expect(isNonEmptyString(artifact.bootstrap?.requestId), `${description} smoke artifact must include /v1/device/bootstrap request ID.`);
-  expect(isNonEmptyString(artifact.analyze?.requestId), `${description} smoke artifact must include /v1/vision/analyze request ID.`);
-
-  const modelMatches =
-    !expectedVisionModel ||
-    (
-      modelMatchesExpected(artifact.health?.defaultModel, expectedVisionModel) &&
-      modelMatchesExpected(artifact.analyze?.model, expectedVisionModel)
-    );
-  const promptMatches =
-    !expectedPromptVersion ||
-    (
-      artifact.health?.promptVersion === expectedPromptVersion &&
-      artifact.analyze?.promptVersion === expectedPromptVersion
-    );
-  const modelContractMessage = `${description} smoke artifact must use launch vision model "${expectedVisionModel}", found health "${artifact.health?.defaultModel ?? "missing"}" and analyze "${artifact.analyze?.model ?? "missing"}".`;
-  const promptContractMessage = `${description} smoke artifact must use prompt version "${expectedPromptVersion}", found health "${artifact.health?.promptVersion ?? "missing"}" and analyze "${artifact.analyze?.promptVersion ?? "missing"}".`;
-  const evidenceShape = validateSmokeEvidenceShape(artifact);
-  const evidenceShapeMessage = `${description} smoke artifact must include launch contract, sampled-frame envelope, runtime controls, strict Structured Outputs mode, and structured analyze fields. Missing: ${
+  // Historical v1 evidence used artifact.analyze?.requestId; it remains readable but is never launch-valid.
+  const explicitFields = validateExplicitSmokeFields(artifact);
+  const gitResult = spawnSync("git", ["rev-parse", "--verify", "HEAD"], {
+    cwd: path.resolve(projectDir, ".."),
+    encoding: "utf8",
+  });
+  const currentSourceRevision = gitResult.status === 0 ? gitResult.stdout.trim().toLowerCase() : undefined;
+  const evidenceShape = validateSmokeArtifactContract(artifact, {
+    expectedApiUrl: targetUrl,
+    expectedEnvironment,
+    expectedModel: expectedVisionModel,
+    expectedPromptVersion,
+    expectedSourceRevision: currentSourceRevision,
+  });
+  evidenceShape.missing.push(...explicitFields.missing);
+  evidenceShape.invalid.push(...explicitFields.invalid);
+  if (!isGitRevision(currentSourceRevision)) {
+    evidenceShape.invalid.push("provenance.current-source-revision-unavailable");
+  }
+  if (requireProviderBacked && isGitRevision(currentSourceRevision)) {
+    try {
+      const activeProvenance = resolveWorkerProvenance(expectedEnvironment, currentSourceRevision);
+      if (artifact.provenance?.workerDeploymentId !== activeProvenance.workerDeploymentId) {
+        evidenceShape.invalid.push("provenance.workerDeploymentId-active-mismatch");
+      }
+      if (artifact.provenance?.workerVersionId !== activeProvenance.workerVersionId) {
+        evidenceShape.invalid.push("provenance.workerVersionId-active-mismatch");
+      }
+      if (artifact.provenance?.workerVersionCreatedAt !== activeProvenance.workerVersionCreatedAt) {
+        evidenceShape.invalid.push("provenance.workerVersionCreatedAt-active-mismatch");
+      }
+    } catch {
+      evidenceShape.invalid.push("provenance.active-worker-unavailable");
+    }
+  } else if (!requireProviderBacked) {
+    evidenceShape.invalid.push("provenance.active-worker-not-verified-for-preview");
+  }
+  const privacy = validateEvidencePrivacy(artifact);
+  for (const fieldPath of privacy.disallowedKeys) {
+    evidenceShape.invalid.push(`disallowedKey:${fieldPath}`);
+  }
+  for (const pattern of privacy.sensitivePatterns) {
+    evidenceShape.invalid.push(`sensitivePattern:${pattern}`);
+  }
+  evidenceShape.valid = evidenceShape.missing.length === 0 && evidenceShape.invalid.length === 0;
+  const evidenceShapeMessage = `${description} smoke artifact must be fresh, match the current Git revision and active Worker deployment/version, and prove distinct provider-backed guidance and scene-query lanes with sanitized request IDs and valid structured safety outputs. Missing: ${
     evidenceShape.missing.join(", ") || "none"
   }. Invalid: ${evidenceShape.invalid.join(", ") || "none"}.`;
 
   if (requireProviderBacked) {
-    expect(
-      artifact.providerBacked === true && artifact.analyze?.executionPath === "provider-backed",
-      `${description} smoke artifact must show provider-backed analyze. Current execution path is "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
-    );
-    expect(modelMatches, modelContractMessage);
-    expect(promptMatches, promptContractMessage);
     expect(evidenceShape.valid, evidenceShapeMessage);
     return;
   }
 
-  if (artifact.providerBacked !== true || artifact.analyze?.executionPath !== "provider-backed") {
-    warn(
-      false,
-      `${description} smoke artifact shows "${artifact.analyze?.executionPath ?? "missing"}"${artifact.analyze?.fallbackReason ? ` with fallback reason "${artifact.analyze.fallbackReason}"` : ""}.`,
-    );
+  warn(evidenceShape.valid, evidenceShapeMessage);
+}
+
+function validateExplicitSmokeFields(artifact) {
+  const missing = [];
+  const invalid = [];
+  const requireField = (container, fieldPath, fieldName, validator) => {
+    if (!container || !(fieldName in container) || container[fieldName] === undefined || container[fieldName] === null) {
+      missing.push(fieldPath);
+    } else if (!validator(container[fieldName])) {
+      invalid.push(fieldPath);
+    }
+  };
+  const requireHealthField = (fieldName, validator) =>
+    requireField(artifact.health, `health.${fieldName}`, fieldName, validator);
+  const requireLaunchContractField = (fieldName, validator) =>
+    requireField(artifact.launchContract, `launchContract.${fieldName}`, fieldName, validator);
+
+  requireHealthField("defaultMaxCompletionTokens", (value) => Number.isInteger(value) && value >= 128 && value <= 1200);
+  requireHealthField("defaultRequestTimeoutMs", (value) => Number.isInteger(value) && value >= 3000 && value <= 30000);
+  requireHealthField("defaultRetryCount", (value) => Number.isInteger(value) && value >= 0 && value <= 2);
+  requireHealthField("structuredOutputMode", (value) => value === "json_schema_strict");
+  requireLaunchContractField("valid", (value) => value === true);
+  requireLaunchContractField("strictStructuredOutputsPresent", (value) => value === true);
+
+  for (const mode of ["guidance", "scene-query"]) {
+    const lane = artifact.lanes?.[mode];
+    const requireEnvelopeField = (fieldName, validator) =>
+      requireField(lane?.requestEnvelope, `lanes.${mode}.requestEnvelope.${fieldName}`, fieldName, validator);
+    const requireAnalyzeField = (fieldName, validator) =>
+      requireField(lane?.analyze, `lanes.${mode}.analyze.${fieldName}`, fieldName, validator);
+
+    requireEnvelopeField("frameSummary", isNonEmptyString);
+    requireEnvelopeField("captureHeuristics", (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value));
+    requireAnalyzeField("walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
   }
 
-  warn(evidenceShape.valid, evidenceShapeMessage);
-  warn(modelMatches, modelContractMessage);
-  warn(promptMatches, promptContractMessage);
+  return { invalid, missing };
 }
 
 function validateNoScreenSmokeEvidence(artifact, options) {
@@ -407,6 +1038,12 @@ function validateNoScreenSmokeEvidence(artifact, options) {
     allowWarning,
     description,
     expectedApiBaseUrl,
+    expectedApiEnvironment,
+    expectedBackendSmokeArtifact,
+    expectedBuildProfile,
+    expectedCandidateBinarySha256,
+    expectedReleaseTrack,
+    expectedSourceRevision,
   } = options;
 
   if (!artifact) {
@@ -421,13 +1058,22 @@ function validateNoScreenSmokeEvidence(artifact, options) {
 
   const result = validateNoScreenSmokeEvidenceArtifact(artifact, {
     expectedApiBaseUrl,
+    expectedApiEnvironment,
+    expectedAppVersion: launchInputs.iosMarketingVersion,
+    expectedBackendSmokeArtifact,
+    expectedBuildNumber: launchInputs.iosBuildNumber,
+    expectedBuildProfile,
     expectedBundleIdentifier: isPlaceholderValue(launchInputs.iosBundleIdentifier)
       ? undefined
       : launchInputs.iosBundleIdentifier,
+    expectedCandidateBinarySha256,
     expectedPromptVersion: launchInputs.productionPromptVersion,
+    expectedReleaseTrack,
+    expectedSourceRevision,
     expectedVisionModel: launchInputs.productionVisionModel,
+    requireCandidateBinding: true,
   });
-  const message = `${description} no-screen smoke evidence must prove the real-iPhone voice/haptics/audio/VoiceOver sequence without raw media, secrets, signed URLs, or full device identifiers. ${formatNoScreenSmokeEvidenceIssues(result)}`;
+  const message = `${description} no-screen smoke evidence must be recent and bind the real-iPhone voice/haptics/audio/VoiceOver sequence to app ${launchInputs.iosMarketingVersion} (${launchInputs.iosBuildNumber}), release track ${expectedReleaseTrack}, the current Git source revision, the signed candidate binary SHA-256, and the exact candidate backend smoke provenance/request IDs without raw media, secrets, signed URLs, or full device identifiers. ${formatNoScreenSmokeEvidenceIssues(result)}`;
 
   if (allowWarning) {
     warn(result.valid, message);
@@ -460,6 +1106,149 @@ function validatePublicSupportPageForStore() {
     supportHtml.includes(launchInputs.supportEmail),
     "Public support page must include the configured support email from launch-inputs.js.",
   );
+}
+
+const publicPageResponseLimitBytes = 1024 * 1024;
+const publicPageTimeoutMs = 10_000;
+const launchInternalPublicPagePhrases = [
+  "launch rehearsal",
+  "before submitting",
+  "todo_",
+  "finalized during launch",
+];
+
+function formatPublicUrlForOutput(value) {
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return "configured URL";
+  }
+}
+
+function isSafeHttpsPublicUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+function getLivePublicPageSpecs() {
+  return [
+    {
+      forbiddenMarkers: [...launchInternalPublicPagePhrases, "does not request microphone"],
+      label: "homepage",
+      requiredMarkers: [
+        "blind and low-vision users",
+        "optional hands-free voice commands",
+        "crash reporting is disabled",
+      ],
+      url: publicUrls.websiteUrl,
+    },
+    {
+      forbiddenMarkers: [...launchInternalPublicPagePhrases, "does not request microphone"],
+      label: "privacy policy",
+      requiredMarkers: [
+        "guide pup privacy policy",
+        "voice and apple speech",
+        "cloudflare observability",
+        "openai",
+        launchInputs.supportEmail,
+      ],
+      url: publicUrls.privacyPolicyUrl,
+    },
+    {
+      forbiddenMarkers: launchInternalPublicPagePhrases,
+      label: "support",
+      requiredMarkers: [
+        "support - guide pup",
+        "camera permission",
+        "emergency services",
+        launchInputs.supportEmail,
+      ],
+      url: publicUrls.supportUrl,
+    },
+    {
+      forbiddenMarkers: launchInternalPublicPagePhrases,
+      label: "safety",
+      requiredMarkers: [
+        "not guaranteed hazard detection or emergency response",
+        "when stop appears",
+        "emergency guidance",
+      ],
+      url: publicUrls.safetyUrl,
+    },
+  ];
+}
+
+async function inspectLivePublicPage(spec, fetchImpl) {
+  const issues = [];
+  const outputUrl = formatPublicUrlForOutput(spec.url);
+  if (!isSafeHttpsPublicUrl(spec.url)) {
+    return { issues: [`Live ${spec.label} URL must be HTTPS without embedded credentials: ${outputUrl}.`], spec };
+  }
+  if (typeof fetchImpl !== "function") {
+    return { issues: [`Live ${spec.label} could not be checked because fetch is unavailable.`], spec };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), publicPageTimeoutMs);
+  timeout.unref?.();
+  try {
+    const response = await fetchImpl(spec.url, {
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent": "GuidePup-Release-Preflight/1.0",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    if (!response || response.ok !== true || !Number.isInteger(response.status)) {
+      issues.push(`Live ${spec.label} must return a successful HTTP response; ${outputUrl} returned status ${response?.status ?? "unavailable"}.`);
+      return { issues, spec };
+    }
+    if (!isSafeHttpsPublicUrl(response.url || spec.url)) {
+      issues.push(`Live ${spec.label} must remain on HTTPS after redirects: ${outputUrl}.`);
+      return { issues, spec };
+    }
+
+    const body = await response.text();
+    if (typeof body !== "string" || Buffer.byteLength(body, "utf8") > publicPageResponseLimitBytes) {
+      issues.push(`Live ${spec.label} response must be text no larger than ${publicPageResponseLimitBytes} bytes.`);
+      return { issues, spec };
+    }
+    const normalizedBody = body.toLowerCase();
+    for (const marker of spec.requiredMarkers) {
+      if (!isNonEmptyString(marker) || !normalizedBody.includes(marker.toLowerCase())) {
+        issues.push(`Live ${spec.label} is missing required current marker "${marker || "configured support email"}".`);
+      }
+    }
+    for (const marker of spec.forbiddenMarkers) {
+      if (normalizedBody.includes(marker)) {
+        issues.push(`Live ${spec.label} still contains stale or launch-internal marker "${marker}".`);
+      }
+    }
+  } catch (error) {
+    const reason = error instanceof Error && error.name === "AbortError" ? "timed out" : "could not be fetched";
+    issues.push(`Live ${spec.label} ${reason}: ${outputUrl}.`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return { issues, spec };
+}
+
+async function validateLivePublicPagesForStore(fetchImpl = globalThis.fetch) {
+  const results = await Promise.all(
+    getLivePublicPageSpecs().map((spec) => inspectLivePublicPage(spec, fetchImpl)),
+  );
+  for (const result of results) {
+    for (const issue of result.issues) {
+      expect(false, issue);
+    }
+  }
 }
 
 function validateAppReviewMetadataForStore() {
@@ -501,36 +1290,6 @@ function validateAppReviewMetadataForStore() {
   );
 }
 
-function hasBooleanFalseForKey(xml, keyName) {
-  const keyIndex = xml.indexOf(`<key>${keyName}</key>`);
-  if (keyIndex === -1) {
-    return false;
-  }
-
-  const nextKeyIndex = xml.indexOf("<key>", keyIndex + keyName.length);
-  const keySection = xml.slice(keyIndex, nextKeyIndex === -1 ? undefined : nextKeyIndex);
-  return keySection.includes("<false/>");
-}
-
-function hasAppFunctionalityPurpose(xml) {
-  return xml.includes("<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>");
-}
-
-function getPrivacyCollectedDataEntry(xml, dataType) {
-  const typeIndex = xml.indexOf(`<string>${dataType}</string>`);
-  if (typeIndex === -1) {
-    return undefined;
-  }
-
-  const entryStart = xml.lastIndexOf("<dict>", typeIndex);
-  const entryEnd = xml.indexOf("</dict>", typeIndex);
-  if (entryStart === -1 || entryEnd === -1) {
-    return undefined;
-  }
-
-  return xml.slice(entryStart, entryEnd + "</dict>".length);
-}
-
 function validateIosPrivacySurface() {
   const infoPlistXml = readTextFileAbsolute(iosInfoPlistPath);
   const privacyManifestXml = readTextFileAbsolute(iosPrivacyManifestPath);
@@ -556,31 +1315,74 @@ function validateIosPrivacySurface() {
     return;
   }
 
-  const expectedCollectedDataTypes = [
-    "NSPrivacyCollectedDataTypePhotosorVideos",
-    "NSPrivacyCollectedDataTypeDeviceID",
-  ];
-  for (const dataType of expectedCollectedDataTypes) {
-    const entry = getPrivacyCollectedDataEntry(privacyManifestXml, dataType);
-    expect(
-      Boolean(entry),
-      `iOS privacy manifest must disclose ${dataType} because the app sends sampled camera frames and anonymous device/session identifiers to the backend.`,
-    );
+  let privacyManifest;
+  try {
+    privacyManifest = plist.parse(privacyManifestXml);
+  } catch (error) {
+    expect(false, `iOS privacy manifest could not be parsed: ${error instanceof Error ? error.message : String(error)}.`);
+    return;
+  }
+
+  compare(privacyManifest.NSPrivacyTracking, false, "iOS privacy manifest top-level tracking");
+
+  const collectedData = privacyManifest.NSPrivacyCollectedDataTypes;
+  expect(Array.isArray(collectedData), "iOS privacy manifest NSPrivacyCollectedDataTypes must be an array.");
+  if (!Array.isArray(collectedData)) {
+    return;
+  }
+
+  const appFunctionality = "NSPrivacyCollectedDataTypePurposeAppFunctionality";
+  const analytics = "NSPrivacyCollectedDataTypePurposeAnalytics";
+  const expectedCollectedData = new Map([
+    ["NSPrivacyCollectedDataTypePhotosorVideos", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeAudioData", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeDeviceID", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeProductInteraction", { linked: true, purposes: [appFunctionality, analytics] }],
+    ["NSPrivacyCollectedDataTypePerformanceData", { linked: true, purposes: [appFunctionality, analytics] }],
+    ["NSPrivacyCollectedDataTypeOtherDiagnosticData", { linked: true, purposes: [appFunctionality, analytics] }],
+  ]);
+  const entriesByType = new Map();
+
+  for (const entry of collectedData) {
+    const dataType = entry?.NSPrivacyCollectedDataType;
+    expect(isNonEmptyString(dataType), "Every iOS privacy manifest collected-data entry must declare its data type.");
+    if (!isNonEmptyString(dataType)) {
+      continue;
+    }
+    expect(!entriesByType.has(dataType), `iOS privacy manifest must not duplicate ${dataType}.`);
+    if (!entriesByType.has(dataType)) {
+      entriesByType.set(dataType, entry);
+    }
+  }
+
+  expect(
+    entriesByType.size === expectedCollectedData.size,
+    `iOS privacy manifest must contain exactly ${expectedCollectedData.size} collected-data types, found ${entriesByType.size}.`,
+  );
+  for (const dataType of entriesByType.keys()) {
+    expect(expectedCollectedData.has(dataType), `iOS privacy manifest has unexpected collected-data type ${dataType}.`);
+  }
+
+  for (const [dataType, expected] of expectedCollectedData) {
+    const entry = entriesByType.get(dataType);
+    expect(Boolean(entry), `iOS privacy manifest must disclose ${dataType}.`);
     if (!entry) {
       continue;
     }
 
+    compare(entry.NSPrivacyCollectedDataTypeLinked, expected.linked, `iOS privacy manifest ${dataType} linked flag`);
+    compare(entry.NSPrivacyCollectedDataTypeTracking, false, `iOS privacy manifest ${dataType} tracking flag`);
+
+    const purposes = entry.NSPrivacyCollectedDataTypePurposes;
+    expect(Array.isArray(purposes), `iOS privacy manifest ${dataType} purposes must be an array.`);
+    if (!Array.isArray(purposes)) {
+      continue;
+    }
+    const uniquePurposes = new Set(purposes);
+    expect(uniquePurposes.size === purposes.length, `iOS privacy manifest ${dataType} purposes must not contain duplicates.`);
     expect(
-      hasBooleanFalseForKey(entry, "NSPrivacyCollectedDataTypeLinked"),
-      `iOS privacy manifest ${dataType} entry must be marked not linked to the user.`,
-    );
-    expect(
-      hasBooleanFalseForKey(entry, "NSPrivacyCollectedDataTypeTracking"),
-      `iOS privacy manifest ${dataType} entry must be marked not used for tracking.`,
-    );
-    expect(
-      hasAppFunctionalityPurpose(entry),
-      `iOS privacy manifest ${dataType} entry must include App Functionality as a purpose.`,
+      uniquePurposes.size === expected.purposes.length && expected.purposes.every((purpose) => uniquePurposes.has(purpose)),
+      `iOS privacy manifest ${dataType} purposes must be exactly: ${expected.purposes.join(", ")}.`,
     );
   }
 }
@@ -602,6 +1404,17 @@ const requiresIos = requiresPreview || requiresStoreBackedDistribution;
 const stagingSmokeArtifact = readSmokeArtifact(stagingSmokeArtifactPath);
 const productionSmokeArtifact = readSmokeArtifact(productionSmokeArtifactPath);
 const noScreenSmokeArtifact = readNoScreenSmokeEvidenceArtifact(projectDir);
+const releaseCandidateArtifact = readSmokeArtifact(releaseCandidateArtifactPath);
+const currentSourceRevision = readCurrentGitSourceRevision();
+let validatedReleaseCandidateArtifact;
+
+if (requiresStoreBackedDistribution) {
+  validateReleaseSourceState(currentSourceRevision);
+  validatedReleaseCandidateArtifact = validateReleaseCandidateArtifact(
+    releaseCandidateArtifact,
+    currentSourceRevision,
+  );
+}
 
 if (requiresIos) {
   checkPlaceholder(launchInputs.iosBundleIdentifier, "iOS bundle identifier");
@@ -639,8 +1452,23 @@ expect(fileExistsAbsolute(path.resolve(projectDir, "../site/support/index.html")
 expect(fileExistsAbsolute(path.resolve(projectDir, "../site/safety/index.html")), "Public safety page is missing: site/safety/index.html.");
 
 if (requiresStoreBackedDistribution) {
+  compare(launchInputs.supportEmail, "charliehan112@gmail.com", "Launch support email");
   validatePublicSupportPageForStore();
   validateAppReviewMetadataForStore();
+  await validateLivePublicPagesForStore();
+  warn(
+    false,
+    "External gate not verified by this local preflight: App Store screenshots and device-size coverage must be confirmed in App Store Connect.",
+  );
+  warn(
+    false,
+    "External gate not verified by this local preflight: the live App Store Connect build, metadata, agreements, compliance, and review state must be confirmed in Apple systems.",
+  );
+} else if (requiresPreview) {
+  warn(
+    false,
+    "Preview does not launch-gate live public-page content; TestFlight/store preflight fetches and validates the configured HTTPS pages.",
+  );
 }
 
 compare(appJson.expo.name, launchInputs.appName, "App name");
@@ -653,6 +1481,8 @@ expect(isNonEmptyString(iosInfoPlist.NSMicrophoneUsageDescription), "iOS microph
 expect(isNonEmptyString(iosInfoPlist.NSSpeechRecognitionUsageDescription), "iOS speech-recognition permission copy is missing.");
 if (requiresIos) {
   validateIosPrivacySurface();
+  validateIosVersionOwnership();
+  validateDirectXcodeLaunchEnvironment();
 }
 
 const previewProfile = easJson.build?.preview;
@@ -679,6 +1509,7 @@ validateSentryLaunchDecision({
 
 if (previewProfile && requiresPreview) {
   compare(previewProfile.distribution, "internal", "preview distribution");
+  compare(previewProfile.autoIncrement, false, "preview autoIncrement");
   compare(previewProfile.env?.EXPO_PUBLIC_API_BASE_URL, launchInputs.stagingApiBaseUrl, "preview API base URL");
   compare(previewProfile.env?.EXPO_PUBLIC_RELEASE_TRACK, "internal-preview", "preview release track");
   compare(previewProfile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", "preview experimental tabs flag");
@@ -693,6 +1524,7 @@ if (requiresPreview) {
   validateSmokeArtifact(stagingSmokeArtifact, {
     allowWarning: !strictPreviewProvider,
     description: "Preview / staging",
+    expectedEnvironment: "staging",
     expectedPromptVersion: launchInputs.productionPromptVersion,
     expectedVisionModel: launchInputs.productionVisionModel,
     filePath: stagingSmokeArtifactPath,
@@ -703,6 +1535,11 @@ if (requiresPreview) {
     allowWarning: true,
     description: "Preview / staging",
     expectedApiBaseUrl: launchInputs.stagingApiBaseUrl,
+    expectedApiEnvironment: "staging",
+    expectedBackendSmokeArtifact: stagingSmokeArtifact,
+    expectedBuildProfile: "preview",
+    expectedReleaseTrack: "preview",
+    expectedSourceRevision: currentSourceRevision,
   });
 }
 
@@ -716,6 +1553,7 @@ for (const [profileName, profile] of Object.entries({ testflight: testflightProf
   }
 
   compare(profile.distribution, "store", `${profileName} distribution`);
+  compare(profile.autoIncrement, false, `${profileName} autoIncrement`);
   compare(profile.env?.EXPO_PUBLIC_APP_ENV, "production", `${profileName} app env`);
   compare(profile.env?.EXPO_PUBLIC_API_BASE_URL, launchInputs.productionApiBaseUrl, `${profileName} API base URL`);
   compare(profile.env?.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS, "false", `${profileName} experimental tabs flag`);
@@ -738,6 +1576,7 @@ if (requiresStoreBackedDistribution) {
   validateSmokeArtifact(productionSmokeArtifact, {
     allowWarning: false,
     description: "Production",
+    expectedEnvironment: "production",
     expectedPromptVersion: launchInputs.productionPromptVersion,
     expectedVisionModel: launchInputs.productionVisionModel,
     filePath: productionSmokeArtifactPath,
@@ -748,6 +1587,12 @@ if (requiresStoreBackedDistribution) {
     allowWarning: false,
     description: "Production",
     expectedApiBaseUrl: launchInputs.productionApiBaseUrl,
+    expectedApiEnvironment: "production",
+    expectedBackendSmokeArtifact: productionSmokeArtifact,
+    expectedBuildProfile: selectedTrack === "testflight" ? "testflight" : "store",
+    expectedCandidateBinarySha256: validatedReleaseCandidateArtifact?.archive?.binarySha256,
+    expectedReleaseTrack: selectedTrack === "testflight" ? "testflight" : "store",
+    expectedSourceRevision: currentSourceRevision,
   });
 }
 
@@ -818,4 +1663,10 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`Release preflight passed for ${selectedTrack}.`);
+if (requiresStoreBackedDistribution) {
+  console.log(
+    `Local release preflight checks passed for ${selectedTrack}; screenshots and live App Store Connect/TestFlight state remain external gates.`,
+  );
+} else {
+  console.log(`Local release preflight checks passed for ${selectedTrack}.`);
+}

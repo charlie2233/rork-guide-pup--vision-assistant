@@ -9,9 +9,10 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 | --- | --- | --- |
 | Camera frames | The shipping navigation path captures camera frames and sends compressed images to the Guide Pup backend for scene analysis. | Answer `Yes` for photos or videos transmitted off-device for app functionality. |
 | Third-party AI processing | The backend may send frames to an OpenAI-compatible provider, and benchmark-only MiniCPM-o stays non-production. | Disclose third-party processing in review notes and privacy policy. |
-| Anonymous device/session bootstrap | The app stores an anonymous device ID and session token in `expo-secure-store`, then sends them to the backend for rate limiting and request authorization. | Answer `Yes` for identifiers collected for app functionality, but mark them as anonymous / not user-linked where allowed. |
-| Crash / performance telemetry | `@sentry/react-native` is present, but launch configuration currently sets `sentryMode: "disabled"` and leaves `EXPO_PUBLIC_SENTRY_DSN` unset for release profiles. If enabled later, default config avoids sending default PII. | Current launch answer: `No` for diagnostics collection. If Sentry mode changes to `enabled`, answer `Yes` for diagnostics / crash data and complete the Sentry release credential gate first. |
-| Microphone / speech recognition | Optional hands-free commands request microphone and iOS speech-recognition access. Spoken commands are parsed into a bounded command set such as start, stop, repeat, status, and settings changes. Raw voice audio is not intentionally logged or sent to model providers by Guide Pup. | Disclose microphone and speech-recognition usage for app functionality. Do not claim raw audio collection unless release policy changes. |
+| Anonymous device/session bootstrap | The app stores an installation-scoped device ID and session token in `expo-secure-store`, then sends them to the backend for rate limiting and request authorization. | Answer `Yes` for Device ID used for App Functionality. Conservatively mark collected data as linked because the installation ID can be associated with requests and provider/platform context. |
+| Cloudflare request observability | Cloudflare platform invocation logs are explicitly disabled in development, staging, and production to avoid automatic header and request capture. Sanitized custom Guide Pup request/quality logs remain enabled and record bounded fields such as request ID, latency, provider/model, prompt version, result class, and sanitized errors. They redact raw frames, credentials, tokens, signed URLs, authorization values, and device IDs. Cloudflare documents a maximum Workers Logs retention of 3 days on Free plans and 7 days on Paid plans; because the account plan is not verified, disclose custom-log retention as up to 7 days. Cloudflare still processes network and platform data to provide the service. | Answer `Yes` for Product Interaction, Performance Data, and Other Diagnostic Data for App Functionality and Analytics. Conservatively mark them linked. Cite [Cloudflare Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and do not claim zero retention. |
+| Crash reporting | `@sentry/react-native` is present, but the intended shipping configuration sets `sentryMode: "disabled"`, leaves the runtime DSN blank, and disables uploads. | Answer `No` for Crash Data only if the submitted archive proves the runtime DSN is blank and uploads are disabled. If Sentry is enabled, reassess Crash Data, Performance Data, and Other Diagnostic Data before submission. |
+| Microphone / speech recognition | Optional hands-free commands request microphone and iOS speech-recognition access. The native request prefers on-device recognition when Apple reports support and otherwise retains Apple speech-service fallback. For third-party Speech Recognition, Apple states that audio may be sent to Apple; unless the user has enabled Improve Siri & Dictation, audio is not stored, while transcripts and related request data associated with a rotating random identifier may be retained for up to two years. Spoken commands remain in a deterministic bounded command set. Guide Pup does not intentionally log raw voice audio or send it to its vision provider. | Answer `Yes` for Audio Data used for App Functionality, conservatively linked, with no tracking. Cite [Ask Siri, Dictation & Privacy](https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/). |
 | Health / location / contacts | Not collected in the shipping path. No location APIs are used in the current shipping path. | Answer `No` for health, precise location, coarse location, and contacts. |
 
 ## Code evidence
@@ -23,24 +24,29 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - Sentry SDK init and privacy scrubbing: `expo/src/lib/sentry.ts`
 - Voice permission copy and bounded commands: `expo/app.json`, `expo/src/lib/voiceCommands.ts`, `expo/modules/guidepup-voice-control`
 - OpenAI-compatible provider default and MiniCPM benchmark-only flag: `backend/guidepup-api/wrangler.jsonc`
-- iOS privacy manifest discloses sampled camera frames as photos/videos and anonymous device/session IDs for app functionality: `expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy`
+- iOS privacy manifest discloses Photos or Videos, Audio Data, Device ID, Product Interaction, Performance Data, and Other Diagnostic Data: `expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy`
 - Native iOS Info.plist must not carry unused location or photo-library permission copy for this shipping path: `expo/ios/GuidePupVisionAssistant/Info.plist`
 
 ## Apple privacy answers to prepare
 
 - Data used to track the user: `No` based on current code.
 - Contact info: `No` in-app collection.
-- User content: `Yes` for camera frames sent for app functionality.
-- Identifiers: `Yes` for anonymous device/session identifier used for app functionality.
-- Diagnostics: `No` for the current launch source of truth because Sentry mode is `disabled`.
-- Microphone and speech recognition: `Yes` for app functionality.
-- Audio data: `No` for raw audio collection unless release policy changes.
+- Photos or Videos: `Yes`, linked, for App Functionality. Sampled frames are sent with installation/request context.
+- Audio Data: `Yes`, linked, for App Functionality. On-device recognition is preferred when supported, but Apple speech-service fallback remains available.
+- Device ID: `Yes`, linked, for App Functionality.
+- Product Interaction: `Yes`, linked, for App Functionality and Analytics.
+- Performance Data: `Yes`, linked, for App Functionality and Analytics.
+- Other Diagnostic Data: `Yes`, linked, for App Functionality and Analytics.
+- Crash Data: `No` only for the intended shipping build with a blank runtime Sentry DSN and disabled uploads, pending submitted-archive proof.
 - Location: `No`.
 - Purchases / financial data: `No`.
+
+All collected categories above are `No` for tracking, third-party advertising, developer advertising/marketing, and product personalization. Do not publish these answers until the submitted archive and deployed provider/platform behavior are verified against this matrix.
 
 ## Review-note language
 
 - Guide Pup uses the camera to analyze the scene ahead for assistive navigation.
 - Camera frames are sent to the Guide Pup backend and may be processed by third-party AI providers.
-- Optional voice commands use microphone and iOS speech recognition for a bounded command set.
-- The app uses anonymous device/session bootstrap instead of user accounts.
+- Optional voice commands use microphone and iOS speech recognition for a bounded command set. On-device recognition is preferred when supported. Apple states third-party Speech Recognition audio may be sent to Apple; unless Improve Siri & Dictation is enabled, audio is not stored, while transcripts and related request data associated with a rotating random identifier may be retained for up to two years.
+- The app uses an installation-scoped device/session bootstrap instead of user accounts.
+- Cloudflare platform invocation logs are disabled to avoid automatic header/request capture. Sanitized custom request, performance, and quality logs may persist in Workers Logs for up to 7 days because the account plan is not yet verified. OpenAI may retain customer content in default abuse-monitoring logs for up to 30 days unless approved data-retention controls apply.

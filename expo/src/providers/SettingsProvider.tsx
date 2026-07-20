@@ -1,6 +1,7 @@
 import createContextHook from "@nkzw/create-context-hook";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 
 export type SpeechRate = "slow" | "normal" | "fast";
 export type DescriptionMode = "short" | "detailed";
@@ -22,24 +23,37 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const SETTINGS_KEY = "@guidepup:settings";
+const StoredSettingsSchema = z.object({
+  descriptionMode: z.enum(["short", "detailed"]).optional(),
+  hapticsEnabled: z.boolean().optional(),
+  hasCompletedOnboarding: z.boolean().optional(),
+  showBoundingBoxes: z.boolean().optional(),
+  speechRate: z.enum(["slow", "normal", "fast"]).optional(),
+}).strict();
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [isReady, setIsReady] = useState(false);
+  const settingsRef = useRef<Settings>(DEFAULT_SETTINGS);
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
-    void loadSettings();
+    const loadOperation = persistenceQueueRef.current.then(loadSettings);
+    persistenceQueueRef.current = loadOperation;
+    void loadOperation;
   }, []);
 
   const loadSettings = async () => {
     try {
       const stored = await AsyncStorage.getItem(SETTINGS_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as Settings;
-        setSettings({
+        const parsed = StoredSettingsSchema.parse(JSON.parse(stored));
+        const loadedSettings = {
           ...DEFAULT_SETTINGS,
           ...parsed,
-        });
+        };
+        settingsRef.current = loadedSettings;
+        setSettings(loadedSettings);
       }
     } catch (error) {
       if (__DEV__) {
@@ -50,42 +64,45 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     }
   };
 
-  const persistSettings = async (newSettings: Settings) => {
-    try {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-    } catch (error) {
-      if (__DEV__) {
-        console.error("[SettingsProvider] Failed to save settings", error);
-      }
-    }
-  };
+  const updateSettings = useCallback((updater: (current: Settings) => Settings): Promise<boolean> => {
+    const operation = persistenceQueueRef.current.then(async () => {
+      const next = updater(settingsRef.current);
 
-  const updateSettings = useCallback((updater: (current: Settings) => Settings) => {
-    setSettings((current) => {
-      const next = updater(current);
-      void persistSettings(next);
-      return next;
+      try {
+        await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+        settingsRef.current = next;
+        setSettings(next);
+        return true;
+      } catch (error) {
+        if (__DEV__) {
+          console.error("[SettingsProvider] Failed to save settings", error);
+        }
+        return false;
+      }
     });
+
+    persistenceQueueRef.current = operation.then(() => undefined);
+    return operation;
   }, []);
 
   const updateSpeechRate = useCallback((rate: SpeechRate) => {
-    updateSettings((current) => ({ ...current, speechRate: rate }));
+    return updateSettings((current) => ({ ...current, speechRate: rate }));
   }, [updateSettings]);
 
   const updateDescriptionMode = useCallback((mode: DescriptionMode) => {
-    updateSettings((current) => ({ ...current, descriptionMode: mode }));
+    return updateSettings((current) => ({ ...current, descriptionMode: mode }));
   }, [updateSettings]);
 
   const updateHapticsEnabled = useCallback((enabled: boolean) => {
-    updateSettings((current) => ({ ...current, hapticsEnabled: enabled }));
+    return updateSettings((current) => ({ ...current, hapticsEnabled: enabled }));
   }, [updateSettings]);
 
   const toggleBoundingBoxes = useCallback(() => {
-    updateSettings((current) => ({ ...current, showBoundingBoxes: !current.showBoundingBoxes }));
+    return updateSettings((current) => ({ ...current, showBoundingBoxes: !current.showBoundingBoxes }));
   }, [updateSettings]);
 
   const markOnboardingComplete = useCallback(() => {
-    updateSettings((current) => ({ ...current, hasCompletedOnboarding: true }));
+    return updateSettings((current) => ({ ...current, hasCompletedOnboarding: true }));
   }, [updateSettings]);
 
   const getSpeechRateValue = useCallback((): number => {

@@ -5,6 +5,17 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `f7eb562`
 Conversation-lane continuation start: `55622a1`
 
+## Current gate on 2026-07-19
+
+- Explicit partial or final STOP remains deterministic while Guide Pup is speaking; the command parser no longer rejects a real STOP based on overlap with synthesized text.
+- Native acoustic echo cancellation is required through `.voiceChat` and voice processing. Voice startup fails closed when that protection cannot be enabled, and diagnostics/no-screen evidence require the observed native `voiceProcessingEnabled` signal.
+- Home, Navigation, and the voice provider use owner-scoped native sessions. STOP and route cleanup invalidate pending attempts, while stale successful or rejected starts can stop only their own owner token.
+- Focused iOS runtime behavior and source-contract tests passed `29/29`; the full Expo scripted suite passed `93/93` before the candidate commit.
+- The post-race-fix arm64 Release simulator build for build `4` exited `0`; artifact inspection confirmed the expected app identity, privacy manifest, production backend URL, and absence of shipping provider keys/direct OpenAI calls. Hardware voice and accessibility behavior remains unclaimed.
+- These tests do not replace the physical build `4` no-screen sequence. Real self-echo resistance, STOP cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruptions, and settings persistence remain hardware gates.
+
+Later dated sections retain phase history. The current owner-scoped listener and VoiceOver interruption behavior is described by the gate above and the latest bullets below.
+
 ## Scope
 
 This phase hardens the deterministic iOS voice command lane for no-screen internal validation. It does not move provider keys or model calls into the client, does not change cloud provider routing, and does not rewrite the app to SwiftUI.
@@ -14,7 +25,7 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Home cold prompt now uses the same stop-speak-resume command-session path as other voice responses, so the app does not start listening while it says "start guidance."
 - Home and Navigation command sessions now request partial recognition to support fast STOP handling.
 - Navigation can handle exact partial STOP barge-in before final recognition, interrupts current speech, pauses guidance locally, and plays the stop haptic when enabled.
-- The voice announcer snapshots speech options per utterance and only restarts listening when the current speech token is still active, preventing stale async speech from reopening the mic during newer speech.
+- The voice announcer snapshots speech options per utterance and invalidates stale speech tokens, but screen routes exclusively own command-session startup and cleanup; the announcer cannot reopen or stop a newer listener.
 - Guidance speech can keep listening for STOP only when the spoken guidance is non-stop, non-obstacle, and does not itself contain "stop" or "pause."
 - Bare `continue` no longer starts guidance, which avoids self-triggering from guidance like "continue forward." `continue guidance` remains supported.
 - Duplicate transcript guards are reset when command sessions restart or guidance pauses, so a later repeated STOP is not ignored forever.
@@ -28,7 +39,7 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - `what do you see` no longer reuses stale scene text; if a guidance analysis is already running, it speaks a deterministic "already analyzing" response instead of promising a scene query that cannot start.
 - Placeholder SOS copy now says the shortcut is not connected in this build instead of claiming emergency services are active.
 - Diagnostics now record speaking state, voice-state timestamps, recognition phase/timestamps, speech/listening overlap counters, unexpected-overlap counters, the last overlap reason, and a PASS/FAIL invariant for no-screen smoke evidence.
-- The voice announcer records `speaking: true` only after pausing the command session when normal speech should not keep the mic open; guidance speech that intentionally keeps recognition active is marked as `stop-barge-in` overlap evidence.
+- Home pauses its owner-scoped listener for non-guidance responses. Navigation keeps its owner-scoped listener armed during guidance and records that intentional speech overlap as `stop-barge-in` evidence.
 - Navigation suppresses stale backend-failure speech/announcements if an analyze request fails after the user has already stopped guidance.
 - The native iOS voice controller now associates delegate callbacks with the active `AVSpeechUtterance`, so a canceled old utterance cannot finish the newest speech continuation or flip `speaking` false too early.
 - Voice commands now use exact normalized phrase sets with optional polite/wake prefixes instead of broad substring regexes; ambient phrases such as "pause music", "start timer", "do not stop", and "the sign says stop" stay out of the deterministic command lane.
@@ -51,6 +62,8 @@ This phase hardens the deterministic iOS voice command lane for no-screen intern
 - Home voice responses now guard command-session restarts by component mount state, and the spoken `start guidance` path does not restart Home listening after routing into Navigation.
 - Home now treats `start guidance` as a deterministic handoff: it stops the Home command session, plays success haptic/audio cues, routes to Navigation, and lets Navigation speak the single guidance-start prompt. Settings changes on Home no longer retrigger the cold prompt or stop/restart listening through the ready-prompt effect.
 - The native iOS speech controller now renews its recognition task after final commands while preserving the active locale and partial-result setting, so the multi-command no-screen smoke sequence is not dependent on one finalized `SFSpeechRecognitionTask` continuing to emit results.
+- VoiceOver cancellation now posts an interrupting attributed announcement before clearing native continuations, so deterministic STOP can cut off a current VoiceOver announcement instead of only changing bookkeeping.
+- No-screen draft diagnostics leave speech-input and spoken-output confirmations false until a physical tester attests them; permissions or module availability can no longer impersonate hardware proof.
 
 ## Voice command coverage
 
@@ -103,7 +116,7 @@ npm --prefix expo run release:preflight:testflight
 npx wrangler whoami
 xcrun devicectl list devices
 xcrun xctrace list devices
-xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+xcrun devicectl device info details --device '<redacted-device-identifier>'
 SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -sdk iphonesimulator -destination 'platform=iOS Simulator,id=09C3102D-6824-4BA2-8CBE-F6348561F6E8' CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build -quiet
 ```
 
@@ -259,3 +272,12 @@ npm --prefix expo run lint
 ```
 
 Results: passed locally. Build iOS Apps `build_sim` also passed for the Release simulator target after this continuation.
+
+## 2026-07-18 conversation-lane and privacy continuation
+
+- `what do you see` now crosses an explicit `scene-query` backend mode, keeps separate repeat memory, and cannot mutate guidance smoothing or deterministic navigation/settings state.
+- Invalid interaction modes and malformed JSON receive the same bounded sanitized `400` response.
+- The in-app Privacy Summary now discloses sampled frames, Apple Speech fallback, installation/session identifiers, bounded diagnostics, and temporary-file cleanup, with a VoiceOver-readable link to the full policy.
+- Full Expo scripted tests passed `42/42`; voice and static no-screen contracts passed; Expo typecheck, lint, and Expo Doctor `17/17` passed.
+- The Release simulator app exposed named accessibility targets for the full onboarding and Settings fallback. Speech rate, detail, and haptics changed and persisted across a process restart.
+- Hardware speech recognition, audible confirmations, STOP cut-through, haptics, earcons, VoiceOver, and settings persistence remain unproven until the iPhone readiness gate passes.

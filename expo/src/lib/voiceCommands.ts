@@ -38,7 +38,6 @@ const POLITE_SUFFIXES = [
 ];
 
 const NEGATION_MATCHER = /\b(don't|dont|do not|never|not|no)\b/;
-const TTS_STOP_SELF_TRIGGER_MATCHER = /\b(stop|stops|stopped|stopping|pause|pauses|paused|pausing)\b/i;
 
 const commandPhrases: Array<[GuidePupVoiceCommandIntent, Set<string>]> = [
   [
@@ -213,8 +212,7 @@ export function normalizeVoiceTranscript(value: string) {
 }
 
 export function canKeepListeningForStopBargeInDuringSpeech(spokenText: string) {
-  const normalized = normalizeVoiceTranscript(spokenText);
-  return Boolean(normalized) && !TTS_STOP_SELF_TRIGGER_MATCHER.test(normalized);
+  return Boolean(normalizeVoiceTranscript(spokenText));
 }
 
 export function parseVoiceCommand(transcript: string): GuidePupVoiceCommandIntent | null {

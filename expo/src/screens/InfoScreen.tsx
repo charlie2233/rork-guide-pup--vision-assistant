@@ -37,25 +37,29 @@ interface InfoPage {
 
 const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
   privacy: {
-    title: "Privacy Policy",
+    title: "Privacy Summary",
     summary:
-      "Review how Guide Pup handles camera frames, anonymous device data, and support requests before you rely on it.",
+      "This short summary covers sampled camera frames, optional Apple speech recognition, an installation-scoped identifier, and bounded diagnostics.",
     sections: [
       {
-        title: "What gets sent",
-        body: "Guide Pup sends compressed camera frames, a device bootstrap token, and minimal request metadata to the backend for navigation analysis.",
+        title: "Scene guidance",
+        body: "Guide Pup sends sampled compressed camera frames, an installation-scoped bootstrap token, a session identifier, and bounded request metadata to its backend for scene analysis, authentication, safety controls, and rate limiting.",
       },
       {
-        title: "What stays limited",
-        body: "The shipping client keeps provider secrets off device and is designed to collect only what is needed for navigation, debugging, and safety.",
+        title: "Voice and Apple Speech",
+        body: "Hands-free commands are optional. Guide Pup prefers on-device speech recognition when iOS supports it; otherwise Apple speech recognition may process voice audio. Guide Pup does not intentionally send raw voice audio to its vision providers.",
       },
       {
-        title: "What to verify before launch",
-        body: "Confirm the final privacy policy URL, App Store privacy answers, and backend logging settings before TestFlight or App Store review.",
+        title: "Diagnostics",
+        body: "Guide Pup may retain bounded product-interaction, performance, provider, request, guidance-result, and sanitized error data. It does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers.",
+      },
+      {
+        title: "Temporary camera files",
+        body: "The camera fallback removes temporary frame files after capture and retries bounded cleanup later if immediate deletion does not succeed. An operating-system cache file may remain until a retry or system cleanup.",
       },
     ],
-    actionLabel: "Open privacy policy",
-    actionHint: "Double tap to open the privacy policy in your browser.",
+    actionLabel: "Open full privacy policy",
+    actionHint: "Double tap to open the full privacy policy in your browser.",
     actionUrl: appConfig.privacyPolicyUrl,
     actionUrlMissingMessage: "Privacy policy URL is not configured yet.",
     relatedRoutes: [

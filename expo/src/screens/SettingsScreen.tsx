@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import { useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Platform,
@@ -32,6 +32,7 @@ export default function SettingsScreen() {
   } = useSettings();
   const diagnosticsTapCountRef = useRef(0);
   const diagnosticsTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const appVersion = Constants.expoConfig?.version || "Not found in repo";
   const buildVersion =
@@ -59,44 +60,56 @@ export default function SettingsScreen() {
   }, [router, navigation]);
 
   const handleSpeechRateChange = useCallback(
-    (rate: SpeechRate) => {
-      updateSpeechRate(rate);
+    async (rate: SpeechRate) => {
+      const saved = await updateSpeechRate(rate);
       const rateLabel = rate === "slow" ? "Slow" : rate === "fast" ? "Fast" : "Normal";
+      const message = saved
+        ? `Speech rate changed to ${rateLabel}`
+        : "Could not save the speech rate. The setting was not changed.";
+      setSettingsError(saved ? null : message);
       if (Platform.OS === "ios") {
-        AccessibilityInfo.announceForAccessibility(`Speech rate changed to ${rateLabel}`);
+        AccessibilityInfo.announceForAccessibility(message);
       }
     },
     [updateSpeechRate],
   );
 
   const handleDescriptionModeChange = useCallback(
-    (mode: DescriptionMode) => {
-      updateDescriptionMode(mode);
+    async (mode: DescriptionMode) => {
+      const saved = await updateDescriptionMode(mode);
       const modeLabel = mode === "short" ? "Short" : "Detailed";
+      const message = saved
+        ? `Descriptions changed to ${modeLabel}`
+        : "Could not save the description setting. The setting was not changed.";
+      setSettingsError(saved ? null : message);
       if (Platform.OS === "ios") {
-        AccessibilityInfo.announceForAccessibility(`Descriptions changed to ${modeLabel}`);
+        AccessibilityInfo.announceForAccessibility(message);
       }
     },
     [updateDescriptionMode],
   );
 
-  const handleBoundingBoxesToggle = useCallback(() => {
+  const handleBoundingBoxesToggle = useCallback(async () => {
     const newValue = !settings.showBoundingBoxes;
-    toggleBoundingBoxes();
+    const saved = await toggleBoundingBoxes();
+    const message = saved
+      ? (newValue ? "Bounding boxes turned on" : "Bounding boxes turned off")
+      : "Could not save the bounding boxes setting. The setting was not changed.";
+    setSettingsError(saved ? null : message);
     if (Platform.OS === "ios") {
-      AccessibilityInfo.announceForAccessibility(
-        newValue ? "Bounding boxes turned on" : "Bounding boxes turned off",
-      );
+      AccessibilityInfo.announceForAccessibility(message);
     }
   }, [settings.showBoundingBoxes, toggleBoundingBoxes]);
 
-  const handleHapticsToggle = useCallback(() => {
+  const handleHapticsToggle = useCallback(async () => {
     const nextValue = !settings.hapticsEnabled;
-    updateHapticsEnabled(nextValue);
+    const saved = await updateHapticsEnabled(nextValue);
+    const message = saved
+      ? (nextValue ? "Haptics turned on" : "Haptics turned off")
+      : "Could not save the haptics setting. The setting was not changed.";
+    setSettingsError(saved ? null : message);
     if (Platform.OS === "ios") {
-      AccessibilityInfo.announceForAccessibility(
-        nextValue ? "Haptics turned on" : "Haptics turned off",
-      );
+      AccessibilityInfo.announceForAccessibility(message);
     }
   }, [settings.hapticsEnabled, updateHapticsEnabled]);
 
@@ -150,6 +163,11 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {settingsError ? (
+          <Text accessibilityRole="alert" style={styles.settingsError} testID="settings-save-error">
+            {settingsError}
+          </Text>
+        ) : null}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Speech</Text>
           <Text style={styles.sectionDescription}>Control how fast Guide Pup speaks.</Text>
@@ -369,6 +387,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
     gap: 36,
+  },
+  settingsError: {
+    color: "#FFB4B4",
+    fontSize: 16,
+    lineHeight: 22,
   },
   section: {
     gap: 12,

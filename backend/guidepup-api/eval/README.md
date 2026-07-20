@@ -17,7 +17,10 @@ This folder contains a small dev/staging-only eval harness for the vision API.
 - `sample-manifest.json` - example manifest with placeholder fixture paths.
 - `run-eval.mjs` - command-line runner that emits markdown or JSON.
 - `fixture-capture-protocol.md` - safe process for capturing 15-30 representative local fixtures.
-- `smoke-results-template.md` - template for recording live staging smoke results.
+- `deploy-with-provenance.mjs` - clean-tree deploy wrapper that stamps the Worker version with the exact Git revision.
+- `run-live-smoke.mjs` - authenticated dual-lane live smoke runner.
+- `smoke-contract.mjs` - shared launch-evidence validation used by the runner and iOS release preflight.
+- `smoke-results-template.md` - version 2 template for recording live staging/production smoke results.
 
 ## Commands
 
@@ -27,15 +30,34 @@ From `backend/guidepup-api/`:
 npm run eval -- --manifest eval/sample-manifest.json
 npm run eval:json -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.json
 npm run eval:markdown -- --manifest eval/sample-manifest.json --output /tmp/guidepup-eval.md
+npm run deploy:staging
+npm run deploy
 npm run smoke:staging
 npm run smoke:production
+npm run test:smoke
 ```
 
-The smoke scripts write the latest JSON and Markdown artifacts before returning. They now also require the launch
-contract by default: provider-backed analyze, the configured launch model and prompt version, bounded runtime controls,
-strict Structured Outputs mode (`json_schema_strict`), sampled-frame envelope proof, and structured analyze output. A
-stale Worker can still leave useful request IDs in the artifact, but the command exits nonzero until the evidence is
-launch-valid.
+Deploy both environments from the same clean commit before running either smoke. The smoke commands intentionally update
+the tracked `*.latest.json` and `*.latest.md` evidence files; running staging smoke between deployments makes the backend
+tree dirty and correctly blocks the production provenance deploy gate. Leave the generated launch evidence unstaged until
+the candidate has finished release validation so its recorded source revision continues to match the deployed commit.
+
+The deploy scripts refuse uncommitted backend source and annotate the deployed Worker version with
+`source-revision:<full-git-commit>`. The smoke runner resolves the active Cloudflare deployment and 100-percent Worker
+version through authenticated Wrangler calls, verifies that annotation, and verifies the deployment does not change
+during the run.
+
+Each smoke executes separate explicit `guidance` and `scene-query` analyzes. The version 2 artifact keeps their
+sanitized, distinct request IDs and compact sampled-frame envelopes, but never image bytes, session tokens, full device
+IDs, credentials, or signed URLs. Both lanes must be provider-backed and pass structured-output and deterministic safety
+coherence checks. Evidence also requires the configured launch model/prompt, bounded runtime controls, strict Structured
+Outputs mode (`json_schema_strict`), the current Git revision, and a single active Worker version.
+
+Smoke evidence expires after 24 hours. TestFlight/store preflight rejects old schema versions, stale timestamps,
+revision mismatches, missing Worker identifiers, and single-lane evidence. Preview preflight keeps its existing warning
+policy unless strict provider smoke is requested. Historical artifacts remain readable but are intentionally
+launch-invalid. A failed smoke prints sanitized diagnostics but leaves the prior `*.latest` artifacts untouched; only a
+fully launch-valid artifact is promoted with an atomic file replacement.
 
 Override the API target if needed:
 

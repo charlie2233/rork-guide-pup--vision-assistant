@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import { appConfig } from "./config";
+import { sanitizePrivacyString, sanitizePrivacyValue } from "./privacySanitizer";
 
 type ErrorContext = Record<string, unknown>;
 type BreadcrumbLevel = "debug" | "info" | "warning" | "error" | "fatal" | "log";
@@ -66,49 +67,110 @@ function getReleaseMetadata() {
   };
 }
 
-function isSensitiveKey(key: string) {
-  return /authorization|base64|password|secret|token|image/i.test(key);
-}
-
-function sanitizeValue(value: unknown, depth = 0): unknown {
-  if (value == null) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    return value.length > 500 ? `${value.slice(0, 500)}…` : value;
-  }
-
-  if (typeof value !== "object") {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    if (depth >= 2) {
-      return "[redacted]";
-    }
-
-    return value.slice(0, 20).map((item) => sanitizeValue(item, depth + 1));
-  }
-
-  if (depth >= 2) {
-    return "[redacted]";
-  }
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
-      key,
-      isSensitiveKey(key) ? "[redacted]" : sanitizeValue(nestedValue, depth + 1),
-    ]),
-  );
-}
-
 function sanitizeBreadcrumb(breadcrumb: BreadcrumbInput) {
   return {
     ...breadcrumb,
-    data: breadcrumb.data ? (sanitizeValue(breadcrumb.data) as Record<string, unknown>) : undefined,
-    message: trimToUndefined(breadcrumb.message) ?? breadcrumb.message,
+    category: breadcrumb.category ? sanitizePrivacyString(breadcrumb.category) : breadcrumb.category,
+    data: breadcrumb.data ? (sanitizePrivacyValue(breadcrumb.data) as Record<string, unknown>) : undefined,
+    message: breadcrumb.message ? sanitizePrivacyString(breadcrumb.message) : breadcrumb.message,
+    type: breadcrumb.type ? sanitizePrivacyString(breadcrumb.type) : breadcrumb.type,
   };
+}
+
+type SentrySpan = NonNullable<Sentry.TransactionEvent["spans"]>[number];
+
+function sanitizeSpan<T extends SentrySpan>(span: T): T {
+  const sanitized = { ...span };
+  sanitized.data = sanitizePrivacyValue(span.data) as T["data"];
+  if (sanitized.description) {
+    sanitized.description = sanitizePrivacyString(sanitized.description);
+  }
+  if (sanitized.op) {
+    sanitized.op = sanitizePrivacyString(sanitized.op);
+  }
+  if (sanitized.origin) {
+    sanitized.origin = sanitizePrivacyString(sanitized.origin) as T["origin"];
+  }
+  return sanitized;
+}
+
+function sanitizeEvent<T extends Sentry.Event>(event: T): T {
+  if (event.message) {
+    event.message = sanitizePrivacyString(event.message);
+  }
+
+  if (event.logentry?.message) {
+    event.logentry.message = sanitizePrivacyString(event.logentry.message);
+  }
+  if (event.logentry?.params) {
+    event.logentry.params = sanitizePrivacyValue(event.logentry.params) as unknown[];
+  }
+
+  if (event.exception?.values) {
+    event.exception.values = event.exception.values.map((exception) => ({
+      ...exception,
+      stacktrace: exception.stacktrace
+        ? {
+            ...exception.stacktrace,
+            frames: exception.stacktrace.frames?.map((frame) => ({
+              ...frame,
+              abs_path: frame.abs_path ? sanitizePrivacyString(frame.abs_path) : frame.abs_path,
+              filename: frame.filename ? sanitizePrivacyString(frame.filename) : frame.filename,
+            })),
+          }
+        : exception.stacktrace,
+      type: exception.type ? sanitizePrivacyString(exception.type) : exception.type,
+      value: exception.value ? sanitizePrivacyString(exception.value) : exception.value,
+    }));
+  }
+
+  if (event.breadcrumbs) {
+    event.breadcrumbs = event.breadcrumbs.map((breadcrumb) => sanitizeBreadcrumb(breadcrumb));
+  }
+
+  if (event.tags) {
+    event.tags = sanitizePrivacyValue(event.tags) as Record<string, string>;
+  }
+
+  if (event.extra) {
+    event.extra = sanitizePrivacyValue(event.extra) as Record<string, unknown>;
+  }
+
+  if (event.contexts) {
+    event.contexts = sanitizePrivacyValue(event.contexts) as Sentry.Event["contexts"];
+  }
+
+  if (event.transaction) {
+    event.transaction = sanitizePrivacyString(event.transaction);
+  }
+
+  if (event.spans) {
+    event.spans = event.spans.map((span) => sanitizeSpan(span));
+  }
+
+  if (event.fingerprint) {
+    event.fingerprint = event.fingerprint.map((value) => sanitizePrivacyString(value));
+  }
+
+  delete event.user;
+  delete event.server_name;
+
+  if (event.request) {
+    const request = event.request as typeof event.request & Record<string, unknown>;
+    delete request.headers;
+    delete request.data;
+    delete request.cookies;
+    delete request.query;
+    delete request.query_string;
+    delete request.env;
+    delete request.fragment;
+
+    if (request.url && typeof request.url === "string") {
+      request.url = sanitizePrivacyString(request.url);
+    }
+  }
+
+  return event;
 }
 
 function setSafeTag(key: string, value?: string | number | boolean | null) {
@@ -116,7 +178,7 @@ function setSafeTag(key: string, value?: string | number | boolean | null) {
     return;
   }
 
-  Sentry.setTag(key, String(value));
+  Sentry.setTag(sanitizePrivacyString(key), sanitizePrivacyString(String(value)));
 }
 
 function applyRuntimeTags() {
@@ -134,7 +196,7 @@ function applyRuntimeTags() {
   setSafeTag("expo.runtimeVersion", expoConfig?.runtimeVersion ? String(expoConfig.runtimeVersion) : undefined);
 
   if (extra && typeof extra === "object") {
-    Sentry.setContext("expo", sanitizeValue(extra) as Record<string, unknown>);
+    Sentry.setContext("expo", sanitizePrivacyValue(extra) as Record<string, unknown>);
   }
 }
 
@@ -186,7 +248,7 @@ function recordAnalyzeTelemetry(summary: AnalyzeSummary) {
     return;
   }
 
-  const sanitized = sanitizeValue(summary) as Record<string, unknown>;
+  const sanitized = sanitizePrivacyValue(summary) as Record<string, unknown>;
 
   setSafeTag("guidepup.analyze.outcome", summary.outcome);
   setSafeTag("guidepup.analyze.method", summary.detail);
@@ -271,9 +333,7 @@ export function initializeSentry() {
 
   if (!navigationIntegration) {
     navigationIntegration = Sentry.reactNavigationIntegration({
-      enablePrefetchTracking: false,
       routeChangeTimeoutMs: 1000,
-      useFullPathsForNavigationRoutes: false,
     });
   }
 
@@ -282,15 +342,13 @@ export function initializeSentry() {
       return sanitizeBreadcrumb(breadcrumb);
     },
     beforeSend(event) {
-      if (event.extra) {
-        event.extra = sanitizeValue(event.extra) as Record<string, unknown>;
-      }
-
-      if (event.request?.headers) {
-        delete (event.request as { headers?: unknown }).headers;
-      }
-
-      return event;
+      return sanitizeEvent(event);
+    },
+    beforeSendSpan(span) {
+      return sanitizeSpan(span);
+    },
+    beforeSendTransaction(event) {
+      return sanitizeEvent(event);
     },
     dsn: appConfig.sentryDsn,
     dist: buildNumber,
@@ -452,7 +510,7 @@ export function setSentryTag(key: string, value?: string) {
     return;
   }
 
-  Sentry.setTag(key, value);
+  setSafeTag(key, value);
 }
 
 export function addBreadcrumb(breadcrumb: BreadcrumbInput) {
@@ -464,12 +522,14 @@ export function addBreadcrumb(breadcrumb: BreadcrumbInput) {
 }
 
 export function captureAppError(error: unknown, context: ErrorContext = {}) {
-  const message = error instanceof Error ? error.message : String(error);
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const sanitizedMessage = sanitizePrivacyString(rawMessage) || "Guide Pup encountered an error.";
+  const sanitizedContext = sanitizePrivacyValue(context) as Record<string, unknown>;
 
   if (__DEV__) {
     console.error("[GuidePupError]", {
-      context: sanitizeValue(context),
-      message,
+      context: sanitizedContext,
+      message: sanitizedMessage,
     });
   }
 
@@ -479,13 +539,15 @@ export function captureAppError(error: unknown, context: ErrorContext = {}) {
 
   Sentry.withScope((scope) => {
     scope.setLevel("error");
-    scope.setContext("guidepup", sanitizeValue(context) as Record<string, unknown>);
+    scope.setContext("guidepup", sanitizedContext);
 
     const route = typeof context.route === "string" ? context.route : undefined;
     if (route) {
-      scope.setTag("route", route);
+      scope.setTag("route", sanitizePrivacyString(route));
     }
 
-    Sentry.captureException(error);
+    const sanitizedError = new Error(sanitizedMessage);
+    sanitizedError.name = error instanceof Error ? sanitizePrivacyString(error.name) : "Error";
+    Sentry.captureException(sanitizedError);
   });
 }

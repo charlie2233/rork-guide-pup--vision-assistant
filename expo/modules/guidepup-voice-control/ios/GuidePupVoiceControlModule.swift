@@ -27,15 +27,16 @@ public final class GuidePupVoiceControlModule: Module {
       await controller.requestPermissions()
     }
 
-    AsyncFunction("startCommandSession") { (localeIdentifier: String?, partialResults: Bool?) -> [String: Any] in
+    AsyncFunction("startCommandSession") { (localeIdentifier: String?, partialResults: Bool?, ownerToken: String?) -> [String: Any] in
       return try await controller.startCommandSession(
         localeIdentifier: localeIdentifier,
-        partialResults: partialResults ?? false
+        partialResults: partialResults ?? false,
+        ownerToken: ownerToken
       )
     }
 
-    AsyncFunction("stopCommandSession") { () -> [String: Any] in
-      await controller.stopCommandSession()
+    AsyncFunction("stopCommandSession") { (ownerToken: String?) -> [String: Any] in
+      await controller.stopCommandSession(ownerToken: ownerToken)
     }
 
     AsyncFunction("speak") { (text: String, localeIdentifier: String?, interrupt: Bool?, rate: Double?) in

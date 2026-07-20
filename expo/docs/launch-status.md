@@ -1,6 +1,28 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-07-17
+Last updated: 2026-07-19
+
+## Current decision
+
+Guide Pup is **not ready for App Store submission yet**. Local source, config, privacy, and release gates are substantially hardened, and Apple identifiers are resolved, but submission is intentionally blocked until both current provider-backed cloud smoke and real-iPhone no-screen evidence exist for the exact candidate.
+
+Current hard blockers:
+
+- Staging/production deployment of the exact committed source and strict `gpt-5.6-sol` / `2026-07-18.v1` provider-backed smoke with current sanitized request IDs for both guidance and scene-query lanes. Wrangler OAuth and both required secret names are verified.
+- A stable iPhone execution path and the complete no-screen hardware sequence with persisted sanitized evidence. The latest check sees the paired/trusted Developer Mode phone in Xcode/xctrace, but DDI, tunnel, and USB/same-LAN execution remain unavailable.
+- Exact distribution archive/TestFlight validation, real screenshots, matching App Privacy answers, attached build, and final App Review metadata verification.
+
+Sentry is deliberately disabled, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
+
+Current local evidence:
+
+- Expo scripted tests: `93/93`; backend privacy/runtime tests: `50/50`; backend smoke/release-evidence tests: `23/23`; both typechecks, Expo lint, voice-command checks, and static no-screen checks passed.
+- Focused iOS runtime safety tests pass `29/29`, including deterministic STOP parsing, owner-scoped delayed/rejected starts and cleanup, fail-closed camera/analysis STOP observation, VoiceOver cancellation, and speech cancellation behavior.
+- A fresh arm64 Release simulator build for build `4` exited `0` after the final safety/privacy changes. The built app reports bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, iOS `15.1`, includes `PrivacyInfo.xcprivacy` and the production Worker URL, and contains no provider-key, direct OpenAI endpoint, or Sentry DSN pattern. This is compile/store-validation evidence, not a signed archive or device/TestFlight result.
+- Simulator speech-rate, detail, and haptics settings persisted across a stop/relaunch cycle. This does not prove real audio, haptics, VoiceOver, camera capture, or no-screen behavior.
+- Preview preflight passes with warnings; TestFlight/store preflights intentionally fail on stale production launch smoke and missing real-iPhone no-screen evidence.
+- The controllable in-app Browser is authenticated to App Store Connect and Apple Developer. It confirms version `1.0.0` is `Prepare for Submission`, build `2` is the only TestFlight build and is expired, App Privacy is not started, no screenshots or candidate build are attached, and the Support URL is blank.
+- Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Their values were not read or logged.
 
 ## Public site
 
@@ -14,13 +36,13 @@ Last updated: 2026-07-17
 
 - Worker env: `staging`
 - Live API URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
-- Current Worker version: `eafec4a6-c543-4406-9c13-d23077034321`
+- Last verified Worker version on 2026-04-29: `eafec4a6-c543-4406-9c13-d23077034321`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
   - `npm run verify:secrets:staging`: passes
-- Latest smoke run:
+- Most recent checked-in smoke run, from 2026-04-29:
   - `/health`: `200 OK`, request ID `c9aa8993-902d-4dd8-9f58-92006449dd24`
   - `/v1/device/bootstrap`: `200 OK`, request ID `2b3dde3a-4543-489a-88e2-f672faf5b3d7`
   - `/v1/vision/analyze`: `200 OK`, request ID `1641e817-2f16-40ad-9167-82832db82c9e`
@@ -32,13 +54,13 @@ Last updated: 2026-07-17
 
 - Worker env: `production`
 - Live API URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
-- Current Worker version: `3bcc4095-53d2-4bf3-a5a2-5fee367f8a7d`
+- Last verified Worker version on 2026-04-29: `3bcc4095-53d2-4bf3-a5a2-5fee367f8a7d`
 - Configured secrets:
   - `BOOTSTRAP_SIGNING_SECRET`: set as a Wrangler secret on `2026-04-01`
   - `OPENAI_API_KEY`: set as a Wrangler secret on `2026-04-29`
 - Required-secret gate:
   - `npm run verify:secrets:production`: passes
-- Latest smoke run:
+- Most recent checked-in smoke run, from 2026-04-29:
   - `/health`: `200 OK`, request ID `e46ed2f5-0bd1-48bb-ab37-2c95f0f28821`
   - `/v1/device/bootstrap`: `200 OK`, request ID `6dafa3da-9abb-4c4d-b9c3-4669c924a056`
   - `/v1/vision/analyze`: `200 OK`, request ID `cebf5445-7923-4a87-8953-124f824914ef`
@@ -57,25 +79,34 @@ Last updated: 2026-07-17
 - EAS Metadata config: `expo/store.config.js`
 - Release preflight: track-aware, with preview warning on fallback-only staging smoke and a hard provider-backed gate for `testflight` and `store`
 - iOS bundle identifier: `app.rork.guide-pup-vision-assist`
-- Apple Team ID: `SBSJ3MX9GZ`
+- Apple Team ID: `K99RADPB9G`
 - App Store Connect App ID: `6756947790`
+- iOS marketing version / App Store version record: `1.0.0`
+- Explicit local iOS distribution candidate: `4` because the only existing TestFlight build, build `2`, is expired
+- Version ownership: EAS `local`; preview/TestFlight/store auto-increment disabled so build `4` cannot silently change
+- Distribution signing: valid Apple Distribution identity for team `K99RADPB9G`; renewed bundle-specific App Store profile UUID `808b8553-e7b4-495f-83cd-4eae9f8420db`, expiring 2027-07-19, with `get-task-allow=false`
+- Signed device baseline: a clean signed Debug build for version `1.0.0` build `3` succeeded, installed, launched, and remained running; physical accessibility and camera behavior remain unverified
 - Support email: `charliehan112@gmail.com`
 - Emergency / safety disclaimer: resolved
+- Store copyright and App Review contact source values: resolved from the authenticated Individual Apple membership and user-provided support email
 - Sentry mode: `disabled`
+- Sentry upload behavior: preview/TestFlight/store set `SENTRY_DISABLE_AUTO_UPLOAD=true` and an explicit blank `EXPO_PUBLIC_SENTRY_DSN`; local Xcode builds also default upload off
+- Sentry runtime gate: Expo embeds checked-in `launchInputs.sentryMode` as immutable config extra, and runtime exposes no DSN unless that mode is enabled; resolved archive-level proof is still required before upload
+- Privacy manifest gate: preflight validates the authoritative six collected-data categories, exact purposes, linked flags, and no-tracking flags without depending on entry or purpose order
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`
 - Current preflight results:
-  - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.5`, `2026-05-22.v1`, strict Structured Outputs mode, sampled-frame envelope fields, and nullable `fallbackReason`
-  - `testflight`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
-  - `store`: still blocked by `TODO_COPYRIGHT_HOLDER`, unresolved App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - `preview`: no longer blocked by the iOS bundle identifier; staging smoke still warns until it proves `gpt-5.6-sol`, `2026-07-18.v1`, strict Structured Outputs mode, sampled-frame envelope fields, both interaction lanes, and nullable `fallbackReason`
+  - `testflight`: still blocked by stale production smoke contract, missing strict Structured Outputs live proof, missing no-screen evidence, and the lack of a completed uploaded candidate build
+  - `store`: still blocked by the same backend, no-screen, build, screenshot, privacy-response, and live metadata gates
 - Current Expo command results:
   - `npx --yes eas-cli whoami`: blocked immediately because Expo auth is missing
   - Preview/TestFlight build and submit were not attempted after the auth check because the first real Expo blocker was already hit
-- Latest local validation on 2026-05-23:
+- Historical local validation snapshot from 2026-05-23:
   - `npx expo config --type public` shows `ios.bundleIdentifier: app.rork.guide-pup-vision-assist`
   - `npm run release:preflight:preview`: passed with warnings for stale staging smoke, including missing `health.structuredOutputMode` / `launchContract.strictStructuredOutputsPresent`, and missing no-screen evidence
-  - `npm run release:preflight:testflight`: failed on copyright holder, App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence
+  - At that time, `npm run release:preflight:testflight` failed on copyright holder, App Review contact fields, stale production smoke contract, missing strict Structured Outputs live proof, and missing no-screen evidence; the copyright and contact source values were resolved later
   - `npm run release:preflight:store`: failed on the same store-backed blockers as TestFlight
   - Strict staging smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
   - Strict production smoke wrote fresh `/tmp` artifacts and exited nonzero as intended because the live Worker is still stale for the launch contract
@@ -87,7 +118,7 @@ Last updated: 2026-07-17
 - Release preflight now requires both `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent` in staging/production evidence.
 - Fresh local validation passed: backend typecheck, backend privacy/runtime tests, staging Worker dry-run, Expo typecheck, Expo lint, no-screen smoke contract, preview preflight, `git diff --check`, and Build iOS Apps Release simulator build.
 - Fresh TestFlight preflight still fails because the checked-in production smoke is stale and does not yet prove strict Structured Outputs on the deployed Worker.
-- `npm --prefix expo run check:ios-device -- --json` still reports `blocked` for `charlie的iPhone`: paired/trusted and Developer Mode enabled, but DDI services, CoreDevice tunnel, USB/same-LAN execution, and Xcode destination visibility are not available.
+- `npm --prefix expo run check:ios-device -- --json` still reports `blocked` for the paired iPhone: paired/trusted and Developer Mode enabled, but DDI services, CoreDevice tunnel, USB/same-LAN execution, and Xcode destination visibility are not available.
 - `npx --yes eas-cli whoami` and `npx --yes wrangler whoami` still report not logged in.
 - Read-only side-panel App Store Connect check still confirms app ID `6756947790`, bundle ID `app.rork.guide-pup-vision-assist`, SKU `EX1766553072106`, and category `Navigation`.
 
@@ -179,7 +210,7 @@ Last updated: 2026-07-17
 ## Actions taken on 2026-04-07
 
 - Re-validated the current iOS blind-user spike after commit `24f6b2c` with `npm run typecheck`, `npm run lint`, and `npx expo config --type public`; all passed.
-- Confirmed the physical validation target is still unavailable on this machine: `xcrun xctrace list devices` reports `charlie的iPhone (26.2.1) (00008130-000A001A1178001C)` under `Devices Offline`.
+- Confirmed the physical validation target is still unavailable on this machine: `xcrun xctrace list devices` reports the paired iPhone on iOS `26.2.1` with identifier `<redacted-device-identifier>` under `Devices Offline`.
 - Hardened the JS-to-native seam so blind-user control does not break when native helpers reject:
   - `GuidePupNavigationCore.announce()` now falls back to the JS accessibility announce path if the native bridge throws.
   - `GuidePupNavigationCore.playHaptic()` now falls back to Expo haptics if the native bridge throws.
@@ -190,12 +221,12 @@ Last updated: 2026-07-17
 ## Actions taken on 2026-04-09
 
 - Re-checked real-device visibility before any more blind-user validation.
-- `xcrun xctrace list devices` still reports `charlie的iPhone (26.2.1) (00008130-000A001A1178001C)` under `Devices Offline`.
-- `xcrun devicectl list devices` reports the same phone as `unavailable` with hostname `charliedeiPhone.coredevice.local`.
+- `xcrun xctrace list devices` still reports the paired iPhone on iOS `26.2.1` with identifier `<redacted-device-identifier>` under `Devices Offline`.
+- `xcrun devicectl list devices` reports the same phone as `unavailable` with hostname `<redacted-device-identifier>`.
 - `xcrun xcdevice list` returns the concrete deviceprep failure for the iPhone:
   - code: `-27`
   - domain: `com.apple.dt.deviceprep`
-  - description: `Browsing on the local area network for charlie的iPhone`
+  - description: `Browsing on the local area network for the paired iPhone`
   - recovery suggestion: `Ensure the device is unlocked and attached with a cable or associated with the same local area network as this Mac. The device must be opted into Developer Mode to connect wirelessly.`
 - `system_profiler SPUSBDataType` shows no connected iPhone on the USB bus on this Mac, so there is no active wired debugging path right now.
 - Re-ran `pod install` in `expo/ios`; it still completes successfully on this machine with `Pod installation complete! There are 102 dependencies from the Podfile and 110 total pods installed.`
@@ -234,24 +265,34 @@ Last updated: 2026-07-17
   - provider/model: `openai-compatible` / `gpt-4.1-2025-04-14`
   - provider latency: `3076ms`
   - round-trip latency: `3822ms`
-- Reconnected `charlie的iPhone`; `xcrun xcdevice list` reports `available: true`, `interface: usb`, iOS `26.3.1`, and `xcrun devicectl device info details` reports Developer Mode enabled, pairing state `paired`, and transport `wired`.
-- Confirmed the Mac has one Apple Development signing identity: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- Reconnected the paired iPhone; `xcrun xcdevice list` reports `available: true`, `interface: usb`, iOS `26.3.1`, and `xcrun devicectl device info details` reports Developer Mode enabled, pairing state `paired`, and transport `wired`.
+- At that time, the Mac reported a historical Apple Development identity for team `SBSJ3MX9GZ`. It is superseded by active release team `K99RADPB9G` and is not current release configuration.
 - Attempted a direct signed Release device build with:
-  - `SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=00008130-000A001A1178001C' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build`
+  - `SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=<redacted-device-identifier>' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build`
 - The device install path is now blocked by Apple signing account/provisioning, not by device connectivity:
   - `No Account for Team "SBSJ3MX9GZ". Add a new account in Accounts settings or verify that your accounts have valid credentials.`
   - `No profiles for 'dev.guidepup.visionassist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching the old local bundle identifier.`
 - Rechecked EAS auth with `npx --yes eas-cli whoami`; it still returns `Not logged in`, so an EAS installable build link cannot be created from this machine yet.
 
-## Blockers
+## Apple release identity alignment on 2026-07-17
+
+- The authenticated Apple Developer portal shows active team `K99RADPB9G`.
+- The editable App Store Connect distribution record for app `6756947790` and bundle `app.rork.guide-pup-vision-assist` was saved as version `1.0.0`; it remains `Prepare for Submission`, and no build upload or submission occurred.
+- The only existing TestFlight build is expired build `2`; app and native version configuration now use version `1.0.0` and build `3` as the next explicit local candidate.
+- The old `SBSJ3MX9GZ` team and certificate identity remain only in historical commands and error evidence. They are superseded by active release team `K99RADPB9G` and are not current release configuration.
+- The first build using `K99RADPB9G` compiled/provisioned through the final React Native bundle, then failed only because the Sentry script attempted an upload while launch Sentry mode was disabled.
+- Rerunning with `SENTRY_DISABLE_AUTO_UPLOAD=true` produced a fresh signed Debug version `1.0.0` build `3`. It reported `TeamIdentifier` `K99RADPB9G`, application-identifier prefix `K99RADPB9G`, and bundle `app.rork.guide-pup-vision-assist`; it installed, launched, and stayed running on the paired iPhone.
+- This proves signing, installation, launch, and process liveness only. It does not prove speech, haptics, earcons, VoiceOver, interruptions, settings persistence, camera behavior, no-screen operation, archive or distribution signing, TestFlight, or submission.
+
+## Historical launch blockers recorded on 2026-07-17
 
 - iOS bundle identifier is resolved to the App Store Connect bundle ID `app.rork.guide-pup-vision-assist`.
-- Apple Team ID is resolved to `SBSJ3MX9GZ`; App Store Connect App ID is resolved to `6756947790`.
-- Store copyright holder is still unresolved.
+- Apple Team ID is resolved to `K99RADPB9G`; App Store Connect App ID is resolved to `6756947790`; the saved App Store version record and local marketing version are `1.0.0`; and the next explicit local build baseline is `3`.
+- The checked-in staging and production smoke artifacts are stale and do not yet prove the current `gpt-5.5`, `2026-05-22.v1`, strict Structured Outputs launch contract against the deployed Workers.
 - Expo/EAS login or `EXPO_TOKEN` is still missing, so metadata push, preview/TestFlight builds, and submit do not start.
-- Real device app install has not happened yet, so native frame capture, VoiceOver announcement delivery, and haptic delivery are still unverified on actual iPhone hardware.
-- The simulator run currently reports `execution path: js-fallback`, which is expected for this pass; the native module is linked, but native frame capture on simulator remains unverified because there is no reliable simulator back-camera path for this spike.
-- The immediate blocker for real blind-user validation is Apple signing/provisioning for the connected iPhone: Xcode needs a signed-in account for team `SBSJ3MX9GZ` and an iOS App Development provisioning profile for `app.rork.guide-pup-vision-assist`.
+- Real-device install and launch now succeed for the clean signed `1.0.0` build `3` bundle, which remains running. Native frame capture, speech input, VoiceOver announcements, haptics, earcons, interruptions, settings persistence, and the full no-screen sequence remain unverified on hardware.
+- A shipping archive has not yet been produced and inspected for release signing, merged privacy manifests, and disabled Sentry runtime/upload behavior; no current build has been uploaded to or validated in TestFlight.
+- App Store screenshots, published privacy answers, an attached build, and persisted App Review metadata are still incomplete. Store copyright `2026 XIANMIN CHEN` and App Review contact source values are resolved; they are not current blockers.
 
 ## Actions taken on 2026-05-23
 
@@ -260,11 +301,11 @@ Last updated: 2026-07-17
   - Bundle ID: `app.rork.guide-pup-vision-assist`
   - SKU: `EX1766553072106`
   - Category: `Navigation`
-- Retried the real-device path after `charlie的iPhone` was wired and unlocked:
-  - `xcrun devicectl device info ddiServices --device E5786BB6-0095-5509-8B85-110C0B5CE6D3` now succeeds and reports the developer disk image `isUsable: true`.
+- Retried the real-device path after the paired iPhone was wired and unlocked:
+- `xcrun devicectl device info ddiServices --device '<redacted-device-identifier>'` succeeded and reported the developer disk image `isUsable: true`; full device identifiers are intentionally omitted from checked-in evidence.
   - `npm --prefix expo run check:ios-device` now returns `READY`; it reports DDI services available, tunnel connected, USB present, xctrace visibility, and Xcode destination visibility. The script now treats that JSON-only execution-ready state as ready even when the devicectl table state is `unknown`.
   - The signed Release device build now stops at Apple account/provisioning, not device connectivity: Xcode reports no configured accounts and no iOS App Development provisioning profile for `app.rork.guide-pup-vision-assist`.
-- Real iPhone no-screen validation is still not complete because the app has not been installed/launched on the physical device.
+- This historical install blocker is superseded by the successful `1.0.0` build `3` install and launch on 2026-07-17. Real iPhone no-screen validation is still incomplete because the physical voice, haptic, VoiceOver, interruption, settings, and camera sequence has not been observed.
 
 ## Actions taken on 2026-05-22
 
@@ -283,20 +324,20 @@ Last updated: 2026-07-17
 - Prepared the Worker code for strict JSON Schema Structured Outputs, compact frame context, `fallbackReason`, `gpt-5.5`, low reasoning effort, and prompt version `2026-05-22.v1`.
 - Confirmed the new Worker contract has not been deployed yet because this shell lacks Cloudflare auth: `CLOUDFLARE_API_TOKEN` is missing and `npx wrangler whoami` reports `Not logged in`.
 - Rechecked physical iPhone status:
-  - `charlie的iPhone` is paired and Developer Mode is enabled, but Xcode reports it unavailable/offline.
+  - The paired iPhone is paired and Developer Mode is enabled, but Xcode reports it unavailable/offline.
   - `xcrun xcdevice list` reports deviceprep code `-27` with LAN/cable recovery guidance.
   - `system_profiler SPUSBDataType` does not show the iPhone on the USB bus.
-- Re-ran `npm run release:preflight:preview`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
-- Re-ran `npm run release:preflight:testflight`; it remains blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`.
+- At that time, `npm run release:preflight:preview` remained blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`.
+- At that time, `npm run release:preflight:testflight` remained blocked by unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, and `TODO_COPYRIGHT_HOLDER`; those identifiers and the copyright source value were resolved later.
 
 ## Actions taken on 2026-05-23 final launch recheck
 
 - Re-ran `npm --prefix expo run release:preflight:preview`; it passed with warnings for stale staging smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing no-screen evidence.
-- Re-ran `npm --prefix expo run release:preflight:testflight`; it failed on unresolved copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing real-iPhone no-screen evidence.
-- Re-ran `npm --prefix expo run check:ios-device`; it reports `charlie的iPhone` is paired with Developer Mode enabled, but currently CoreDevice state is `unavailable`, DDI services are unavailable, the tunnel is unavailable, USB is not present, and Xcode destination visibility is `no`.
+- In that May snapshot, `npm --prefix expo run release:preflight:testflight` failed on unresolved copyright holder, support email, emergency/safety disclaimer, public support contact readiness, stale production smoke, missing launch-contract/sampled-frame/runtime/structured evidence, and missing real-iPhone no-screen evidence; the source-value blockers were resolved later.
+- In that May snapshot, `npm --prefix expo run check:ios-device` reported the paired iPhone was paired with Developer Mode enabled, but CoreDevice state was `unavailable`, DDI services were unavailable, the tunnel was unavailable, USB was not present, and Xcode destination visibility was `no`.
 - Re-ran the staging Worker dry-run; it passed locally and still shows the intended launch values `gpt-5.5`, prompt `2026-05-22.v1`, and bounded runtime controls, but Wrangler auth is missing so nothing was deployed.
 - Re-ran `npx --yes wrangler whoami` and `npx --yes eas-cli whoami`; both returned `Not logged in`.
-- Submission remains blocked. Main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Apple provisioning, and final store metadata are not complete.
+- At that time, submission remained blocked and main was not merged because the required real-iPhone smoke, provider-backed launch smoke, EAS/TestFlight auth, Apple provisioning, and final store metadata were incomplete.
 
 ## Actions taken on 2026-07-17 launch-input continuation
 
@@ -304,14 +345,14 @@ Last updated: 2026-07-17
 - Resolved emergency / safety disclaimer from existing public safety, runtime fallback, and App Review copy.
 - Mirrored both values into `expo/release/launch-inputs.js` and the preview, TestFlight, and store EAS profile envs.
 - Re-ran TestFlight/store preflight; support email and emergency disclaimer no longer appear as blockers.
-- TestFlight/store remain blocked on copyright holder, App Review contact fields, stale production smoke contract, and missing real-iPhone no-screen evidence.
+- Copyright and App Review contact source values were resolved later on 2026-07-17. Current TestFlight/store preflight blockers are the stale production smoke contract and missing real-iPhone no-screen evidence; archive, TestFlight, screenshot, privacy-response, persisted metadata, and authentication gates remain external launch blockers.
 
 ## Actions taken on 2026-05-23 App Review metadata gate
 
 - Added App Review metadata to `expo/store.config.js` so EAS Metadata can push `apple.review.demoRequired: false` when auth is available.
 - Added release-preflight checks for App Review contact first name, last name, email, phone, no demo credentials, and review notes that explicitly state Guide Pup does not require account sign-in.
 - This addresses the local source-of-truth gap for the App Store Connect sign-in-required checkbox, but EAS/App Store auth is still required before the dashboard can be updated.
-- Preview preflight still passes with warnings. TestFlight/store preflight now also fail on unresolved App Review contact fields, as intended.
+- In that May snapshot, preview preflight passed with warnings while TestFlight/store preflight also failed on unresolved App Review contact fields, as intended; those source values were resolved later.
 
 ## Actions taken on 2026-05-23 Sentry launch-mode gate
 
@@ -327,7 +368,7 @@ Last updated: 2026-07-17
 - Added `npm --prefix expo run check:ios-device -- --json` output so the same CoreDevice readiness check can feed suffix-only structured `deviceReadiness` evidence into the real-iPhone no-screen artifact.
 - The JSON output includes only device identifier suffixes and explicitly declares `privacy.identifierHandling: "suffix-only"` / `containsFullDeviceIds: false`.
 - Tightened `expo/release/no-screen-smoke.latest.json` validation so device, provenance, and backend fields must agree on app version, build number, build profile, bundle identifier, and API environment.
-- Current JSON readiness still exits blocked: `charlie的iPhone` is paired with Developer Mode enabled and visible to `xctrace`, but DDI services are unavailable, USB/same-LAN execution is unavailable, and Xcode does not list it as a runnable destination.
+- That May JSON readiness snapshot exited blocked: the paired iPhone was paired with Developer Mode enabled and visible to `xctrace`, but DDI services were unavailable, USB/same-LAN execution was unavailable, and Xcode did not list it as a runnable destination.
 - Latest validation passed: `check-ios-device-ready.mjs` syntax, no-screen evidence syntax/tests, no-screen static contract, preview preflight expected-pass, TestFlight preflight expected-fail, Expo typecheck, Expo lint, smoke-evidence privacy tests, backend typecheck, `git diff --check`, and Build iOS Apps Release simulator build on `iPhone 16e`.
 
 ## Actions taken on 2026-05-23 no-screen evidence and scene-query gate
@@ -340,10 +381,10 @@ Last updated: 2026-07-17
 ## Actions taken on 2026-05-22
 
 - Hardened the Xcode simulator validation path after the Build iOS Apps plugin reached the native build but failed in Sentry upload before app validation.
-- Added a simulator-only Sentry upload guard to `expo/ios/.xcode.env`:
+- Added a simulator-only Sentry upload guard to `expo/ios/.xcode.env` as a historical workaround:
   - `SENTRY_DISABLE_AUTO_UPLOAD=true`
   - `SENTRY_ALLOW_FAILURE=true`
-- This guard applies only when `PLATFORM_NAME` contains `simulator`, so device/archive/TestFlight builds still require the real Sentry release environment for symbol/source-map upload.
+- This historical guard applied only when `PLATFORM_NAME` contained `simulator`. It was superseded on 2026-07-17: simulator, device, and archive builds now default `SENTRY_DISABLE_AUTO_UPLOAD=true` while Sentry mode is disabled, and `SENTRY_ALLOW_FAILURE` is absent.
 - Re-ran Build iOS Apps plugin Release simulator build after the guard; it passed for the `iPhone 16e` simulator.
 - Tightened release preflight so provider-backed smoke is not considered launch-valid unless the live Worker also proves the expected `gpt-5.5` model, `2026-05-22.v1` prompt version, sampled-frame envelope, structured output validity, and nullable `fallbackReason`.
 - Hardened no-screen voice flows locally:

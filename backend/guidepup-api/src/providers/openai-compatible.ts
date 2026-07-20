@@ -1,8 +1,9 @@
 import { buildVisionSystemPrompt, buildVisionUserPrompt, ProviderVisionJsonSchema } from "../lib/prompts";
-import { logWarn, sanitizeLogMessage } from "../lib/logging";
+import { logWarn } from "../lib/logging";
+import { enforceProviderCallLimit } from "../lib/rate-limit";
 import { ProviderVisionSchema } from "../schemas/vision";
 import { getOpenAIProviderAttempts } from "./config";
-import type { ProviderInput, ProviderResult, VisionProvider } from "./types";
+import type { ProviderInput, ProviderResult, ProviderTokenUsage, VisionProvider } from "./types";
 
 type OpenAIChatCompletionResponse = {
   choices?: Array<{
@@ -12,6 +13,11 @@ type OpenAIChatCompletionResponse = {
     };
   }>;
   model?: string;
+  usage?: {
+    completion_tokens?: number;
+    prompt_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 const STRUCTURED_OUTPUT_MODE = "json_schema_strict";
@@ -29,8 +35,15 @@ class ProviderHttpError extends Error {
   }
 }
 
+class ProviderCapacityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderCapacityError";
+  }
+}
+
 function getModel(env: Env) {
-  return env.OPENAI_MODEL || "gpt-5.5";
+  return env.OPENAI_MODEL || "gpt-5.6-sol";
 }
 
 function getReasoningEffort(env: Env, model: string) {
@@ -96,16 +109,29 @@ function extractTextContent(content: string | Array<{ text?: string; type?: stri
   return "";
 }
 
-function extractJsonObject(text: string) {
-  const stripped = text.replace(/```json|```/gi, "").trim();
-  const firstBrace = stripped.indexOf("{");
-  const lastBrace = stripped.lastIndexOf("}");
+function sanitizeMetadataIdentifier(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(trimmed)
+    ? trimmed
+    : undefined;
+}
 
-  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    throw new Error("Provider did not return a JSON object.");
+function boundedTokenCount(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? Math.min(value, 1_000_000)
+    : undefined;
+}
+
+function extractTokenUsage(usage: OpenAIChatCompletionResponse["usage"]): ProviderTokenUsage | undefined {
+  if (!usage) {
+    return undefined;
   }
-
-  return stripped.slice(firstBrace, lastBrace + 1);
+  const bounded: ProviderTokenUsage = {
+    inputTokens: boundedTokenCount(usage.prompt_tokens),
+    outputTokens: boundedTokenCount(usage.completion_tokens),
+    totalTokens: boundedTokenCount(usage.total_tokens),
+  };
+  return Object.values(bounded).some((value) => value !== undefined) ? bounded : undefined;
 }
 
 function sleep(ms: number) {
@@ -124,15 +150,27 @@ function isRetryableProviderError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       ...init,
       signal: controller.signal,
     });
+    let payload: OpenAIChatCompletionResponse | undefined;
+    if (response.ok) {
+      try {
+        payload = (await response.json()) as OpenAIChatCompletionResponse;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw error;
+        }
+        throw new Error("Provider returned invalid JSON.");
+      }
+    }
+    return { payload, response };
   } finally {
     clearTimeout(timeout);
   }
@@ -170,6 +208,7 @@ async function analyzeWithAttempt(
   attempt: ReturnType<typeof getOpenAIProviderAttempts>[number],
   runtimeConfig: ReturnType<typeof getOpenAIProviderRuntimeConfig>,
   budget: ProviderRequestBudget,
+  env: Env,
 ) {
   const startedAt = Date.now();
   const maxAttempts = runtimeConfig.retryCount + 1;
@@ -178,11 +217,19 @@ async function analyzeWithAttempt(
   for (let attemptIndex = 0; attemptIndex < maxAttempts; attemptIndex += 1) {
     try {
       const timeoutMs = claimOutboundCall(budget);
-      const response = await fetchWithTimeout(`${attempt.baseUrl}${attempt.path}`, {
+      const globalCallLimit = await enforceProviderCallLimit(env);
+      if (!globalCallLimit.allowed) {
+        const reason = globalCallLimit.reason === "infrastructure-unavailable"
+          ? "Provider call safety control is unavailable."
+          : "Provider call budget is exhausted.";
+        throw new ProviderCapacityError(reason);
+      }
+      const { payload, response } = await fetchJsonWithTimeout(`${attempt.baseUrl}${attempt.path}`, {
         method: "POST",
         headers: {
           [attempt.authHeader]: `${attempt.authPrefix}${attempt.apiKey}`.trim(),
           "content-type": "application/json",
+          "x-client-request-id": input.requestId,
         },
         body: JSON.stringify({
           model: runtimeConfig.model,
@@ -218,20 +265,28 @@ async function analyzeWithAttempt(
         throw new ProviderHttpError(`${attempt.name} failed (${response.status}).`, isRetryableStatus(response.status));
       }
 
-      const payload = (await response.json()) as OpenAIChatCompletionResponse;
+      if (!payload) {
+        throw new Error(`${attempt.name} returned an empty provider response.`);
+      }
       const message = payload.choices?.[0]?.message;
       if (message?.refusal) {
-        throw new Error(`Provider refused vision analysis: ${sanitizeLogMessage(message.refusal, 160)}`);
+        throw new Error("Provider refused vision analysis.");
       }
       const text = extractTextContent(message?.content);
-      const parsed = ProviderVisionSchema.parse(JSON.parse(extractJsonObject(text)));
+      let parsed: ReturnType<typeof ProviderVisionSchema.parse>;
+      try {
+        parsed = ProviderVisionSchema.parse(JSON.parse(text.trim()));
+      } catch {
+        throw new Error("Provider returned an invalid structured response.");
+      }
 
       return {
         latencyMs: Date.now() - startedAt,
-        model: payload.model || runtimeConfig.model,
+        model: sanitizeMetadataIdentifier(payload.model) || runtimeConfig.model,
         parsed,
-        rawText: text,
         transport: attempt.name,
+        upstreamRequestId: sanitizeMetadataIdentifier(response.headers.get("x-request-id")),
+        usage: extractTokenUsage(payload.usage),
       } satisfies Omit<ProviderResult, "provider">;
     } catch (error) {
       lastError = error;
@@ -284,12 +339,15 @@ export class OpenAICompatibleProvider implements VisionProvider {
       }
 
       try {
-        const result = await analyzeWithAttempt(input, attempt, runtimeConfig, budget);
+        const result = await analyzeWithAttempt(input, attempt, runtimeConfig, budget, env);
         return {
           ...result,
           provider: this.name,
         };
       } catch (error) {
+        if (error instanceof ProviderCapacityError) {
+          throw error;
+        }
         logWarn("vision.provider_attempt_failed", {
           attempt: attempt.name,
           message: error instanceof Error ? error.message : String(error),

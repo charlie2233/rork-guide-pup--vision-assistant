@@ -106,11 +106,21 @@ for (const transcript of [
 }
 
 const navigationScreen = read("../src/screens/NavigationScreen.tsx");
+const analyzeApi = read("../src/lib/api.ts");
+const conversationLane = read("../src/lib/conversationLane.ts");
+const visionAI = read("../src/logic/VisionAI.ts");
+const guideAI = read("../src/logic/GuideAI.ts");
+const cloudAnalyzePath = guideAI.slice(
+  guideAI.indexOf("async analyzeWithVision("),
+  guideAI.indexOf("async getNextDirection("),
+);
 mustInclude(navigationScreen, "conversationIntent === \"what-do-you-see\"", "Conversation-lane route");
 mustInclude(navigationScreen, "Guidance settings are unchanged", "Scene-query non-mutation confirmation");
+mustInclude(navigationScreen, "interactionMode: mode", "Conversation mode reaches GuideAI");
 mustInclude(navigationScreen, "updateNavigationMemory: mode === \"guidance\"", "Conversation lane does not mutate navigation smoothing memory");
-mustInclude(navigationScreen, "mode === \"scene-query\" || !isSpeakingRef.current", "Scene-query final answer can interrupt the analyzing prompt");
-mustInclude(navigationScreen, "mode === \"guidance\" || mode === \"scene-query\"", "Scene-query answer can keep STOP barge-in armed");
+mustInclude(navigationScreen, "priorGuidance: lastGuidanceMessageRef.current", "Scene answers stay out of guidance context memory");
+mustInclude(navigationScreen, "if (mode === \"guidance\")", "Scene answers do not overwrite guidance context memory");
+mustInclude(navigationScreen, "planVisionLaneResult", "Vision results use the behaviorally tested lane boundary");
 mustInclude(navigationScreen, "isStopBargeInCommand(normalizedTranscript)", "Partial STOP cut-through");
 mustInclude(navigationScreen, "lastStopHandledAtRef", "STOP stale-speech guard");
 mustInclude(navigationScreen, "recordStopBargeInSnapshot", "STOP cut-through diagnostic recorder");
@@ -122,19 +132,38 @@ mustInclude(navigationScreen, "playAudioCue(\"error\")", "Error audio cue path")
 mustInclude(navigationScreen, "updateSpeechRate", "Spoken speech-rate setting path");
 mustInclude(navigationScreen, "updateDescriptionMode", "Spoken detail-level setting path");
 mustInclude(navigationScreen, "updateHapticsEnabled", "Spoken haptics setting path");
+mustInclude(visionAI, "interactionMode: options?.interactionMode ?? \"guidance\"", "VisionAI propagates typed interaction mode");
+mustInclude(analyzeApi, "interactionMode: payload.interactionMode", "API JSON propagates interaction mode");
+mustInclude(conversationLane, "speech\n      && isGuiding", "All guidance speech remains STOP-interruptible");
+mustInclude(
+  conversationLane,
+  "isSceneQuery || isSafetyStop || !isSpeaking",
+  "Scene-query and safety STOP results can interrupt an earlier prompt",
+);
+mustInclude(conversationLane, "canKeepListeningForStopBargeInDuringSpeech", "Guidance speech retains STOP barge-in eligibility");
+mustInclude(conversationLane, "settingsUpdate: null", "Scene-query result plan cannot mutate settings");
+mustInclude(conversationLane, "isSceneQuery && !isSafetyStop ? null : result", "Scene-query safety STOP escapes conversation isolation");
+mustInclude(conversationLane, "audioCue: isSafetyStop ? \"stop\" : null", "Scene-query safety STOP keeps the stop earcon");
+mustInclude(cloudAnalyzePath, "direction: analysis.direction", "Cloud direction is returned literally");
+mustInclude(cloudAnalyzePath, "message: analysis.message", "Cloud message is returned literally");
+mustInclude(cloudAnalyzePath, "options?.interactionMode !== \"scene-query\"", "Scene-query mode enforces memory isolation");
+mustNotInclude(cloudAnalyzePath, "smoothDirection(", "Cloud response path must not smooth provider direction");
+mustNotInclude(cloudAnalyzePath, "buildMessage(", "Cloud response path must not rewrite provider message");
 
 const homeScreen = read("../src/screens/HomeScreen.tsx");
-mustInclude(homeScreen, "isMountedRef", "Home voice-session mounted guard");
+mustInclude(homeScreen, "isFocusedRef", "Home voice-session focus ownership guard");
 mustInclude(homeScreen, "hasAnnouncedReadyPromptRef", "Home ready prompt one-shot guard");
 mustInclude(homeScreen, "speakVoiceResponseRef", "Home ready prompt is not coupled to settings-change effect cleanup");
 mustInclude(homeScreen, "startGuidanceFromHome", "Home guidance handoff helper");
 mustInclude(homeScreen, "lastSpokenMessageRef.current = \"Guidance started. Analyzing your surroundings.\"", "Home handoff seeds Navigation repeat text");
-mustInclude(homeScreen, "if (isMountedRef.current)", "Home stale voice-session restart guard");
+mustInclude(homeScreen, "if (isFocusedRef.current)", "Home stale voice-session restart guard");
 mustNotInclude(homeScreen, "Guidance starting. Say stop guidance any time to pause.", "Home must not speak overlapping start prompt during Navigation handoff");
 
 const settingsProvider = read("../src/providers/SettingsProvider.tsx");
 mustInclude(settingsProvider, "AsyncStorage.getItem", "Settings persistence load");
 mustInclude(settingsProvider, "AsyncStorage.setItem", "Settings persistence save");
+mustInclude(settingsProvider, "persistenceQueueRef", "Settings writes are serialized");
+mustInclude(settingsProvider, "return false", "Settings persistence reports failure");
 mustInclude(settingsProvider, "speechRate", "Speech-rate persisted setting");
 mustInclude(settingsProvider, "descriptionMode", "Detail-level persisted setting");
 mustInclude(settingsProvider, "hapticsEnabled", "Haptics persisted setting");

@@ -4,9 +4,16 @@ import { Platform } from "react-native";
 import {
   analyzeVision,
   type GuidePupCaptureHeuristics,
+  type VisionInteractionMode,
   type VisionAnalyzeResponse,
 } from "@/src/lib/api";
 import { recordAnalyzeEvent } from "@/src/lib/diagnostics";
+import {
+  assertFreshFrameForUpload,
+  isAbortError,
+  isStaleFrameError,
+  throwIfAborted,
+} from "@/src/lib/runtimeSafety";
 import { captureAppError } from "@/src/lib/sentry";
 
 const MAX_UPLOAD_WIDTH = 768;
@@ -33,8 +40,12 @@ export interface VisionAIResult {
 export interface AnalyzeFrameOptions {
   detail?: "low" | "high";
   frameId?: string;
+  interactionMode?: VisionInteractionMode;
+  minimumFrameTimestampMs?: number;
   priorGuidance?: string;
+  recoveryGateActive?: boolean;
   sessionId?: string;
+  signal?: AbortSignal;
   updateNavigationMemory?: boolean;
 }
 
@@ -116,7 +127,19 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
   const detail = options?.detail ?? (Platform.OS === "web" ? "high" : "low");
 
   try {
+    throwIfAborted(options?.signal);
+    assertFreshFrameForUpload({
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
+    });
     const prepared = await preprocessFrame(frame);
+    throwIfAborted(options?.signal);
+    assertFreshFrameForUpload({
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
+    });
     const captureHeuristics = buildCaptureHeuristics(frame, prepared);
     const frameSummary = buildFrameSummary(frame, captureHeuristics);
 
@@ -127,6 +150,7 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
       frameSummary,
       hasImage: true,
       imageBase64: prepared.base64,
+      interactionMode: options?.interactionMode ?? "guidance",
       mimeType: prepared.mimeType,
       nativePath: frame.source,
       priorGuidance: options?.priorGuidance,
@@ -135,6 +159,9 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
       sourceHeight: prepared.height,
       sourceWidth: prepared.width,
       timestampMs: frame.timestampMs,
+    }, {
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
     });
 
     return {
@@ -143,6 +170,9 @@ export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFr
       timestamp,
     };
   } catch (error) {
+    if (isAbortError(error) || isStaleFrameError(error)) {
+      throw error;
+    }
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const captureHeuristics = buildCaptureHeuristics(frame);
     recordAnalyzeEvent({

@@ -1,10 +1,16 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
 import { useSettings } from '@/src/providers/SettingsProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGuidePupRouter } from '@/src/lib/router';
 import { recordVoiceSnapshot } from '@/src/lib/diagnostics';
+import {
+  releaseOwnedAnnouncementOwner,
+  startOwnedVoiceSession,
+  stopOwnedVoiceSession,
+} from '@/src/lib/ownedVoiceSession';
 import { parseConversationPrompt } from '@/src/lib/voiceConversation';
 import {
   buildVoiceHelpPrompt,
@@ -14,12 +20,20 @@ import {
   type GuidePupHandledTranscript,
 } from '@/src/lib/voiceCommands';
 import { buildVoiceStatusSummary, describeHaptics, describeSpeechRate, fasterSpeechRate, slowerSpeechRate } from '@/src/lib/voiceSettings';
-import { GuidePupNavigationCore } from '@/src/native/GuidePupNavigationCore';
-import { GuidePupVoiceControl } from '@/src/native/GuidePupVoiceControl';
+import {
+  createGuidePupAnnouncementOwnerToken,
+  GuidePupNavigationCore,
+} from '@/src/native/GuidePupNavigationCore';
+import {
+  createGuidePupVoiceSessionOwnerToken,
+  GuidePupVoiceControl,
+} from '@/src/native/GuidePupVoiceControl';
+
+type VoiceOverState = "disabled" | "enabled" | "unknown";
 
 export default function HomeScreen() {
   const router = useGuidePupRouter();
-  const { speak } = useVoice();
+  const { stop: stopVoice } = useVoice();
   const {
     isReady,
     settings,
@@ -30,8 +44,61 @@ export default function HomeScreen() {
   const lastHandledTranscriptRef = useRef<GuidePupHandledTranscript | null>(null);
   const lastSpokenMessageRef = useRef("Guide Pup is ready. Say start guidance to begin, or say help for commands.");
   const hasAnnouncedReadyPromptRef = useRef(false);
-  const isMountedRef = useRef(true);
+  const isFocusedRef = useRef(false);
   const resumeListeningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceRecoveryExhaustedHandledRef = useRef(false);
+  const voiceResponseGenerationRef = useRef(0);
+  const announcementOwnerTokenRef = useRef<string | null>(null);
+  const voiceSessionAttemptGenerationRef = useRef(0);
+  const voiceSessionOwnerTokenRef = useRef<string | null>(null);
+  const voiceOverResolutionRef = useRef<Promise<VoiceOverState> | null>(null);
+  const voiceOverStateRef = useRef<VoiceOverState>("unknown");
+
+  const resolveVoiceOverState = useCallback(() => {
+    if (voiceOverStateRef.current !== "unknown") {
+      return Promise.resolve(voiceOverStateRef.current);
+    }
+    if (!voiceOverResolutionRef.current) {
+      voiceOverResolutionRef.current = AccessibilityInfo.isScreenReaderEnabled()
+        .then((enabled) => {
+          const nextState = enabled ? "enabled" : "disabled";
+          voiceOverStateRef.current = nextState;
+          return nextState;
+        })
+        .catch(() => {
+          voiceOverStateRef.current = "enabled";
+          voiceOverResolutionRef.current = null;
+          return "enabled" as const;
+        });
+    }
+    return voiceOverResolutionRef.current;
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+    void resolveVoiceOverState().then((state) => {
+      if (isActive) {
+        voiceOverStateRef.current = state;
+      }
+    });
+
+    const subscription = AccessibilityInfo.addEventListener("screenReaderChanged", (enabled) => {
+      voiceResponseGenerationRef.current += 1;
+      voiceOverStateRef.current = enabled ? "enabled" : "disabled";
+      voiceOverResolutionRef.current = Promise.resolve(enabled ? "enabled" : "disabled");
+      stopVoice();
+      void GuidePupVoiceControl.stopSpeaking();
+      const announcementOwnerToken = announcementOwnerTokenRef.current;
+      if (announcementOwnerToken) {
+        void GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken);
+      }
+    });
+
+    return () => {
+      isActive = false;
+      subscription.remove();
+    };
+  }, [resolveVoiceOverState, stopVoice]);
 
   const syncVoiceState = useCallback(async () => {
     const state = await GuidePupVoiceControl.getState().catch(() => null);
@@ -45,12 +112,24 @@ export default function HomeScreen() {
       lastError: state.lastError ?? undefined,
       listening: state.listening,
       microphonePermission: state.microphonePermission,
+      recoveryState: state.recoveryState,
       speaking: state.speaking,
       speechPermission: state.speechPermission,
+      voiceProcessingEnabled: state.voiceProcessingEnabled,
     });
   }, []);
 
   const startVoiceSession = useCallback(async () => {
+    const attemptGeneration = voiceSessionAttemptGenerationRef.current + 1;
+    voiceSessionAttemptGenerationRef.current = attemptGeneration;
+    const ownerToken = createGuidePupVoiceSessionOwnerToken("home");
+    const attemptIsCurrent = () =>
+      isFocusedRef.current
+      && voiceSessionAttemptGenerationRef.current === attemptGeneration;
+    if (!attemptIsCurrent()) {
+      return;
+    }
+
     if (!GuidePupVoiceControl.isNativeModuleAvailable()) {
       recordVoiceSnapshot({
         available: false,
@@ -62,6 +141,9 @@ export default function HomeScreen() {
 
     try {
       const permissions = await GuidePupVoiceControl.requestPermissions();
+      if (!attemptIsCurrent()) {
+        return;
+      }
       recordVoiceSnapshot({
         available: true,
         executionPath: "native-voice",
@@ -71,6 +153,9 @@ export default function HomeScreen() {
       });
 
       if (permissions.microphone !== "granted" || permissions.speech !== "granted") {
+        if (!attemptIsCurrent()) {
+          return;
+        }
         const permissionMessage = permissions.microphone !== "granted" && permissions.speech !== "granted"
           ? "Microphone and speech recognition permissions are required for hands-free commands. You can still use the buttons."
           : permissions.microphone !== "granted"
@@ -81,16 +166,52 @@ export default function HomeScreen() {
           lastError: permissionMessage,
           listening: false,
         });
-        await GuidePupVoiceControl.speak(permissionMessage, {
-          interrupt: true,
-        }).catch(() => speak(permissionMessage));
+        const voiceOverState = await resolveVoiceOverState();
+        if (!attemptIsCurrent()) {
+          return;
+        }
+        stopVoice();
+        await GuidePupVoiceControl.stopSpeaking().catch(() => undefined);
+        if (!isFocusedRef.current) {
+          return;
+        }
+        const announcementOwnerToken = announcementOwnerTokenRef.current;
+        if (!announcementOwnerToken) {
+          return;
+        }
+        if (voiceOverState === "enabled") {
+          await GuidePupNavigationCore.announce(permissionMessage, announcementOwnerToken).catch(() => undefined);
+        } else {
+          await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
+          await GuidePupVoiceControl.speak(permissionMessage, {
+            interrupt: true,
+          }).catch(() => undefined);
+        }
+        return;
+      }
+
+      if (!attemptIsCurrent()) {
         return;
       }
 
       lastHandledTranscriptRef.current = null;
-      const state = await GuidePupVoiceControl.startCommandSession({
-        partialResults: true,
+      voiceSessionOwnerTokenRef.current = ownerToken;
+      const state = await startOwnedVoiceSession({
+        isCurrent: attemptIsCurrent,
+        ownerToken,
+        start: (ownedToken) => GuidePupVoiceControl.startCommandSession({
+          ownerToken: ownedToken,
+          partialResults: true,
+        }),
+        stop: (ownedToken) => GuidePupVoiceControl.stopCommandSession({ ownerToken: ownedToken }),
       }).catch(() => null);
+
+      if (!attemptIsCurrent()) {
+        if (voiceSessionOwnerTokenRef.current === ownerToken) {
+          voiceSessionOwnerTokenRef.current = null;
+        }
+        return;
+      }
 
       if (state) {
         recordVoiceSnapshot({
@@ -99,8 +220,10 @@ export default function HomeScreen() {
           lastError: state.lastError ?? undefined,
           listening: state.listening,
           microphonePermission: state.microphonePermission,
+          recoveryState: state.recoveryState,
           speaking: state.speaking,
           speechPermission: state.speechPermission,
+          voiceProcessingEnabled: state.voiceProcessingEnabled,
         });
       }
     } catch (error) {
@@ -111,7 +234,7 @@ export default function HomeScreen() {
         listening: false,
       });
     }
-  }, [speak]);
+  }, [resolveVoiceOverState, stopVoice]);
 
   const speakVoiceResponse = useCallback(async (
     message: string,
@@ -119,45 +242,83 @@ export default function HomeScreen() {
     rateOverride?: number,
     options?: { resumeListening?: boolean },
   ) => {
+    const responseGeneration = voiceResponseGenerationRef.current + 1;
+    voiceResponseGenerationRef.current = responseGeneration;
+    const responseIsCurrent = () =>
+      isFocusedRef.current
+      && voiceResponseGenerationRef.current === responseGeneration;
     lastSpokenMessageRef.current = message;
+    if (!responseIsCurrent()) {
+      return;
+    }
     if (resumeListeningTimerRef.current) {
       clearTimeout(resumeListeningTimerRef.current);
       resumeListeningTimerRef.current = null;
     }
 
-    await GuidePupVoiceControl.stopCommandSession().catch(() => undefined);
+    await stopOwnedVoiceSession({
+      ownerRef: voiceSessionOwnerTokenRef,
+      stop: (ownerToken) => GuidePupVoiceControl.stopCommandSession({ ownerToken }),
+    }).catch(() => undefined);
+    if (!responseIsCurrent()) {
+      return;
+    }
     recordVoiceSnapshot({
       listening: false,
     });
 
     if (settings.hapticsEnabled && haptic) {
       await GuidePupNavigationCore.playHaptic(haptic).catch(() => undefined);
+      if (!responseIsCurrent()) {
+        return;
+      }
     }
     if (haptic) {
       void GuidePupNavigationCore.playAudioCue(haptic);
     }
 
-    await GuidePupVoiceControl.speak(message, {
-      interrupt: true,
-      rate: rateOverride ?? (
-        settings.speechRate === "slow"
-          ? 0.7
-          : settings.speechRate === "fast"
-            ? 1.2
-            : 0.9
-      ),
-    }).catch(() => undefined);
+    const voiceOverState = await resolveVoiceOverState();
+    if (!responseIsCurrent()) {
+      return;
+    }
+    stopVoice();
+    await GuidePupVoiceControl.stopSpeaking().catch(() => undefined);
+    if (!responseIsCurrent()) {
+      return;
+    }
+    const announcementOwnerToken = announcementOwnerTokenRef.current;
+    if (!announcementOwnerToken) {
+      return;
+    }
+    if (voiceOverState === "enabled") {
+      await GuidePupNavigationCore.announce(message, announcementOwnerToken).catch(() => undefined);
+    } else {
+      await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
+      if (!responseIsCurrent()) {
+        return;
+      }
+      await GuidePupVoiceControl.speak(message, {
+        interrupt: true,
+        rate: rateOverride ?? (
+          settings.speechRate === "slow"
+            ? 0.7
+            : settings.speechRate === "fast"
+              ? 1.2
+              : 0.9
+        ),
+      }).catch(() => undefined);
+    }
 
-    if (options?.resumeListening === false || !isMountedRef.current) {
+    if (options?.resumeListening === false || !responseIsCurrent()) {
       return;
     }
 
     resumeListeningTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
+      if (responseIsCurrent()) {
         void startVoiceSession();
       }
     }, 600);
-  }, [settings.hapticsEnabled, settings.speechRate, startVoiceSession]);
+  }, [resolveVoiceOverState, settings.hapticsEnabled, settings.speechRate, startVoiceSession, stopVoice]);
 
   const speakVoiceResponseRef = useRef(speakVoiceResponse);
 
@@ -166,6 +327,7 @@ export default function HomeScreen() {
   }, [speakVoiceResponse]);
 
   const startGuidanceFromHome = useCallback(() => {
+    voiceResponseGenerationRef.current += 1;
     lastHandledTranscriptRef.current = null;
     lastSpokenMessageRef.current = "Guidance started. Analyzing your surroundings.";
     if (resumeListeningTimerRef.current) {
@@ -173,10 +335,19 @@ export default function HomeScreen() {
       resumeListeningTimerRef.current = null;
     }
 
-    void GuidePupVoiceControl.stopCommandSession().then((state) => {
+    stopVoice();
+    void GuidePupVoiceControl.stopSpeaking();
+    const announcementOwnerToken = announcementOwnerTokenRef.current;
+    if (announcementOwnerToken) {
+      void GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken);
+    }
+    void stopOwnedVoiceSession({
+      ownerRef: voiceSessionOwnerTokenRef,
+      stop: (ownerToken) => GuidePupVoiceControl.stopCommandSession({ ownerToken }),
+    }).then((state) => {
       recordVoiceSnapshot({
-        listening: state.listening,
-        speaking: state.speaking,
+        listening: state?.listening ?? false,
+        speaking: state?.speaking ?? false,
       });
     }).catch(() => {
       recordVoiceSnapshot({
@@ -188,23 +359,41 @@ export default function HomeScreen() {
     }
     void GuidePupNavigationCore.playAudioCue("success");
     router.push('/navigation' as never);
-  }, [router, settings.hapticsEnabled]);
+  }, [router, settings.hapticsEnabled, stopVoice]);
 
-  useEffect(() => {
-    isMountedRef.current = true;
+  useFocusEffect(useCallback(() => {
+    const announcementOwnerToken = createGuidePupAnnouncementOwnerToken("home-announcement");
+    announcementOwnerTokenRef.current = announcementOwnerToken;
+    void GuidePupNavigationCore.claimAnnouncementOwner(announcementOwnerToken);
+    voiceRecoveryExhaustedHandledRef.current = false;
+    isFocusedRef.current = true;
+    if (isReady && settings.hasCompletedOnboarding && hasAnnouncedReadyPromptRef.current) {
+      void startVoiceSession();
+    }
 
     return () => {
-      isMountedRef.current = false;
+      voiceResponseGenerationRef.current += 1;
+      voiceSessionAttemptGenerationRef.current += 1;
+      isFocusedRef.current = false;
       if (resumeListeningTimerRef.current) {
         clearTimeout(resumeListeningTimerRef.current);
         resumeListeningTimerRef.current = null;
       }
-      void GuidePupVoiceControl.stopCommandSession();
+      stopVoice();
+      void GuidePupVoiceControl.stopSpeaking();
+      void releaseOwnedAnnouncementOwner({
+        ownerRef: announcementOwnerTokenRef,
+        release: (ownerToken) => GuidePupNavigationCore.releaseAnnouncementOwner(ownerToken),
+      });
+      void stopOwnedVoiceSession({
+        ownerRef: voiceSessionOwnerTokenRef,
+        stop: (ownerToken) => GuidePupVoiceControl.stopCommandSession({ ownerToken }),
+      });
     };
-  }, []);
+  }, [isReady, settings.hasCompletedOnboarding, startVoiceSession, stopVoice]));
 
   useEffect(() => {
-    if (!isReady) {
+    if (!isReady || !isFocusedRef.current) {
       return;
     }
 
@@ -223,8 +412,12 @@ export default function HomeScreen() {
     }
   }, [isReady, router, settings.hasCompletedOnboarding]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const recognitionSubscription = GuidePupVoiceControl.addRecognitionListener(({ isFinal, transcript }) => {
+      if (!isFocusedRef.current) {
+        return;
+      }
+
       if (!isFinal) {
         return;
       }
@@ -279,63 +472,86 @@ export default function HomeScreen() {
           return;
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
-          updateSpeechRate(nextRate);
-          void speakVoiceResponse(
-            nextRate === settings.speechRate
-              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
-              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`,
-            "success",
-            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
-          );
+          if (nextRate === settings.speechRate) {
+            void speakVoiceResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`, null);
+            return;
+          }
+          void updateSpeechRate(nextRate).then((saved) => speakVoiceResponse(
+            saved
+              ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`
+              : "I could not save the speech rate. The setting was not changed.",
+            saved ? "success" : "stop",
+            saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
+          ));
           return;
         }
         case "faster-speech": {
           const nextRate = fasterSpeechRate(settings.speechRate);
-          updateSpeechRate(nextRate);
-          void speakVoiceResponse(
-            nextRate === settings.speechRate
-              ? `Speech rate is already ${describeSpeechRate(nextRate)}.`
-              : `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`,
-            "success",
-            nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9,
-          );
+          if (nextRate === settings.speechRate) {
+            void speakVoiceResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`, null);
+            return;
+          }
+          void updateSpeechRate(nextRate).then((saved) => speakVoiceResponse(
+            saved
+              ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`
+              : "I could not save the speech rate. The setting was not changed.",
+            saved ? "success" : "stop",
+            saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
+          ));
           return;
         }
         case "more-detail":
-          updateDescriptionMode("detailed");
-          void speakVoiceResponse(
-            settings.descriptionMode === "detailed"
-              ? "Detail level is already detailed."
-              : "Detail level set to detailed. Say less detail to undo.",
-            "success",
-          );
+          if (settings.descriptionMode === "detailed") {
+            void speakVoiceResponse("Detail level is already detailed.", null);
+            return;
+          }
+          void updateDescriptionMode("detailed").then((saved) => speakVoiceResponse(
+            saved
+              ? "Detail level set to detailed. Say less detail to undo."
+              : "I could not save the detail level. The setting was not changed.",
+            saved ? "success" : "stop",
+          ));
           return;
         case "less-detail":
-          updateDescriptionMode("short");
-          void speakVoiceResponse(
-            settings.descriptionMode === "short"
-              ? "Detail level is already short."
-              : "Detail level set to short. Say more detail to undo.",
-            "success",
-          );
+          if (settings.descriptionMode === "short") {
+            void speakVoiceResponse("Detail level is already short.", null);
+            return;
+          }
+          void updateDescriptionMode("short").then((saved) => speakVoiceResponse(
+            saved
+              ? "Detail level set to short. Say more detail to undo."
+              : "I could not save the detail level. The setting was not changed.",
+            saved ? "success" : "stop",
+          ));
           return;
         case "haptics-on":
-          updateHapticsEnabled(true);
-          void speakVoiceResponse(
-            settings.hapticsEnabled
-              ? `Haptics are already ${describeHaptics(true)}.`
-              : "Haptics turned on. Say haptics off to undo.",
-            "success",
-          );
+          if (settings.hapticsEnabled) {
+            void speakVoiceResponse(`Haptics are already ${describeHaptics(true)}.`, null);
+            return;
+          }
+          void updateHapticsEnabled(true).then(async (saved) => {
+            if (saved) {
+              await GuidePupNavigationCore.playHaptic("success").catch(() => undefined);
+            }
+            return speakVoiceResponse(
+              saved
+                ? "Haptics turned on. Say haptics off to undo."
+                : "I could not save the haptics setting. The setting was not changed.",
+              saved ? "success" : "stop",
+            );
+          });
           return;
         case "haptics-off":
-          updateHapticsEnabled(false);
-          void speakVoiceResponse(
-            settings.hapticsEnabled
+          if (!settings.hapticsEnabled) {
+            void speakVoiceResponse(`Haptics are already ${describeHaptics(false)}.`, null);
+            return;
+          }
+          void updateHapticsEnabled(false).then((saved) => speakVoiceResponse(
+            saved
               ? "Haptics turned off. Say haptics on to undo."
-              : `Haptics are already ${describeHaptics(false)}.`,
-            null,
-          );
+              : "I could not save the haptics setting. The setting was not changed.",
+            saved ? null : "stop",
+          ));
           return;
         case "status":
           void speakVoiceResponse(
@@ -358,9 +574,29 @@ export default function HomeScreen() {
         lastError: state.lastError ?? undefined,
         listening: state.listening,
         microphonePermission: state.microphonePermission,
+        recoveryState: state.recoveryState,
         speaking: state.speaking,
         speechPermission: state.speechPermission,
+        voiceProcessingEnabled: state.voiceProcessingEnabled,
       });
+
+      if (state.recoveryState !== "exhausted") {
+        if (state.recoveryState === "idle" && state.listening) {
+          voiceRecoveryExhaustedHandledRef.current = false;
+        }
+        return;
+      }
+      if (voiceRecoveryExhaustedHandledRef.current || !isFocusedRef.current) {
+        return;
+      }
+
+      voiceRecoveryExhaustedHandledRef.current = true;
+      void speakVoiceResponse(
+        "Voice control could not recover. Use the large Start Guidance button with VoiceOver, or try again after returning to this screen.",
+        "stop",
+        undefined,
+        { resumeListening: false },
+      );
     });
 
     void syncVoiceState();
@@ -378,7 +614,7 @@ export default function HomeScreen() {
     updateDescriptionMode,
     updateHapticsEnabled,
     updateSpeechRate,
-  ]);
+  ]));
 
   const handlePress = () => {
     startGuidanceFromHome();
@@ -389,7 +625,10 @@ export default function HomeScreen() {
       void GuidePupNavigationCore.playHaptic("error");
     }
     void GuidePupNavigationCore.playAudioCue("error");
-    speak("SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.");
+    void speakVoiceResponse(
+      "SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.",
+      null,
+    );
   };
 
   const handleOpenSettings = () => {

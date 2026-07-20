@@ -12,7 +12,12 @@ export interface GuidePupVoiceControlPermissions {
 
 export interface GuidePupVoiceControlCommandSessionOptions {
   locale?: string;
+  ownerToken?: string;
   partialResults?: boolean;
+}
+
+export interface GuidePupVoiceControlStopSessionOptions {
+  ownerToken?: string;
 }
 
 export interface GuidePupVoiceControlSpeakOptions {
@@ -21,13 +26,22 @@ export interface GuidePupVoiceControlSpeakOptions {
   rate?: number;
 }
 
+export type GuidePupVoiceControlRecoveryState =
+  | "idle"
+  | "recovering"
+  | "interrupted"
+  | "background"
+  | "exhausted";
+
 export interface GuidePupVoiceControlState {
   available: boolean;
   lastError?: string | null;
   listening: boolean;
   microphonePermission: GuidePupVoicePermissionStatus;
+  recoveryState?: GuidePupVoiceControlRecoveryState;
   speaking: boolean;
   speechPermission: GuidePupVoicePermissionStatus;
+  voiceProcessingEnabled: boolean;
 }
 
 export interface GuidePupVoiceRecognitionEvent {

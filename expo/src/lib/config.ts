@@ -1,4 +1,7 @@
+import Constants from "expo-constants";
 import { z } from "zod";
+
+type LaunchSentryMode = "disabled" | "enabled";
 
 const RawConfigSchema = z.object({
   apiBaseUrl: z.string().optional(),
@@ -31,6 +34,13 @@ const rawConfig = RawConfigSchema.parse({
 const trimToUndefined = (value?: string) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+};
+
+const launchSentryMode: LaunchSentryMode =
+  Constants.expoConfig?.extra?.launchSentryMode === "enabled" ? "enabled" : "disabled";
+
+export const resolveSentryDsn = (mode: LaunchSentryMode, value?: string) => {
+  return mode === "enabled" ? trimToUndefined(value) : undefined;
 };
 
 const trimConfiguredValue = (value?: string) => {
@@ -66,7 +76,7 @@ export const appConfig = {
   privacyPolicyUrl: trimConfiguredValue(rawConfig.privacyPolicyUrl) || derivedPublicPageUrl("/privacy"),
   releaseTrack: trimToUndefined(rawConfig.releaseTrack) || (__DEV__ ? "development-client" : "app-store"),
   safetyUrl: derivedPublicPageUrl("/safety"),
-  sentryDsn: trimToUndefined(rawConfig.sentryDsn),
+  sentryDsn: resolveSentryDsn(launchSentryMode, rawConfig.sentryDsn),
   supportEmail,
   supportUrl:
     trimConfiguredValue(rawConfig.supportUrl) ||

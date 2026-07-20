@@ -4,6 +4,17 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `c2b8781`
 
+## Current gate on 2026-07-19
+
+- App Store Connect is authenticated and identifies Guide Pup as app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, team `K99RADPB9G`, and copyright `2026 XIANMIN CHEN`. Build `4` is the next candidate; the only existing TestFlight build is expired build `2`.
+- Apple distribution signing and the matching App Store provisioning profile are present. The direct Xcode archive/upload path is available even though EAS CLI is not authenticated.
+- The final build `4` arm64 Release simulator build exited `0` with signing and Sentry upload disabled. Artifact inspection confirmed bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, the privacy manifest, production Worker URL, and no provider-key/direct-OpenAI/Sentry-DSN pattern. This does not satisfy the signed archive, TestFlight, screenshot, or hardware gates.
+- Wrangler OAuth and both required staging/production secret names are verified. Exact-source deployment and strict dual-lane smoke are still pending, so no current provider-backed request IDs are claimed yet.
+- App Store Connect still has no candidate build attached, no screenshots, App Privacy not started, and a blank Support URL. Those fields must not be completed as launch-ready until the exact candidate clears cloud and physical-device gates.
+- Current blockers are the build `4` physical no-screen artifact, exact signed archive/TestFlight install, current provider-backed production evidence, screenshots from the candidate, matching privacy answers, build attachment, and final metadata review. App Store submission is not authorized by local tests alone.
+
+All later dated evidence is retained as phase history. Older authentication, model, device, and unresolved-input statements below do not override the current gate above.
+
 ## Scope
 
 This phase advances internal TestFlight readiness without claiming external gates are solved. It fixes launch-facing disclosure copy so the public site, App Review notes, and release docs match the current iOS behavior: Guide Pup uses camera frames for scene guidance, and optional hands-free voice commands request microphone and iOS speech-recognition permissions for a bounded deterministic command lane.
@@ -19,8 +30,8 @@ No provider keys, raw images, raw audio, credentials, or signed URLs were logged
 - Updated TestFlight checklist to validate microphone and speech-recognition permission prompts during hands-free command smoke.
 - Updated launch inputs release notes to match the current shipping behavior.
 - Updated the in-app camera-permission fallback copy to say "iOS speech recognition" rather than overclaiming on-device speech recognition.
-- Added a versioned Xcode env guard so iOS simulator builds skip Sentry source-map/debug-symbol upload attempts unless explicitly overridden. This keeps local/plugin simulator validation from requiring Sentry org/project credentials while leaving device/archive/TestFlight upload behavior unchanged.
-- Tightened release preflight so provider-backed smoke is not launch-valid unless staging/production evidence also matches the expected `gpt-5.5` model, `2026-05-22.v1` prompt, sampled-frame envelope, structured output validity, and nullable `fallbackReason`.
+- Added a versioned Xcode env guard for local simulator validation. This historical behavior was superseded on 2026-07-17: simulator, device, and archive builds now default `SENTRY_DISABLE_AUTO_UPLOAD=true` while launch Sentry mode is disabled, and `SENTRY_ALLOW_FAILURE` is absent.
+- Tightened release preflight so provider-backed smoke is not launch-valid unless staging/production evidence also matches the configured launch model and prompt, currently `gpt-5.6-sol` and `2026-07-18.v1`, plus sampled-frame envelope, structured output validity, and nullable `fallbackReason`.
 - Hardened no-screen voice behavior for repeated commands, permission denial fallbacks, scene-query-in-progress responses, stale scene-query answers, and placeholder SOS copy.
 
 ## Evidence gathered
@@ -60,14 +71,14 @@ Device status:
 ```bash
 xcrun devicectl list devices
 xcrun xctrace list devices
-xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+xcrun devicectl device info details --device '<redacted-device-identifier>'
 ```
 
 Results:
 
 - `charlie的iPhone`, iPhone 15 Pro, is paired but `unavailable`.
 - `xcrun xctrace list devices` shows `charlie的iPhone (26.4.2)` under `Devices Offline`.
-- Device details show Developer Mode `enabled`, pairing state `paired`, tunnel state `unavailable`, UDID `00008130-000A001A1178001C`, and last connection `2026-05-05 22:31:40 +0000`.
+- Device details showed Developer Mode `enabled`, pairing state `paired`, and tunnel state `unavailable`; full device identifiers are intentionally omitted from checked-in evidence.
 
 Release gate status during this phase:
 
@@ -131,7 +142,7 @@ Results:
 - Cloudflare remains blocked: Wrangler returned `Not logged in`.
 - Local env remains missing `CLOUDFLARE_API_TOKEN`, `OPENAI_API_KEY`, `EXPO_TOKEN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`, `HUGGINGFACE_HUB_TOKEN`, and `HF_TOKEN`.
 - Hugging Face connector is authenticated as `Chargers`; no MiniCPM production comparison was run in this continuation.
-- Prior Build iOS Apps plugin validation failed before app validation because the Sentry Xcode script attempted a simulator source-map upload without Sentry org/project env. The versioned `.xcode.env` now defaults `SENTRY_DISABLE_AUTO_UPLOAD=true` and `SENTRY_ALLOW_FAILURE=true` only when `PLATFORM_NAME` is a simulator target.
+- Prior Build iOS Apps plugin validation failed before app validation because the Sentry Xcode script attempted a simulator source-map upload without Sentry org/project env. That simulator-only workaround is historical and superseded: the versioned `.xcode.env` now defaults `SENTRY_DISABLE_AUTO_UPLOAD=true` for simulator, device, and archive builds while Sentry is disabled, and it does not set `SENTRY_ALLOW_FAILURE`.
 - Preflight now treats checked-in live smoke as stale until it proves the launch backend contract, not just provider reachability.
 
 Validation after the continuation:
@@ -155,7 +166,7 @@ Results:
 - `git diff --check`: passed.
 - Preview preflight: still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`; now warns that staging smoke is stale for the launch contract (`gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope and nullable `fallbackReason`).
 - TestFlight preflight: still fails on unresolved `TODO_IOS_BUNDLE_IDENTIFIER`, `TODO_APPLE_TEAM_ID`, `TODO_APP_STORE_CONNECT_APP_ID`, `TODO_COPYRIGHT_HOLDER`, and stale production smoke contract (`gpt-4.1` / `2026-03-31.v1`, missing sampled-frame envelope and nullable `fallbackReason`).
-- Build iOS Apps plugin Release simulator build now passes for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, simulator `iPhone 16e`, after the simulator-only Sentry upload guard.
+- Build iOS Apps plugin Release simulator build passed for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, simulator `iPhone 16e`. The simulator-only guard used for that historical run has since been superseded by the explicit all-build Sentry-disabled launch configuration.
 
 ## Backend request IDs
 
@@ -251,7 +262,7 @@ Results:
 - TestFlight/store preflight now also fail on public support-page readiness: the support page still contains launch-internal placeholder phrases and the configured support email is unresolved.
 - TestFlight/store remain blocked on unresolved Apple identifiers, copyright holder, emergency/safety disclaimer, stale production smoke contract, and missing no-screen evidence.
 
-## Identifier resolution continuation on 2026-05-23
+## Historical identifier resolution continuation on 2026-05-23
 
 App Store Connect was opened in the side-panel browser at `https://appstoreconnect.apple.com/apps`. The first attempt redirected to Apple sign-in, so a WhatsApp note was sent to Charlie.H requesting login / 2FA or the App Store Connect App ID. After Charlie logged in, the same side-panel browser showed the Guide Pup app record.
 
@@ -259,12 +270,12 @@ Apple and local Xcode evidence resolved the iOS release identifiers without usin
 
 - iOS bundle identifier: `app.rork.guide-pup-vision-assist`
   - Evidence: App Store Connect App Information shows bundle ID `app.rork.guide-pup-vision-assist`; the repo now mirrors it in `expo/app.config.ts`, `expo/app.json`, `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`, and `expo/ios/GuidePupVisionAssistant/Info.plist`.
-- Apple Team ID: `SBSJ3MX9GZ`
-  - Evidence: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- Historical local Apple Team ID: `SBSJ3MX9GZ`
+  - Evidence at that time: `security find-identity -v -p codesigning` returned `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`. That identity is historical and is superseded by the current authenticated team recorded below.
 - App Store Connect App ID: `6756947790`
   - Evidence: App Store Connect app list links `Guide Pup: Vision Assistant` to `/apps/6756947790/distribution`; App Information lists Apple ID `6756947790`.
 
-The release source of truth was updated for those values. App Store Connect also shows SKU `EX1766553072106`, primary category `Navigation`, version `1.0 Prepare for Submission`, empty copyright/support metadata, no build selected, and `Sign-in required` currently checked in App Review Information even though the app has no account flow; those remain submission-readiness gaps.
+The release source of truth was updated for those values at that time; the historical team value is superseded below. App Store Connect also showed SKU `EX1766553072106`, primary category `Navigation`, version `1.0 Prepare for Submission`, empty copyright/support metadata, no build selected, and `Sign-in required` checked in App Review Information even though the app has no account flow; those were submission-readiness gaps.
 
 Validation after resolving local identifiers:
 
@@ -331,7 +342,9 @@ Results:
 - STOP barge-in diagnostics reset when a new navigation run starts, preventing stale STOP cut-through proof from carrying into another smoke draft.
 - Live backend smoke now separates `providerBacked` from `launchContract.valid`; release preflight requires both, so stale-but-provider-backed Workers are represented accurately without weakening submission gates.
 
-## Remaining P0 blockers
+## Historical P0 snapshot before later continuations
+
+This snapshot predates the later May and July evidence below. It is retained for chronology and must not be read as the current blocker list.
 
 - Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
 - Machine-readable real-iPhone no-screen evidence is missing: `expo/release/no-screen-smoke.latest.json`.
@@ -406,16 +419,16 @@ npm --prefix expo run check:ios-device
 xcrun devicectl list devices
 xcrun xctrace list devices
 security find-identity -v -p codesigning
-SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'id=00008130-000A001A1178001C' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build
-xcrun devicectl device info details --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
-xcrun devicectl device info ddiServices --device E5786BB6-0095-5509-8B85-110C0B5CE6D3
+SENTRY_DISABLE_AUTO_UPLOAD=true xcodebuild -workspace expo/ios/GuidePupVisionAssistant.xcworkspace -scheme GuidePupVisionAssistant -configuration Release -destination 'platform=iOS,name=charlie的iPhone' -derivedDataPath /tmp/guidepup-device-build -allowProvisioningUpdates DEVELOPMENT_TEAM=SBSJ3MX9GZ CODE_SIGN_STYLE=Automatic ONLY_ACTIVE_ARCH=YES COMPILER_INDEX_STORE_ENABLE=NO build
+xcrun devicectl device info details --device 'charlie的iPhone'
+xcrun devicectl device info ddiServices --device 'charlie的iPhone'
 ```
 
 Results:
 
 - `xcrun devicectl list devices` now shows `charlie的iPhone` as `available (paired)`.
-- `xcrun xctrace list devices` shows hardware UDID `00008130-000A001A1178001C`.
-- The Mac still has one valid signing identity: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- `xcrun xctrace list devices` showed the physical iPhone; the full hardware identifier is intentionally omitted from checked-in evidence.
+- At that time, the Mac reported `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`; this is historical evidence and is not current release configuration.
 - `xcodebuild` reached the device but failed before build/install because the developer disk image could not be mounted.
 - `devicectl device info ddiServices` returned `kAMDMobileImageMounterDeviceLocked: The device is locked`.
 - `devicectl device info details` shows Developer Mode enabled, pairing state paired, tunnel connected, and `ddiServicesAvailable: false`.
@@ -424,7 +437,33 @@ Results:
 - The second signed Release device build now reaches signing/provisioning and fails with:
   - `No Accounts: Add a new account in Accounts settings.`
   - `No profiles for 'app.rork.guide-pup-vision-assist' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'app.rork.guide-pup-vision-assist'.`
-- Next action is Apple-side: sign Xcode in with an account that can provision team `SBSJ3MX9GZ`, create/download an iOS App Development profile for `app.rork.guide-pup-vision-assist`, then rerun the device build/install and no-screen smoke.
+- The historical next action was to sign Xcode in for `SBSJ3MX9GZ`; that instruction is superseded by the current active team below.
+
+## Release identity and version alignment on 2026-07-17
+
+- Authenticated Apple Developer portal team: `K99RADPB9G`.
+- Live App Store Connect app: `6756947790`; bundle ID: `app.rork.guide-pup-vision-assist`; editable distribution version saved as `1.0.0`; status `Prepare for Submission`.
+- The only existing TestFlight build is expired build `2`, so Expo and native Xcode configuration use version `1.0.0` and build `3` as the next explicit local candidate. EAS uses local version ownership and store-backed auto-increment is disabled.
+- The old team `SBSJ3MX9GZ` and its local identity remain in the command/error transcript above only as historical evidence, not current configuration.
+- The first corrected-team build compiled and provisioned through the final React Native bundle, then failed only because the Sentry script attempted upload while launch Sentry mode was disabled.
+- A fresh clean signed Debug build with the checked-in Sentry-disabled default succeeded. The resulting version `1.0.0` build `3` app reported `TeamIdentifier` `K99RADPB9G`, application-identifier prefix `K99RADPB9G`, and bundle `app.rork.guide-pup-vision-assist`, installed and launched successfully on the paired iPhone, and remained running.
+- This proves signing, installation, launch, and process liveness only. It does not prove physical speech input, haptics, earcons, VoiceOver, interruption handling, settings persistence, camera behavior, no-screen operation, archive or distribution signing, TestFlight upload, or submission.
+- Saving the App Store Connect version as `1.0.0` changed editable metadata only; no build was uploaded and no submission occurred.
+
+## App Store metadata continuation on 2026-07-17
+
+- App Information saved subtitle `Assistive scene guidance`; bundle ID, SKU, Apple ID, category, age rating `4+`, and Individual membership identity were verified in authenticated Apple pages.
+- The version record saved the description, keywords, marketing URL, copyright `2026 XIANMIN CHEN`, and manual release selection. Manual release prevents an approval from becoming a public release before blind-user sign-off.
+- Apple Developer identifies the membership as Individual under `XIANMIN CHEN`. The authenticated membership phone and user-provided support email resolve the release-source App Review contact values without inventing identity details.
+- Before a build was attached, App Store Connect retained copyright and manual release after save and full page reload. The no-sign-in selection, App Review contact, and review notes appeared saved but reverted on reload, so live persistence remains unresolved and those fields must be re-entered and rechecked after a build is attached.
+- App Privacy has not been started in App Store Connect. Its privacy-policy URL is saved as `https://guidepup-site.pages.dev/privacy`, but no privacy responses were published; the code and provider-retention audit must finish first.
+- No screenshots or candidate build are attached, and `Add for Review` was not used.
+
+Fresh signed candidate status:
+
+- A clean signed Debug device build for version `1.0.0` build `3` completed successfully against the paired iPhone with the checked-in Xcode Sentry-upload default and no one-off shell override.
+- The resulting bundle reports `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `3`, application/team prefix `K99RADPB9G`; it installed, launched, and remained running on the connected iPhone.
+- This proves build, signing, provisioning, installation, launch, and process liveness only. Physical voice, haptic, earcon, VoiceOver, interruption, settings-persistence, native-camera, JS-fallback, and no-screen behavior remain unclaimed until the human-observed sequence is completed.
 
 ## Public support-copy continuation on 2026-05-23
 
@@ -642,3 +681,29 @@ Results:
 - Backend typecheck/tests, staging dry-run, Expo static checks, preview preflight, and Release simulator build passed.
 - TestFlight preflight still fails on unresolved copyright holder, App Review contact fields, stale production smoke contract, and missing real-iPhone no-screen evidence.
 - The stale smoke contract now explicitly blocks missing strict Structured Outputs proof: `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent`.
+
+## 2026-07-18 submission decision
+
+Decision: **not ready to submit yet**. App Store Connect identity is resolved from prior authenticated evidence, but no build should be attached or submitted until the candidate itself clears the cloud and hardware gates. The current controllable in-app Browser tab redirects to Apple sign-in with `authResult=FAILED`, so live metadata persistence has not been reverified in this continuation.
+
+Current verified identity:
+
+- App Store Connect app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, next candidate build `3`, team `K99RADPB9G`, copyright `2026 XIANMIN CHEN`.
+- Support and App Review email: `charliehan112@gmail.com`; no account or demo credentials are required.
+- Sentry remains intentionally disabled and is not an authentication blocker.
+
+Current blockers:
+
+- Deploy and strictly smoke the current staging and production Workers; no launch-valid current request IDs exist yet.
+- Restore the paired iPhone as a runnable Xcode destination and produce the sanitized real no-screen evidence artifact.
+- Finish and inspect the exact distribution archive/TestFlight build, validate it through TestFlight, capture real screenshots, publish matching privacy answers, attach the build, and reverify App Review fields.
+
+Current local evidence:
+
+- Expo scripted tests passed `42/42`; backend tests passed `17/17`; the adversarial release-preflight suite passed `10/10`; both typechecks, Expo lint, and Expo Doctor `17/17` passed.
+- The exact Release simulator build for workspace `expo/ios/GuidePupVisionAssistant.xcworkspace`, scheme `GuidePupVisionAssistant`, and `iPhone 17 Pro Max` exited `0`. Bundle ID `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `3`, and permission copy were present in the built artifact.
+- The Release artifact installed and launched. Runtime snapshots exposed named accessibility targets for onboarding, privacy, support, safety, Home, and Settings; settings persisted across a stop/relaunch cycle.
+- Preview preflight passes with stale-smoke and missing-device-evidence warnings. TestFlight and store preflights fail on the stale production launch contract and missing `release/no-screen-smoke.latest.json`, as intended.
+- This simulator evidence is not a signed distribution archive, TestFlight install, real camera/haptic/audio/VoiceOver validation, or App Store screenshot set.
+
+No App Store submission, TestFlight upload, or `main` launch-ready merge is claimed in this section.

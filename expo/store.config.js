@@ -22,7 +22,7 @@ module.exports = {
         title: launchInputs.appName,
         subtitle: "Assistive scene guidance",
         description:
-          "Guide Pup provides assistive navigation guidance for blind and low-vision users. The app captures camera frames, sends them to the Guide Pup backend for analysis, and speaks short forward, turn, or stop cues with conservative safe-stop behavior when the scene is unclear or the service is unavailable.",
+          "Guide Pup provides assistive navigation guidance for blind and low-vision users. The app captures sampled camera frames, sends them through the Guide Pup backend to a third-party AI provider for analysis, and speaks short forward, turn, or stop cues with conservative safe-stop behavior when the scene is unclear or the service is unavailable. Optional hands-free commands use Apple speech recognition.",
         keywords: [
           "accessibility",
           "blind",

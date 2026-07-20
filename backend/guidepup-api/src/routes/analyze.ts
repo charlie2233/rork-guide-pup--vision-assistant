@@ -2,7 +2,7 @@ import { jsonResponse } from "../lib/http";
 import { createSafeFallbackResponse, normalizeProviderVision } from "../lib/normalize";
 import { logError, logInfo, logWarn } from "../lib/logging";
 import { getPromptVersion } from "../lib/prompts";
-import { enforceRateLimit } from "../lib/rate-limit";
+import { enforceAnalyzeIpRateLimit, enforceRateLimit } from "../lib/rate-limit";
 import { reportBackendError } from "../lib/sentry";
 import { verifySessionToken } from "../lib/session";
 import {
@@ -91,7 +91,14 @@ export async function handleAnalyze(
 
   const body = parsedBody.data;
   const promptVersion = getPromptVersion(env);
-  const rateLimit = await enforceRateLimit(deviceId, env);
+  const deviceRateLimit = await enforceRateLimit(deviceId, env);
+  const ipRateLimit = deviceRateLimit.allowed
+    ? await enforceAnalyzeIpRateLimit(request, env)
+    : undefined;
+  const rateLimit = deviceRateLimit.allowed && ipRateLimit
+    ? ipRateLimit
+    : deviceRateLimit;
+  const rateLimitScope = deviceRateLimit.allowed ? "analyze-ip" : "device";
 
   if (!rateLimit.allowed) {
     const infrastructureUnavailable = rateLimit.reason === "infrastructure-unavailable";
@@ -111,6 +118,7 @@ export async function handleAnalyze(
       deviceId,
       interactionMode: body.interactionMode,
       latencyMs: Date.now() - startedAt,
+      rateLimitScope,
       requestId,
       resetAt: rateLimit.resetAt,
       promptVersion,
@@ -177,15 +185,19 @@ export async function handleAnalyze(
       model: normalized.model,
       promptVersion: normalized.promptVersion,
       provider: normalized.provider,
+      providerInputTokens: providerResult.usage?.inputTokens,
+      providerOutputTokens: providerResult.usage?.outputTokens,
+      providerTotalTokens: providerResult.usage?.totalTokens,
       transport: providerResult.transport,
+      upstreamRequestId: providerResult.upstreamRequestId,
       requestId,
     });
 
     return jsonResponse(request, env, normalized, {
       headers: {
-        "x-rate-limit-limit": String(rateLimit.limit),
-        "x-rate-limit-remaining": String(rateLimit.remaining),
-        "x-rate-limit-reset-at": rateLimit.resetAt,
+        "x-rate-limit-limit": String(deviceRateLimit.limit),
+        "x-rate-limit-remaining": String(deviceRateLimit.remaining),
+        "x-rate-limit-reset-at": deviceRateLimit.resetAt,
         "x-request-id": requestId,
       },
     });

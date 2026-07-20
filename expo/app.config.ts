@@ -1,8 +1,12 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
-const appJson = require("./app.json") as { expo: ExpoConfig };
+const { launchInputs } = require("./release/launch-inputs.js") as {
+  launchInputs: {
+    iosBundleIdentifier: string;
+    sentryMode: "disabled" | "enabled";
+  };
+};
 
-const DEFAULT_DEV_IOS_BUNDLE_IDENTIFIER = "app.rork.guide-pup-vision-assist";
 const DEFAULT_DEV_ANDROID_PACKAGE = "dev.guidepup.visionassist";
 
 function withDevFallback(value: string | undefined, fallback: string) {
@@ -13,22 +17,23 @@ function withDevFallback(value: string | undefined, fallback: string) {
   return value;
 }
 
-export default function appConfig(_context: ConfigContext): ExpoConfig {
-  const config = appJson.expo;
+export default function appConfig({ config }: ConfigContext): ExpoConfig {
+  const resolvedConfig = config as ExpoConfig;
 
   return {
-    ...config,
+    ...resolvedConfig,
+    extra: {
+      ...resolvedConfig.extra,
+      launchSentryMode: launchInputs.sentryMode,
+    },
     ios: {
-      ...config.ios,
-      bundleIdentifier: withDevFallback(
-        process.env.IOS_BUNDLE_IDENTIFIER ?? config.ios?.bundleIdentifier,
-        DEFAULT_DEV_IOS_BUNDLE_IDENTIFIER,
-      ),
+      ...resolvedConfig.ios,
+      bundleIdentifier: launchInputs.iosBundleIdentifier,
     },
     android: {
-      ...config.android,
+      ...resolvedConfig.android,
       package: withDevFallback(
-        process.env.ANDROID_PACKAGE ?? config.android?.package,
+        process.env.ANDROID_PACKAGE ?? resolvedConfig.android?.package,
         DEFAULT_DEV_ANDROID_PACKAGE,
       ),
     },

@@ -24,6 +24,7 @@ export type DiagnosticsStopBargeInRecognitionPhase = "partial" | "final";
 export type DiagnosticsStopBargeInRecognizedCommand = "stop-guidance-partial" | "stop-guidance";
 export type DiagnosticsHapticOutcome = "none" | "success" | "failure";
 export type DiagnosticsAudioCueOutcome = "none" | "success" | "failure";
+export type DiagnosticsRecoveryState = "idle" | "recovering" | "interrupted" | "background" | "exhausted";
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -88,6 +89,7 @@ export interface DiagnosticsNavigationLoopSnapshot {
   lastCaptureLatencyMs?: number;
   lastError?: string;
   lastTotalGuidanceLoopLatencyMs?: number;
+  recoveryState?: DiagnosticsRecoveryState;
   sessionActive: boolean;
   updatedAt: number;
   voiceOverRunning?: boolean;
@@ -129,27 +131,33 @@ export interface DiagnosticsVoiceSnapshot {
   lastVoiceStateChangedAt?: number;
   listening: boolean;
   microphonePermission?: string;
+  recoveryState?: DiagnosticsRecoveryState;
   speaking: boolean;
   speechListeningOverlapActive: boolean;
   speechListeningOverlapCount: number;
   speechPermission?: string;
   unexpectedSpeechListeningOverlapCount: number;
   updatedAt: number;
+  voiceProcessingEnabled: boolean;
 }
 
 export interface DiagnosticsStopBargeInSnapshot {
+  analysisInactiveAfterStop: boolean | null;
   armedAt?: number;
   armedDuringSpeech: boolean;
   attemptedDuringSpeech: boolean;
   audioCueAttempted: boolean;
-  cutThrough: boolean;
+  cameraInactiveAfterStop: boolean | null;
+  cutThrough: boolean | null;
   guidancePaused: boolean;
   hapticAttempted: boolean;
   lastRecognizedAt?: number;
+  listeningStoppedAfterStop: boolean | null;
+  postStopObservedAt: number | null;
   recognizedCommand?: DiagnosticsStopBargeInRecognizedCommand;
   recognizedDuringSpeech: boolean;
   recognizedPhase?: DiagnosticsStopBargeInRecognitionPhase;
-  staleSpeechAfterStop: boolean;
+  staleSpeechAfterStop: boolean | null;
   updatedAt: number;
 }
 
@@ -225,14 +233,18 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
 });
 
 const createInitialStopBargeInSnapshot = (): DiagnosticsStopBargeInSnapshot => ({
+  analysisInactiveAfterStop: null,
   armedDuringSpeech: false,
   attemptedDuringSpeech: false,
   audioCueAttempted: false,
-  cutThrough: false,
+  cameraInactiveAfterStop: null,
+  cutThrough: null,
   guidancePaused: false,
   hapticAttempted: false,
+  listeningStoppedAfterStop: null,
+  postStopObservedAt: null,
   recognizedDuringSpeech: false,
-  staleSpeechAfterStop: false,
+  staleSpeechAfterStop: null,
   updatedAt: Date.now(),
 });
 
@@ -257,7 +269,6 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
     executionPath: "js-fallback",
     sessionActive: false,
     updatedAt: Date.now(),
-    voiceOverRunning: false,
   },
   recentAnalyzeEvents: [],
   runtime: createInitialRuntime(),
@@ -275,6 +286,7 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
     speechListeningOverlapCount: 0,
     unexpectedSpeechListeningOverlapCount: 0,
     updatedAt: Date.now(),
+    voiceProcessingEnabled: false,
   },
 });
 
@@ -487,6 +499,7 @@ export function recordNavigationLoopSnapshot(input: {
   lastCaptureLatencyMs?: number;
   lastError?: string | null;
   lastTotalGuidanceLoopLatencyMs?: number;
+  recoveryState?: DiagnosticsRecoveryState;
   sessionActive?: boolean;
   voiceOverRunning?: boolean;
 }) {
@@ -501,6 +514,7 @@ export function recordNavigationLoopSnapshot(input: {
         input.lastError === undefined ? current.navigationLoop.lastError : sanitizeMessage(input.lastError ?? undefined, 120),
       lastTotalGuidanceLoopLatencyMs:
         input.lastTotalGuidanceLoopLatencyMs ?? current.navigationLoop.lastTotalGuidanceLoopLatencyMs,
+      recoveryState: input.recoveryState ?? current.navigationLoop.recoveryState,
       sessionActive: input.sessionActive ?? current.navigationLoop.sessionActive,
       updatedAt: Date.now(),
       voiceOverRunning: input.voiceOverRunning ?? current.navigationLoop.voiceOverRunning,
@@ -575,8 +589,10 @@ export function recordVoiceSnapshot(input: {
   lastVoiceStateChangedAt?: number;
   listening?: boolean;
   microphonePermission?: string;
+  recoveryState?: DiagnosticsRecoveryState;
   speaking?: boolean;
   speechPermission?: string;
+  voiceProcessingEnabled?: boolean;
 }) {
   const now = Date.now();
   const hasVoiceStateChange = input.listening !== undefined || input.speaking !== undefined;
@@ -612,6 +628,7 @@ export function recordVoiceSnapshot(input: {
         input.lastVoiceStateChangedAt ?? (hasVoiceStateChange ? now : current.voice.lastVoiceStateChangedAt),
       listening: nextListening,
       microphonePermission: input.microphonePermission ?? current.voice.microphonePermission,
+      recoveryState: input.recoveryState ?? current.voice.recoveryState,
       speaking: nextSpeaking,
       speechListeningOverlapActive: nextOverlapActive,
       speechListeningOverlapCount:
@@ -621,6 +638,7 @@ export function recordVoiceSnapshot(input: {
         current.voice.unexpectedSpeechListeningOverlapCount
         + (isNewOverlap && nextOverlapReason === "unexpected" ? 1 : 0),
       updatedAt: now,
+      voiceProcessingEnabled: input.voiceProcessingEnabled ?? current.voice.voiceProcessingEnabled,
     },
     };
   });
@@ -633,18 +651,37 @@ export function recordStopBargeInSnapshot(input: Partial<Omit<DiagnosticsStopBar
     ...current,
     stopBargeIn: {
       ...current.stopBargeIn,
+      analysisInactiveAfterStop:
+        input.analysisInactiveAfterStop !== undefined
+          ? input.analysisInactiveAfterStop
+          : current.stopBargeIn.analysisInactiveAfterStop,
       armedAt: input.armedAt ?? current.stopBargeIn.armedAt,
       armedDuringSpeech: input.armedDuringSpeech ?? current.stopBargeIn.armedDuringSpeech,
       attemptedDuringSpeech: input.attemptedDuringSpeech ?? current.stopBargeIn.attemptedDuringSpeech,
       audioCueAttempted: input.audioCueAttempted ?? current.stopBargeIn.audioCueAttempted,
-      cutThrough: input.cutThrough ?? current.stopBargeIn.cutThrough,
+      cameraInactiveAfterStop:
+        input.cameraInactiveAfterStop !== undefined
+          ? input.cameraInactiveAfterStop
+          : current.stopBargeIn.cameraInactiveAfterStop,
+      cutThrough: input.cutThrough !== undefined ? input.cutThrough : current.stopBargeIn.cutThrough,
       guidancePaused: input.guidancePaused ?? current.stopBargeIn.guidancePaused,
       hapticAttempted: input.hapticAttempted ?? current.stopBargeIn.hapticAttempted,
       lastRecognizedAt: input.lastRecognizedAt ?? current.stopBargeIn.lastRecognizedAt,
+      listeningStoppedAfterStop:
+        input.listeningStoppedAfterStop !== undefined
+          ? input.listeningStoppedAfterStop
+          : current.stopBargeIn.listeningStoppedAfterStop,
+      postStopObservedAt:
+        input.postStopObservedAt !== undefined
+          ? input.postStopObservedAt
+          : current.stopBargeIn.postStopObservedAt,
       recognizedCommand: input.recognizedCommand ?? current.stopBargeIn.recognizedCommand,
       recognizedDuringSpeech: input.recognizedDuringSpeech ?? current.stopBargeIn.recognizedDuringSpeech,
       recognizedPhase: input.recognizedPhase ?? current.stopBargeIn.recognizedPhase,
-      staleSpeechAfterStop: input.staleSpeechAfterStop ?? current.stopBargeIn.staleSpeechAfterStop,
+      staleSpeechAfterStop:
+        input.staleSpeechAfterStop !== undefined
+          ? input.staleSpeechAfterStop
+          : current.stopBargeIn.staleSpeechAfterStop,
       updatedAt: now,
     },
   }));
@@ -861,9 +898,13 @@ function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
     },
     {
       ...baseStep("stop-guidance"),
-      stopCutThrough: input.stopBargeIn.cutThrough
+      stopCutThrough: input.stopBargeIn.cutThrough === true
         && input.stopBargeIn.recognizedDuringSpeech
-        && input.stopBargeIn.recognizedPhase === "partial",
+        && input.stopBargeIn.recognizedPhase === "partial"
+        && input.stopBargeIn.analysisInactiveAfterStop === true
+        && input.stopBargeIn.cameraInactiveAfterStop === true
+        && input.stopBargeIn.listeningStoppedAfterStop === true
+        && input.stopBargeIn.staleSpeechAfterStop === false,
     },
   ];
 }
@@ -883,18 +924,23 @@ export function buildNoScreenSmokeEvidenceDraft(
     hapticsEnabled: options.settings?.hapticsEnabled ?? true,
     speechRate: options.settings?.speechRate || "normal",
   };
-  const stopBargeInConfirmed = input.stopBargeIn.cutThrough
+  const stopBargeInConfirmed = input.stopBargeIn.cutThrough === true
     && input.stopBargeIn.recognizedDuringSpeech
-    && input.stopBargeIn.recognizedPhase === "partial";
+    && input.stopBargeIn.recognizedPhase === "partial"
+    && input.stopBargeIn.analysisInactiveAfterStop === true
+    && input.stopBargeIn.cameraInactiveAfterStop === true
+    && input.stopBargeIn.listeningStoppedAfterStop === true
+    && input.stopBargeIn.staleSpeechAfterStop === false
+    && typeof input.stopBargeIn.postStopObservedAt === "number";
 
   return {
     artifactVersion: 1,
     assistiveTech: {
       audioCuesAudible: false,
       hapticsFelt: false,
-      speechInputConfirmed: input.voice.microphonePermission === "granted"
-        && input.voice.speechPermission === "granted",
-      spokenOutputConfirmed: input.voice.available,
+      speechInputConfirmed: false,
+      spokenOutputConfirmed: false,
+      voiceProcessingEnabled: input.voice.voiceProcessingEnabled,
       voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
     },
     backendSmoke: {
@@ -962,6 +1008,7 @@ export function buildNoScreenSmokeEvidenceDraft(
           : "FAIL",
       stopBargeInConfirmed,
       unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
+      voiceProcessingEnabled: input.voice.voiceProcessingEnabled,
       voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
     },
     generatedAt,
@@ -1004,13 +1051,17 @@ export function buildNoScreenSmokeEvidenceDraft(
       restoredDefaultsAfterValidation: false,
     },
     stopBargeIn: {
+      analysisInactiveAfterStop: input.stopBargeIn.analysisInactiveAfterStop,
       armedDuringSpeech: input.stopBargeIn.armedDuringSpeech,
       attemptedDuringSpeech: input.stopBargeIn.attemptedDuringSpeech,
       audioCueAttempted: input.stopBargeIn.audioCueAttempted,
+      cameraInactiveAfterStop: input.stopBargeIn.cameraInactiveAfterStop,
       cutThrough: input.stopBargeIn.cutThrough,
       guidancePaused: input.stopBargeIn.guidancePaused,
       hapticAttempted: input.stopBargeIn.hapticAttempted,
       lastSpeechListeningOverlapReason: input.voice.lastSpeechListeningOverlapReason || "",
+      listeningStoppedAfterStop: input.stopBargeIn.listeningStoppedAfterStop,
+      postStopObservedAt: input.stopBargeIn.postStopObservedAt,
       recognizedCommand: input.stopBargeIn.recognizedCommand || "",
       recognizedDuringSpeech: input.stopBargeIn.recognizedDuringSpeech,
       recognizedPhase: input.stopBargeIn.recognizedPhase || "",

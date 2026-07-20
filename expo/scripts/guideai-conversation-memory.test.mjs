@@ -8,6 +8,8 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const sourcePath = fileURLToPath(new URL("../src/logic/GuideAI.ts", import.meta.url));
 const source = readFileSync(sourcePath, "utf8");
+const runtimeSafetySourcePath = fileURLToPath(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+const runtimeSafetySource = readFileSync(runtimeSafetySourcePath, "utf8");
 
 function analysis(overrides) {
   return {
@@ -16,7 +18,7 @@ function analysis(overrides) {
     fallbackReason: null,
     hazardLevel: "none",
     latencyMs: 10,
-    lighting: "good",
+    lighting: "normal",
     message: "Continue forward.",
     model: "test-model",
     obstacle: false,
@@ -38,6 +40,22 @@ function loadGuideAI(responses) {
   });
 
   const module = { exports: {} };
+  const runtimeSafetyModule = { exports: {} };
+  const compiledRuntimeSafety = ts.transpileModule(runtimeSafetySource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  vm.runInNewContext(compiledRuntimeSafety.outputText, {
+    AbortController,
+    Date,
+    Error,
+    exports: runtimeSafetyModule.exports,
+    module: runtimeSafetyModule,
+  }, {
+    filename: runtimeSafetySourcePath,
+  });
   const VisionAI = {
     analyzeFrame: async (_frame, options) => {
       const next = responses.shift();
@@ -56,6 +74,9 @@ function loadGuideAI(responses) {
       if (specifier === "./VisionAI") {
         return { VisionAI };
       }
+      if (specifier === "../lib/runtimeSafety") {
+        return runtimeSafetyModule.exports;
+      }
       return require(specifier);
     },
   }, {
@@ -65,13 +86,15 @@ function loadGuideAI(responses) {
   return module.exports.GuideAI;
 }
 
-const frame = {
-  base64: "test",
-  height: 1,
-  source: "native-core",
-  timestampMs: 1,
-  width: 1,
-};
+function freshFrame() {
+  return {
+    base64: "test",
+    height: 1,
+    source: "native-core",
+    timestampMs: Date.now(),
+    width: 1,
+  };
+}
 
 {
   const optionsSeen = [];
@@ -85,36 +108,58 @@ const frame = {
       captureOptions: (options) => optionsSeen.push(options),
       success: true,
       analysis: analysis({
-        confidence: 0.99,
+        confidence: 0.2,
         direction: "turn-left",
-        message: "Scene has a doorway on the left.",
+        message: "Cloud says turn left now.",
         sceneDescription: "A doorway is on the left.",
       }),
       timestamp: 2,
     },
+  ]);
+
+  assert.equal((await GuideAI.analyzeWithVision(freshFrame())).direction, "forward");
+  const sceneAnswer = await GuideAI.analyzeWithVision(freshFrame(), {
+    interactionMode: "scene-query",
+  });
+  assert.equal(sceneAnswer.direction, "stop", "Low-confidence scene movement must become a deterministic STOP.");
+  assert.equal(sceneAnswer.fallbackReason, "ios-low-confidence");
+  assert.equal(sceneAnswer.message, "Stop. Guide Pup needs a clearer view.");
+  assert.equal(sceneAnswer.confidence, 0.2, "Cloud confidence must remain literal.");
+  assert.deepEqual(
+    optionsSeen.map((options) => ({
+      interactionMode: options?.interactionMode,
+      updateNavigationMemory: options?.updateNavigationMemory,
+    })),
+    [{ interactionMode: "scene-query", updateNavigationMemory: undefined }],
+    "Conversation-lane mode must reach VisionAI without relying on an auxiliary memory flag.",
+  );
+  assert.equal(
+    (await GuideAI.getNextDirection({ headingVector: { x: -0.1, y: 0 } }, null)).direction,
+    "forward",
+    "Conversation-lane scene answers must not bias the separate legacy guidance smoothing path.",
+  );
+}
+
+{
+  const GuideAI = loadGuideAI([
     {
       success: true,
-      analysis: analysis({ confidence: 0.7, direction: "forward", message: "Continue forward." }),
-      timestamp: 3,
+      analysis: analysis({ confidence: 0.95, direction: "forward", message: "Cloud forward." }),
+      timestamp: 1,
+    },
+    {
+      success: true,
+      analysis: analysis({ confidence: 0.1, direction: "turn-right", message: "Cloud right." }),
+      timestamp: 2,
     },
   ]);
 
-  assert.equal((await GuideAI.analyzeWithVision(frame)).direction, "forward");
-  assert.equal(
-    (await GuideAI.analyzeWithVision(frame, { updateNavigationMemory: false })).direction,
-    "turn-left",
-    "Conversation-lane answers may speak their own scene direction.",
-  );
-  assert.deepEqual(
-    optionsSeen.map((options) => options?.updateNavigationMemory),
-    [false],
-    "Conversation-lane calls must opt out of navigation memory updates.",
-  );
-  assert.equal(
-    (await GuideAI.analyzeWithVision(frame)).direction,
-    "forward",
-    "Conversation-lane scene answers must not bias the next guidance smoothing decision.",
-  );
+  assert.equal((await GuideAI.analyzeWithVision(freshFrame())).direction, "forward");
+  const changedGuidance = await GuideAI.analyzeWithVision(freshFrame());
+  assert.equal(changedGuidance.direction, "stop", "Unsafe low-confidence movement must not actuate.");
+  assert.equal(changedGuidance.message, "Stop. Guide Pup needs a clearer view.");
+  assert.equal(changedGuidance.fallbackReason, "ios-low-confidence");
+  assert.equal(changedGuidance.confidence, 0.1, "Consecutive cloud confidence must remain literal.");
 }
 
 {
@@ -130,21 +175,16 @@ const frame = {
       analysis: null,
       timestamp: 2,
     },
-    {
-      success: true,
-      analysis: analysis({ confidence: 0.7, direction: "turn-left", message: "Turn left." }),
-      timestamp: 3,
-    },
   ]);
 
-  assert.equal((await GuideAI.analyzeWithVision(frame)).direction, "forward");
+  assert.equal((await GuideAI.analyzeWithVision(freshFrame())).direction, "forward");
   assert.equal(
-    (await GuideAI.analyzeWithVision(frame, { updateNavigationMemory: false })).direction,
+    (await GuideAI.analyzeWithVision(freshFrame(), { interactionMode: "scene-query" })).direction,
     "stop",
     "Conversation-lane failures still speak a safe stop fallback.",
   );
   assert.equal(
-    (await GuideAI.analyzeWithVision(frame)).direction,
+    (await GuideAI.getNextDirection({ headingVector: { x: -0.1, y: 0 } }, null)).direction,
     "forward",
     "Conversation-lane failures must not reset guidance smoothing memory.",
   );

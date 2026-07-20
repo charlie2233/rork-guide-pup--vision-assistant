@@ -3,78 +3,81 @@
 Date:
 Environment:
 Operator:
+Artifact version: 2
 
-## Target URLs
+## Provenance and freshness
 
-- Public site:
-- Staging API:
+- Worker deployment ID:
+- Worker version ID:
+- Worker version created at:
+- source Git revision:
+- evidence expires at:
+- maximum age seconds: 86400
 
 ## Worker smoke
 
+- API URL:
 - `GET /health`
   - status:
-  - request id:
+  - sanitized request ID:
+  - provider/model:
+  - prompt version:
   - structured output mode:
-  - notes:
 - `POST /v1/device/bootstrap`
   - status:
-  - request id:
-  - device id suffix:
-  - notes:
-- `POST /v1/vision/analyze`
-  - status:
-  - request id:
-  - execution path:
-  - provider:
-  - model:
-  - prompt version:
-  - structured output valid:
-  - structured output missing fields:
-  - direction:
-  - hazard level:
-  - obstacle:
-  - lighting:
-  - surface type:
-  - walkability:
-  - confidence:
-  - scene description:
-  - fallback reason:
-  - spoken message:
-  - notes:
+  - sanitized request ID:
+  - device ID suffix only:
 
-## Analyze request envelope
+## Explicit analyze lanes
 
-- sampled frame:
-- image included:
-- app version:
-- session id:
-- frame id:
-- frame summary:
-- timestamp ms:
-- native path:
-- platform:
-- detail:
-- dimensions:
-- capture heuristics:
-- prior guidance:
+Record both lanes. Request IDs must be sanitized and distinct.
+
+### guidance
+
+- `interactionMode`: `guidance`
+- status/request ID:
+- provider/model/prompt version:
+- execution path:
+- structured output valid:
+- direction/hazard/obstacle/walkability:
+- lighting/surface/confidence:
+- scene description/message/fallback reason:
+- sampled-frame envelope valid:
+
+### scene-query
+
+- `interactionMode`: `scene-query`
+- status/request ID:
+- provider/model/prompt version:
+- execution path:
+- structured output valid:
+- direction/hazard/obstacle/walkability:
+- lighting/surface/confidence:
+- scene description/message/fallback reason:
+- sampled-frame envelope valid:
 
 ## Launch contract
 
 - provider backed:
-- launch contract valid:
-- structured output valid:
+- dual-lane evidence present:
+- explicit interaction modes valid:
+- distinct analyze request IDs:
+- structured outputs valid:
+- safety contracts valid:
 - strict Structured Outputs present:
-- sampled-frame envelope valid:
+- sampled-frame envelopes valid:
 - runtime controls present:
+- provenance valid:
+- freshness bounded:
+- launch contract valid:
 
-## Eval harness
+## Privacy check
 
-- manifest:
-- benchmark enabled:
-- stop recall:
-- false forward count:
-- average latency:
+- no raw image/audio:
+- no full device IDs:
+- no session tokens/provider keys/credentials:
+- no signed URLs:
 
 ## Risks / follow-ups
 
-- 
+-

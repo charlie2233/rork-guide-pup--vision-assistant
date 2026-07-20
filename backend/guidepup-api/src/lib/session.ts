@@ -1,4 +1,8 @@
 const DEV_FALLBACK_SIGNING_SECRET = "guidepup-local-dev-secret-change-me";
+const BETA_SESSION_TTL_SECONDS = 60 * 60;
+const MIN_BETA_SESSION_TTL_SECONDS = 15 * 60;
+const MAX_BETA_SESSION_TTL_SECONDS = 4 * 60 * 60;
+const MAX_DEVELOPMENT_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 type SessionPayload = {
   deviceId: string;
@@ -7,21 +11,28 @@ type SessionPayload = {
   v: 1;
 };
 
-function getSessionTtlSeconds(env: Env) {
-  const parsed = Number.parseInt(env.SESSION_TTL_SECONDS || "86400", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
+export function getSessionTtlSeconds(env: Env) {
+  const environment = env.ENVIRONMENT || "development";
+  const isBetaEnvironment = environment === "staging" || environment === "production";
+  const fallback = isBetaEnvironment ? BETA_SESSION_TTL_SECONDS : 24 * 60 * 60;
+  const maximum = isBetaEnvironment ? MAX_BETA_SESSION_TTL_SECONDS : MAX_DEVELOPMENT_SESSION_TTL_SECONDS;
+  const minimum = isBetaEnvironment ? MIN_BETA_SESSION_TTL_SECONDS : 5 * 60;
+  const parsed = Number.parseInt(env.SESSION_TTL_SECONDS || "", 10);
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
-function getSigningSecret(env: Env) {
-  if (env.BOOTSTRAP_SIGNING_SECRET) {
-    return env.BOOTSTRAP_SIGNING_SECRET;
+export function getBootstrapSigningSecret(env: Env) {
+  const configured = env.BOOTSTRAP_SIGNING_SECRET?.trim();
+  if (configured) {
+    return configured;
   }
 
-  if ((env.ENVIRONMENT || "development") !== "production") {
+  if ((env.ENVIRONMENT || "development") === "development") {
     return DEV_FALLBACK_SIGNING_SECRET;
   }
 
-  throw new Error("BOOTSTRAP_SIGNING_SECRET is required in production.");
+  throw new Error("BOOTSTRAP_SIGNING_SECRET is required outside development.");
 }
 
 function encodeBase64Url(bytes: Uint8Array) {
@@ -48,7 +59,7 @@ function decodeBase64Url(value: string) {
 async function importSigningKey(env: Env) {
   return crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(getSigningSecret(env)),
+    new TextEncoder().encode(getBootstrapSigningSecret(env)),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],

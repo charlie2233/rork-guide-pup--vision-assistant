@@ -118,9 +118,9 @@ for (const transcript of stopBargeInRejected) {
 
 assert.equal(normalizeVoiceTranscript(" Guide Pup, STOP guidance! "), "guide pup stop guidance");
 assert.equal(canKeepListeningForStopBargeInDuringSpeech("Keep moving forward."), true);
-assert.equal(canKeepListeningForStopBargeInDuringSpeech("Safe stop active."), false);
-assert.equal(canKeepListeningForStopBargeInDuringSpeech("Guidance paused."), false);
-assert.equal(canKeepListeningForStopBargeInDuringSpeech("Say stop guidance any time."), false);
+assert.equal(canKeepListeningForStopBargeInDuringSpeech("Safe stop active."), true);
+assert.equal(canKeepListeningForStopBargeInDuringSpeech("Guidance paused."), true);
+assert.equal(canKeepListeningForStopBargeInDuringSpeech("Say stop guidance any time."), true);
 assert.equal(
   module.exports.isRecentDuplicateTranscript(
     "stop guidance",

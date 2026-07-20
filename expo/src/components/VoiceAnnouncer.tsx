@@ -39,22 +39,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     void (async () => {
       const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
-      const keepListeningDuringSpeech = Boolean(speechOptions?.keepListeningDuringSpeech)
-        && canKeepListeningForStopBargeInDuringSpeech(combinedMessage);
-      const shouldResumeListening = Boolean(voiceState?.listening);
-      const shouldPauseListening = shouldResumeListening && !keepListeningDuringSpeech;
-
-      if (shouldPauseListening) {
-        const stoppedState = await GuidePupVoiceControl.stopCommandSession().catch(() => null);
-        recordVoiceSnapshot({
-          listening: stoppedState?.listening ?? false,
-          speaking: stoppedState?.speaking ?? false,
-        });
+      if (sessionRef.current !== sessionId) {
+        return;
       }
+      const keepListeningDuringSpeech = Boolean(voiceState?.listening)
+        && canKeepListeningForStopBargeInDuringSpeech(combinedMessage);
 
+      if (sessionRef.current !== sessionId) {
+        return;
+      }
       setIsSpeaking(true);
       recordVoiceSnapshot({
-        listening: shouldPauseListening ? false : voiceState?.listening,
+        listening: voiceState?.listening,
         speaking: true,
         speechListeningOverlapReason: keepListeningDuringSpeech ? "stop-barge-in" : undefined,
       });
@@ -70,18 +66,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         locale: speechOptions?.locale,
         rate: speechOptions?.rate ?? getSpeechRateValue(),
       }).catch(() => undefined);
-
-      if (shouldPauseListening && sessionRef.current === sessionId) {
-        const resumedState = await GuidePupVoiceControl.startCommandSession({
-          partialResults: true,
-        }).catch(() => null);
-        if (resumedState) {
-          recordVoiceSnapshot({
-            listening: resumedState.listening,
-            speaking: resumedState.speaking,
-          });
-        }
-      }
     })().finally(() => {
       if (sessionRef.current === sessionId) {
         setIsSpeaking(false);
@@ -113,13 +97,13 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [flushQueue]);
 
   const stop = useCallback(() => {
+    sessionRef.current += 1; // invalidate queued and in-flight speech before native cancellation
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
     queueRef.current = [];
     void GuidePupVoiceControl.stopSpeaking();
-    sessionRef.current += 1; // invalidate any in-flight callbacks
     setIsSpeaking(false);
     recordVoiceSnapshot({
       speaking: false,

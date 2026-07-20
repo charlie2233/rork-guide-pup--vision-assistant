@@ -9,12 +9,13 @@ Guide Pup is an assistive navigation app for blind and low-vision users. It anal
 ## What Reviewers Should Know
 
 - The shipping path uses camera input for scene analysis.
-- Optional hands-free voice commands request microphone and speech-recognition access.
+- Optional hands-free voice commands request microphone and Apple speech-recognition access. On-device recognition is preferred when supported; Apple service processing may otherwise occur.
 - Spoken commands are parsed into a bounded command lane for actions such as start, stop, repeat, status, and settings changes.
 - Camera frames are compressed and sent to the Guide Pup backend.
-- The backend may route requests through third-party AI providers.
+- The Cloudflare backend routes sampled compressed camera frames to an OpenAI vision provider for structured scene analysis.
 - Raw voice audio is not intentionally logged or sent to model providers by Guide Pup.
-- The app uses anonymous device/session bootstrap instead of user sign-in.
+- Sanitized Cloudflare request, performance, and quality logs may persist for up to 7 days. OpenAI default abuse-monitoring retention may be up to 30 days unless approved retention controls apply.
+- The app uses an installation-scoped identifier and session bootstrap instead of user sign-in.
 - App Review sign-in / demo account required should be set to `No` / `false`.
 - Do not provide demo credentials; there is no account flow in the shipping app.
 - The app is designed to fail safe and return `STOP` when the scene is unclear, the backend is unavailable, or the response is invalid.
@@ -28,7 +29,11 @@ Guide Pup uses the camera to analyze the scene ahead for assistive navigation. F
 
 If you need to explain the microphone and speech-recognition permissions, use:
 
-Guide Pup uses the microphone and iOS speech recognition for optional hands-free commands. Spoken commands are parsed into a bounded command set such as start guidance, stop guidance, repeat, status, and settings changes. Guide Pup does not intentionally log raw voice audio or send it to AI providers.
+Guide Pup uses the microphone and Apple speech recognition for optional hands-free commands. On-device recognition is preferred when supported; Apple service processing may otherwise occur. Spoken commands are limited to a deterministic command set such as start guidance, stop guidance, repeat, status, and settings changes. Guide Pup does not intentionally log raw voice audio or send voice audio to its vision provider.
+
+## Exact App Review Notes
+
+Use the current `appReviewNotes` value from `expo/release/launch-inputs.js`. It discloses no sign-in, sampled-frame processing through Cloudflare and OpenAI, Apple Speech fallback, deterministic command ownership, bounded sanitized-log retention, and conservative STOP behavior. `expo/store.config.js` sends that exact value to App Store Connect.
 
 If you need to explain the safety model, use:
 
@@ -41,4 +46,4 @@ Guide Pup is assistive guidance, not guaranteed hazard detection or emergency re
 - Marketing URL: `https://guidepup-site.pages.dev`
 - Safety disclaimer: see [Launch Inputs](./launch-inputs.md)
 - If a reviewer asks for email support, use the support email in [Launch Inputs](./launch-inputs.md).
-- App Review contact name, email, and phone must be filled in [Launch Inputs](./launch-inputs.md) before metadata push or submission.
+- The checked-in App Review contact must be reverified in App Store Connect after the candidate build is attached and before submission.

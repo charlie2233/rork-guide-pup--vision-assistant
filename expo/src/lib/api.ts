@@ -10,6 +10,12 @@ import {
   sanitizeMessage,
 } from "./diagnostics";
 import { clearDeviceSession, ensureDeviceSession } from "./device";
+import {
+  assertFreshFrameForUpload,
+  createAbortError,
+  isAbortError,
+  throwIfAborted,
+} from "./runtimeSafety";
 import { addBreadcrumb, setSentryTag } from "./sentry";
 
 export const VisionAnalyzeResponseSchema = z.object({
@@ -54,6 +60,8 @@ export type HealthCheckResponse = z.infer<typeof HealthCheckResponseSchema> & {
   latencyMs: number;
 };
 
+export type VisionInteractionMode = "guidance" | "scene-query";
+
 type GuidePupClientPlatform = "ios" | "android" | "web" | "unknown";
 
 export type GuidePupCaptureHeuristics = {
@@ -73,6 +81,7 @@ export type AnalyzeVisionPayload = {
   frameSummary?: string;
   hasImage?: boolean;
   imageBase64: string;
+  interactionMode: VisionInteractionMode;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
   nativePath?: "native-core" | "js-fallback";
   sampledFrame?: boolean;
@@ -83,17 +92,40 @@ export type AnalyzeVisionPayload = {
   timestampMs?: number;
 };
 
-async function fetchWithTimeout(url: string, init: RequestInit) {
+export type AnalyzeVisionOptions = {
+  allowRetry?: boolean;
+  minimumCapturedAtMs?: number;
+  signal?: AbortSignal;
+};
+
+async function fetchWithTimeout(url: string, init: RequestInit, externalSignal?: AbortSignal) {
+  throwIfAborted(externalSignal);
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), appConfig.apiTimeoutMs);
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
+  externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, appConfig.apiTimeoutMs);
 
   try {
     return await fetch(url, {
       ...init,
       signal: controller.signal,
     });
+  } catch (error) {
+    if (externalSignal?.aborted) {
+      throw createAbortError();
+    }
+    if (timedOut) {
+      throw new Error("Guide Pup API request timed out.");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
+    externalSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -336,7 +368,18 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
   }
 }
 
-export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = true): Promise<VisionAnalyzeResponse> {
+export async function analyzeVision(
+  payload: AnalyzeVisionPayload,
+  options: AnalyzeVisionOptions = {},
+): Promise<VisionAnalyzeResponse> {
+  const { allowRetry = true, minimumCapturedAtMs, signal } = options;
+  throwIfAborted(signal);
+  assertFreshFrameForUpload({
+    capturedAtMs: payload.timestampMs,
+    minimumCapturedAtMs,
+    signal,
+  });
+
   const startedAt = Date.now();
   const telemetryEnvelope = buildAnalyzeTelemetryEnvelope(payload);
   let analyzeTelemetryRecorded = false;
@@ -346,6 +389,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
     category: "api.analyze",
     data: {
       detail: payload.detail || "low",
+      interactionMode: payload.interactionMode,
       sourceHeight: payload.sourceHeight,
       sourceWidth: payload.sourceWidth,
     },
@@ -358,6 +402,9 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
   try {
     session = await ensureDeviceSession();
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
     const message = getErrorMessage(error);
     recordAnalyzeTelemetry(classifyAnalyzeError(message), {
       ...telemetryEnvelope,
@@ -377,6 +424,12 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
     });
     throw error;
   }
+  throwIfAborted(signal);
+  assertFreshFrameForUpload({
+    capturedAtMs: payload.timestampMs,
+    minimumCapturedAtMs,
+    signal,
+  });
 
   try {
     const response = await fetchWithTimeout(`${requireApiBaseUrl()}/v1/vision/analyze`, {
@@ -394,6 +447,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         frameSummary: payload.frameSummary,
         hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
         imageBase64: payload.imageBase64,
+        interactionMode: payload.interactionMode,
         mimeType: payload.mimeType,
         nativePath: payload.nativePath,
         platform: getPlatform(),
@@ -404,9 +458,11 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         sourceWidth: payload.sourceWidth,
         timestampMs: payload.timestampMs,
       }),
-    });
+    }, signal);
 
+    throwIfAborted(signal);
     const rawText = await response.text();
+    throwIfAborted(signal);
     const rawJson = safeParseJson(rawText);
     const latencyMs = Date.now() - startedAt;
     requestId = response.headers.get("x-request-id")?.trim() || undefined;
@@ -431,7 +487,12 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
         type: "http",
       });
       await clearDeviceSession();
-      return analyzeVision(payload, false);
+      throwIfAborted(signal);
+      return analyzeVision(payload, {
+        allowRetry: false,
+        minimumCapturedAtMs,
+        signal,
+      });
     }
 
     if (!response.ok) {
@@ -475,6 +536,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
           message: "Vision analyze returned safe fallback response",
           type: "http",
         });
+        throwIfAborted(signal);
         return safeResponse;
       }
 
@@ -554,6 +616,7 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       category: "api.analyze",
       data: {
         direction: result.direction,
+        interactionMode: payload.interactionMode,
         latencyMs,
         requestId,
         provider: result.provider,
@@ -562,8 +625,12 @@ export async function analyzeVision(payload: AnalyzeVisionPayload, allowRetry = 
       message: "Vision analyze succeeded",
       type: "http",
     });
+    throwIfAborted(signal);
     return result;
   } catch (error) {
+    if (isAbortError(error) && signal?.aborted) {
+      throw createAbortError();
+    }
     const message = getErrorMessage(error);
     const outcome = message.toLowerCase().includes("timed out") || message.toLowerCase().includes("abort") ? "timeout" : "failure";
 

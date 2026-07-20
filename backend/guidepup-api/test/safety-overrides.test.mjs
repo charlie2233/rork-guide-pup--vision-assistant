@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 import ts from "typescript";
+import { getSafetyStopReason, requiresSafetyStop } from "../eval/safety-policy.mjs";
 
 const require = createRequire(import.meta.url);
 const moduleCache = new Map();
@@ -41,6 +42,9 @@ function loadTsModule(relativePathOrUrl) {
 
   const localRequire = (specifier) => {
     if (specifier.startsWith(".")) {
+      if (specifier.endsWith("/eval/safety-policy.mjs")) {
+        return { getSafetyStopReason, requiresSafetyStop };
+      }
       return loadTsModule(resolveTsUrl(specifier, new URL("./", sourceUrl)));
     }
     return require(specifier);
@@ -101,6 +105,13 @@ test("low-visibility provider guidance is forced to safe stop", () => {
 test("contradictory provider safety fields always replace forward or turn speech with STOP", () => {
   const cases = [
     {
+      name: "provider STOP with unsafe forward speech",
+      overrides: {
+        recommendedDirection: "stop",
+        shortMessage: "Continue forward.",
+      },
+    },
+    {
       name: "very-close obstacle",
       overrides: {
         obstacles: [{ confidence: 0.92, distance: "very-close", position: "center", type: "chair" }],
@@ -142,6 +153,22 @@ test("contradictory provider safety fields always replace forward or turn speech
       name: "low confidence",
       overrides: { confidence: 0.6 },
     },
+    ...[
+      "oncoming vehicle",
+      "moving bike",
+      "wet floor",
+      "blocked sidewalk",
+      "unknown overhead hazard",
+    ].map((hazard) => ({
+      name: `critical hazard: ${hazard}`,
+      overrides: {
+        criticalHazards: [hazard],
+        hazardLevel: "none",
+        pathClear: true,
+        recommendedDirection: "forward",
+        shortMessage: "Continue forward.",
+      },
+    })),
   ];
 
   for (const { name, overrides } of cases) {
@@ -196,4 +223,43 @@ test("a low, non-immediate hazard never produces a STOP haptic contradiction", (
   assert.equal(normalized.hazardLevel, "low");
   assert.equal(normalized.message, "Continue forward.");
   assert.equal(normalized.obstacle, false);
+});
+
+test("shared safety policy deterministically covers every runtime STOP cause", () => {
+  const clear = {
+    confidence: 0.9,
+    direction: "forward",
+    fallbackReason: null,
+    hasCloseObstacle: false,
+    hazardLevel: "none",
+    lighting: "normal",
+    obstacle: false,
+    pathClear: true,
+    safetyTags: [],
+    walkability: "clear",
+  };
+  const cases = [
+    ["fallback", { fallbackReason: "provider-error" }],
+    ["close-obstacle", { hasCloseObstacle: true }],
+    ["path-not-clear", { pathClear: false }],
+    ["high-hazard", { hazardLevel: "high" }],
+    ["medium-hazard", { hazardLevel: "medium" }],
+    ["uncertain-walkability", { walkability: "caution" }],
+    ["uncertain-walkability", { walkability: "uncertain" }],
+    ["low-visibility", { lighting: "dim" }],
+    ["low-visibility", { lighting: "dark" }],
+    ["low-visibility", { lighting: "unknown" }],
+    ["critical-hazard", { safetyTags: ["vehicle"] }],
+    ["low-confidence", { confidence: 0.649 }],
+    ["provider-stop", { direction: "stop" }],
+    ["obstacle", { obstacle: true }],
+  ];
+
+  assert.equal(requiresSafetyStop(clear), false);
+  assert.equal(getSafetyStopReason(clear), null);
+  for (const [expectedReason, override] of cases) {
+    const input = { ...clear, ...override };
+    assert.equal(requiresSafetyStop(input), true, expectedReason);
+    assert.equal(getSafetyStopReason(input), expectedReason);
+  }
 });

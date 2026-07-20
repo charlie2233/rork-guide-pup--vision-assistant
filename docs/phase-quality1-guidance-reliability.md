@@ -5,6 +5,17 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `52e28d2`
 Contract-tightening continuation start: `bf3da45`
 
+## Current gate on 2026-07-19
+
+- The cloud contract now uses `gpt-5.6-sol` with strict Structured Outputs for direction, hazard level, obstacle, message, scene description, walkability, surface type, lighting, confidence, provider, model, prompt version, and fallback reason.
+- Guidance and `what do you see` are separate cloud interaction modes. The conversation lane can update repeat memory but cannot mutate deterministic navigation, settings, camera timing, STOP, haptics, VoiceOver, or guidance smoothing.
+- Sampled images and compact frame context are bounded; shipping-client provider calls remain prohibited. Backend redaction tests cover raw media, credentials, bearer values, signed URLs, local paths, and provider response bodies.
+- Backend privacy/runtime tests passed `50/50`, backend smoke/release tests passed `23/23`, and the full Expo scripted suite passed `93/93`.
+- The final build `4` arm64 Release simulator build and artifact inspection passed with the production Worker URL and privacy manifest present and provider-key/direct-OpenAI/Sentry-DSN patterns absent. This is not provider-backed live smoke or physical guidance-quality evidence.
+- Live staging/production deployment, strict provider-backed dual-lane smoke, a labeled live vision eval, and blind-user physical validation remain open. Local tests and dry-runs are not quality or launch proof for the deployed candidate.
+
+All later dated sections are retained as historical phase evidence. Their older model, authentication, and Worker-state statements are not current launch claims; the gate above is authoritative.
+
 ## Scope
 
 This phase improves guidance-reliability evidence without changing the app/backend ownership boundary:
@@ -80,7 +91,7 @@ Results: passed locally. The privacy test suite now includes low-visibility over
   - Make the client reject analyze responses that omit the launch-required structured fields.
   - Preserve explicit safe-stop metadata when local analysis is unavailable.
 - `backend/guidepup-api/src/providers/openai-compatible.ts`, `backend/guidepup-api/src/providers/index.ts`, `backend/guidepup-api/src/routes/health.ts`, and `backend/guidepup-api/wrangler.jsonc`
-  - Add bounded provider runtime controls: `OPENAI_MAX_COMPLETION_TOKENS=700`, `OPENAI_REQUEST_TIMEOUT_MS=12000`, `OPENAI_RETRY_COUNT=1`, and `OPENAI_RETRY_DELAY_MS=250`.
+  - Add bounded provider runtime controls: `OPENAI_MAX_COMPLETION_TOKENS=700`, `OPENAI_REQUEST_TIMEOUT_MS=8500`, `OPENAI_RETRY_COUNT=1`, and `OPENAI_RETRY_DELAY_MS=250`.
   - Clamp runtime values to safe ranges and retry only retryable provider failures (`408`, `429`, `5xx`, and request aborts).
   - Surface the configured values in `/health` provider summary without exposing provider secrets.
 - `backend/guidepup-api/test/provider-runtime-controls.test.mjs`, `expo/scripts/release-preflight.mjs`, and `expo/scripts/check-no-screen-smoke-contract.mjs`
@@ -283,3 +294,21 @@ Results:
 - Backend privacy/runtime/prompt tests passed: 9 tests.
 - `git diff --check` passed.
 - No live eval run was claimed, because the repository still lacks private local fixture images and Cloudflare auth/provider redeploy evidence is blocked in this shell.
+
+## 2026-07-18 guidance reliability continuation
+
+Changes prepared:
+
+- Added explicit guidance versus scene-query interaction modes across iOS and cloud, preserving the deterministic command lane and separate conversational memory.
+- Expanded compact sampled-frame context and required structured output for direction, hazard, obstacle, message, scene description, walkability, surface, lighting, confidence, provider/model/prompt version, and fallback reason.
+- Kept native camera/session timing, STOP, speech, haptics, VoiceOver, settings, diagnostics, and fallback ownership on iOS.
+- Bounded the JavaScript frame fallback to a 768-pixel longest edge, removed URIs from returned data, retried temporary-file cleanup, and exposed only generic path-free errors.
+- Added release-config adversarial tests that execute the actual Xcode environment order, exact Expo assignments, sourced `NODE_BINARY`, and canonical bundler wrapper.
+
+Evidence:
+
+- Expo scripted suite `42/42`, backend suite `17/17`, release hardening suite `10/10`, privacy/camera suite `8/8`, both typechecks, lint, and Expo Doctor `17/17` passed.
+- Independent privacy/security re-review returned PASS after path-redaction and policy-agreement fixes.
+- Worker dry-run bundles passed for all three environments, but no provider deployment, live eval, or current smoke request ID is claimed.
+- The exact Release simulator artifact built with `xcodebuild` exit `0`, installed, launched, and exposed named accessibility targets for onboarding, privacy, support, safety, Home, and Settings.
+- Simulator settings changes for speech rate, description detail, and haptics survived a stop/relaunch cycle. This is persistence/UI proof only; it does not prove physical haptics, audible speech, VoiceOver behavior, or camera guidance.

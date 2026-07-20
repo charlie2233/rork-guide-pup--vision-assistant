@@ -5,6 +5,15 @@ Branch: `codex/guidepup-credentialed-launch`
 Continuation start: `efa5e34`
 Latest continuation start: `b5c1c5e`
 
+## Current gate on 2026-07-19
+
+- The launch candidate is version `1.0.0`, build `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`.
+- Native voice startup now requires `.voiceChat` plus `AVAudioInputNode` voice processing, reports `voiceProcessingEnabled`, and fails closed if acoustic echo cancellation cannot be enabled. Explicit STOP is never discarded by text-based echo suppression.
+- Native command sessions use owner tokens. A stale successful or rejected start can clean up only its own native session and cannot stop a newer listener. Focused behavioral and contract coverage passed `29/29`.
+- The final build `4` arm64 Release simulator compile and artifact inspection passed, including bundle/version/build, privacy manifest, production backend URL, and client secret/direct-provider checks. This remains simulator evidence and does not attest speech, VoiceOver, camera, haptics, audio cues, or interruptions on the connected iPhone.
+- The current suffix-only readiness check is still `blocked`: the phone is paired and trusted, Developer Mode is enabled, and Xcode/xctrace can see it, but DDI services, the CoreDevice tunnel, and a USB/same-LAN execution path are unavailable in the latest snapshot.
+- No current `expo/release/no-screen-smoke.latest.json` exists. Physical speech input, confirmations, haptics, earcons, VoiceOver, interruption recovery, settings persistence, native camera capture, JS fallback, and STOP cut-through remain unvalidated for build `4`.
+
 ## Scope
 
 This phase tracks the real-iPhone no-screen validation gate. It does not replace hardware proof with simulator, static checks, or backend smoke.
@@ -99,7 +108,7 @@ Results:
 
 1. Keep the iPhone unlocked, on the same LAN, with Developer Mode enabled.
 2. Prefer USB for the first install/run if available; otherwise fix the CoreDevice tunnel until `devicectl device info details` returns complete information.
-3. Install a signed internal build once bundle ID, Apple Team ID, App Store Connect app ID, and Expo auth are configured.
+3. Install the exact signed build `4` candidate once the distribution archive is produced; direct Xcode upload does not require Expo authentication.
 4. Run `npm --prefix expo run check:ios-device -- --json` and copy the readiness fields only when it reports `deviceReadiness.result: "ready"`.
 5. Run the exact no-screen sequence, export diagnostics afterward, use the Diagnostics screen no-screen JSON draft, and write `expo/release/no-screen-smoke.latest.json` using `expo/docs/no-screen-smoke-evidence.example.json` as the shape.
 6. Run `npm --prefix expo run check:no-screen-evidence` before TestFlight preflight.
@@ -171,3 +180,23 @@ npm --prefix expo run check:no-screen-smoke
 ```
 
 Results: passed with 14 no-screen evidence tests, including the new wrong-order rejection. This is still schema/static validation only. It prevents weak evidence packets but does not replace a real iPhone no-screen run.
+
+## 2026-07-18 current hardware gate
+
+Commands:
+
+```bash
+npm --prefix expo run check:ios-device -- --json
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run check:no-screen-evidence
+xcrun devicectl list devices
+system_profiler SPUSBDataType
+```
+
+Results:
+
+- The static no-screen command contract passed, including the conversation-lane `what do you see` path and deterministic STOP/settings controls.
+- The paired iPhone is trusted and Developer Mode is enabled, but the latest readiness check remains `blocked`: DDI unavailable, tunnel disconnected, no USB or same-LAN execution path, and no Xcode runnable destination. `system_profiler SPUSBDataType` listed no iPhone, and only suffix identifiers were emitted.
+- `release/no-screen-smoke.latest.json` is absent, so no physical speech, confirmation, haptic, earcon, VoiceOver, interruption, settings-persistence, native-camera, or JS-fallback claim is made.
+- The required real sequence remains the launch blocker. Simulator or prior install/process-liveness evidence does not satisfy it.
+- The Release simulator artifact installed and launched, and Settings values survived a process restart. That narrows the remaining work but does not replace the hardware checks above.

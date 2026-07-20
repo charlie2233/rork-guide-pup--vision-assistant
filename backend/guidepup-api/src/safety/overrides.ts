@@ -1,4 +1,5 @@
 import { type VisionAnalyzeResponse, VisionAnalyzeResponseSchema } from "../schemas/vision";
+import { getSafetyStopReason } from "../../eval/safety-policy.mjs";
 
 type SafetyContext = {
   confidence: number;
@@ -8,8 +9,6 @@ type SafetyContext = {
   safetyTags: string[];
   walkability?: "clear" | "caution" | "uncertain";
 };
-
-const MIN_SAFE_CONFIDENCE = 0.65;
 
 function stopWithMessage(response: VisionAnalyzeResponse, message: string, fallbackReason: string) {
   return VisionAnalyzeResponseSchema.parse({
@@ -24,37 +23,40 @@ function stopWithMessage(response: VisionAnalyzeResponse, message: string, fallb
 }
 
 export function applySafetyOverrides(response: VisionAnalyzeResponse, context: SafetyContext) {
-  if (context.hasCloseObstacle) {
-    return stopWithMessage(response, "Stop. Obstacle is very close.", "close-obstacle");
-  }
+  const stopReason = getSafetyStopReason({
+    confidence: context.confidence,
+    direction: response.direction,
+    fallbackReason: response.fallbackReason,
+    hasCloseObstacle: context.hasCloseObstacle,
+    hazardLevel: response.hazardLevel,
+    lighting: context.lighting,
+    obstacle: response.obstacle,
+    pathClear: context.pathClear,
+    safetyTags: context.safetyTags,
+    walkability: context.walkability,
+  });
 
-  if (context.pathClear === false) {
-    return stopWithMessage(response, "Stop. Path is not clear.", "path-not-clear");
+  switch (stopReason) {
+    case "close-obstacle":
+    case "obstacle":
+      return stopWithMessage(response, "Stop. Obstacle is very close.", stopReason);
+    case "path-not-clear":
+      return stopWithMessage(response, "Stop. Path is not clear.", stopReason);
+    case "high-hazard":
+      return stopWithMessage(response, "Stop. Path looks unsafe.", stopReason);
+    case "medium-hazard":
+      return stopWithMessage(response, "Stop. Path may be unsafe.", stopReason);
+    case "uncertain-walkability":
+      return stopWithMessage(response, "Stop. Walkability is uncertain.", stopReason);
+    case "low-visibility":
+      return stopWithMessage(response, "Stop. Visibility is too low.", stopReason);
+    case "critical-hazard":
+      return stopWithMessage(response, "Stop. Hazard ahead.", stopReason);
+    case "fallback":
+    case "low-confidence":
+    case "provider-stop":
+      return stopWithMessage(response, "Stop. I need a clearer view.", stopReason);
+    default:
+      return response;
   }
-
-  if (response.hazardLevel === "high") {
-    return stopWithMessage(response, "Stop. Path looks unsafe.", "high-hazard");
-  }
-
-  if (response.hazardLevel === "medium") {
-    return stopWithMessage(response, "Stop. Path may be unsafe.", "medium-hazard");
-  }
-
-  if (context.walkability === "caution" || context.walkability === "uncertain") {
-    return stopWithMessage(response, "Stop. Walkability is uncertain.", "uncertain-walkability");
-  }
-
-  if (context.lighting === "dark" || context.lighting === "dim" || context.lighting === "unknown") {
-    return stopWithMessage(response, "Stop. Visibility is too low.", "low-visibility");
-  }
-
-  if (context.safetyTags.some((tag) => ["stairs", "curb", "drop-off", "uncertain-walkability"].includes(tag))) {
-    return stopWithMessage(response, "Stop. Hazard ahead.", "critical-hazard");
-  }
-
-  if (context.confidence < MIN_SAFE_CONFIDENCE) {
-    return stopWithMessage(response, "Stop. I need a clearer view.", "low-confidence");
-  }
-
-  return response;
 }

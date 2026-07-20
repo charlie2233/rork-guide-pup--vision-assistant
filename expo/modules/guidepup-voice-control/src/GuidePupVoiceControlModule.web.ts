@@ -12,6 +12,7 @@ const unavailableState: GuidePupVoiceControlState = {
   microphonePermission: "unsupported",
   speaking: false,
   speechPermission: "unsupported",
+  voiceProcessingEnabled: false,
 };
 
 export default {

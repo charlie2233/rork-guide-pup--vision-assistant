@@ -1,4 +1,5 @@
-import { type AnalyzeFrameInput, type AnalyzeFrameOptions, VisionAI, VisionAnalysis } from "./VisionAI";
+import { type AnalyzeFrameInput, type AnalyzeFrameOptions, VisionAI } from "./VisionAI";
+import { applyDeterministicVisionSafetyGuard } from "../lib/runtimeSafety";
 
 export interface GuideAIDirection {
   confidence?: number;
@@ -330,8 +331,10 @@ export const GuideAI = {
     frame: AnalyzeFrameInput,
     options?: AnalyzeFrameOptions,
   ): Promise<GuideAIDirection | null> {
+    const analysisStartedAtMs = Date.now();
     const result = await VisionAI.analyzeFrame(frame, options);
-    const updateNavigationMemory = options?.updateNavigationMemory !== false;
+    const updateNavigationMemory =
+      options?.interactionMode !== "scene-query" && options?.updateNavigationMemory !== false;
 
     if (!result.success || !result.analysis) {
       if (updateNavigationMemory) {
@@ -351,33 +354,27 @@ export const GuideAI = {
       };
     }
 
-    const analysis = result.analysis;
+    const analysis = applyDeterministicVisionSafetyGuard(result.analysis, {
+      analysisLatencyMs: Date.now() - analysisStartedAtMs,
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      recoveryGateActive: options?.recoveryGateActive,
+    });
 
-    const smoothed = updateNavigationMemory
-      ? smoothDirection(
-          analysis.direction,
-          analysis.confidence,
-          analysis.obstacle
-        )
-      : {
-          confidence: analysis.confidence,
-          direction: analysis.direction,
-        };
-
-    const message =
-      smoothed.direction === analysis.direction
-        ? analysis.message
-        : buildMessage(smoothed.direction, analysis.obstacle, false);
+    if (updateNavigationMemory) {
+      lastDirection = analysis.direction;
+      lastConfidence = analysis.confidence;
+    }
 
     return {
       confidence: analysis.confidence,
-      direction: smoothed.direction,
+      direction: analysis.direction,
       fallbackReason: analysis.fallbackReason,
       hazardLevel: analysis.hazardLevel,
       latencyMs: analysis.latencyMs,
       model: analysis.model,
       obstacle: analysis.obstacle,
-      message,
+      message: analysis.message,
       promptVersion: analysis.promptVersion,
       provider: analysis.provider,
       sceneDescription: analysis.sceneDescription,

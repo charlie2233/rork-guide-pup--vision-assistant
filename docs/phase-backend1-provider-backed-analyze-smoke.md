@@ -4,6 +4,15 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
 
+## Current gate on 2026-07-19
+
+- Wrangler OAuth is authenticated to the intended Cloudflare account. Staging and production each expose the required secret names `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; secret values were not read, printed, or written to the repository.
+- The prepared Worker contract uses `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, explicit guidance and scene-query lanes, bounded retries/cost controls, deterministic STOP overrides, provider allowlists, privacy-safe rate-limit subjects, and stamped runtime provenance.
+- Backend privacy/runtime tests passed `50/50`; backend smoke and release-evidence tests passed `23/23`; typecheck and staging/production Wrangler dry-runs passed.
+- Deployment is intentionally pending the exact clean committed source. Therefore no new launch-valid staging or production request IDs are claimed in this section yet; historical GPT-4.1 IDs below remain historical only.
+
+All later dated sections are retained as phase history. Their older model, authentication, device, request-ID, and blocker statements are not current launch claims; the gate above is authoritative for this candidate.
+
 ## Scope
 
 This phase tightens the cloud-owned vision contract for internal iOS launch readiness while preserving the app/backend boundary:
@@ -15,13 +24,13 @@ This phase tightens the cloud-owned vision contract for internal iOS launch read
 ## Code changes prepared
 
 - Backend OpenAI-compatible provider now requests strict JSON Schema Structured Outputs instead of loose JSON object mode.
-- Backend default model config is prepared for `gpt-5.5`, low reasoning effort, and prompt version `2026-05-22.v1`.
+- Backend default model config is prepared for `gpt-5.6-sol`, low reasoning effort, and prompt version `2026-07-18.v1`.
 - Analyze request accepts compact frame context: `sessionId`, `frameId`, `timestampMs`, `priorGuidance`, `nativePath`, source size, detail level, sanitized `frameSummary`, `captureHeuristics`, `sampledFrame`, and `hasImage`.
 - Analyze response now carries `fallbackReason` for safe fallback and safety-override cases.
 - iOS sends sampled-frame metadata from the navigation loop while keeping camera capture and STOP/haptics/VoiceOver control local.
 - Backend log redaction is shared with the Sentry envelope path so `deviceId`, tokens, auth headers, API keys, raw image/base64 fields, and keyless bearer/base64-like snippets are redacted before logging or Sentry reporting, while request ID, route, prompt version, and environment remain usable.
 - Provider non-OK errors no longer carry upstream response-body snippets into app logs or Sentry messages.
-- Backend provider runtime controls are now bounded and surfaced for smoke evidence: max completion tokens default `700` (clamped `128..1200`), request timeout default `12000` ms (clamped `3000..30000`), retry count default `1` (clamped `0..2`), and retry delay default `250` ms (clamped `0..2000`).
+- Backend provider runtime controls are now bounded and surfaced for smoke evidence: max completion tokens default `700` (clamped `128..1200`), request timeout default `8500` ms (clamped `3000..9000`), retry count default `1` (clamped `0..2`), and retry delay default `250` ms (clamped `0..2000`).
 - Provider retry behavior is limited to retryable transport/server failures (`408`, `429`, `5xx`, and request aborts), and release preflight now requires those runtime-control health fields in staging/production smoke artifacts.
 
 ## Live backend evidence
@@ -55,7 +64,7 @@ Production result:
 - Prompt version: `2026-03-31.v1`
 - Artifact: `backend/guidepup-api/eval/smoke-results-production.latest.json`
 
-Important: the live Workers are provider-backed, but they have not yet been redeployed with the new `gpt-5.5` / `2026-05-22.v1` structured-output contract because this shell is not authenticated to Cloudflare.
+Historical note from 2026-05-22: the live Workers were provider-backed but had not been redeployed with that phase's prepared contract because Wrangler was not authenticated at that time.
 
 Latest temporary smoke rerun on 2026-05-23, written only to `/tmp` artifacts:
 
@@ -79,7 +88,7 @@ Runtime-control continuation smoke on 2026-05-23, written only to `/tmp` artifac
 - Production `/v1/vision/analyze`: `289ef798-9c70-41db-b1e6-d6886a11711f`
 - Production execution path: `provider-backed`, but launch-invalid for the same stale live Worker contract.
 
-## Auth and provider status
+## Historical auth and provider status from 2026-05-22
 
 Command evidence:
 
@@ -98,7 +107,7 @@ Results:
 - `hf` CLI: not installed in this shell; MiniCPM remains experimental/benchmark-only and is not part of production guidance.
 - `npx wrangler whoami`: failed with `Not logged in`.
 
-## Device status
+## Historical device status from 2026-05-22
 
 Commands run:
 
@@ -106,7 +115,7 @@ Commands run:
 xcrun xctrace list devices
 xcrun devicectl list devices
 xcrun xcdevice list
-xcrun devicectl device info details --device 00008130-000A001A1178001C
+xcrun devicectl device info details --device 'charlie的iPhone'
 system_profiler SPUSBDataType
 security find-identity -v -p codesigning
 ```
@@ -119,7 +128,7 @@ Current physical iPhone state:
 - `xcrun xcdevice list` reports deviceprep code `-27`, domain `com.apple.dt.deviceprep`, and the recovery suggestion to unlock/attach by cable or use same LAN with Developer Mode.
 - `devicectl device info details` reports Developer Mode `enabled`, pairing state `paired`, tunnel state `unavailable`, and last connection `2026-05-05 22:31:40 +0000`.
 - `system_profiler SPUSBDataType` did not show an attached iPhone on the USB bus.
-- One signing identity exists: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`.
+- At the time of this phase, one local identity was reported: `Apple Development: XIANMIN CHEN (SBSJ3MX9GZ)`. It is historical evidence and is not current release configuration; the authenticated active Apple Developer team verified on 2026-07-17 is `K99RADPB9G`.
 
 No real-iPhone no-screen smoke evidence was produced in this phase because the device is not currently available to install/run the app.
 
@@ -284,3 +293,27 @@ Results:
 - Preview preflight now warns that the checked-in staging smoke is stale until it includes `health.structuredOutputMode` and `launchContract.strictStructuredOutputsPresent`.
 - TestFlight preflight still fails, now also naming missing strict Structured Outputs evidence in the stale production smoke artifact.
 - No live staging/production Worker deploy or provider-backed re-smoke was performed in this continuation because `npx --yes wrangler whoami` still returns `Not logged in` and `CLOUDFLARE_API_TOKEN` is not available in this shell.
+
+## 2026-07-18 current cloud gate
+
+Prepared source now keeps scene analysis and conversation answers in explicit cloud-owned modes, uses strict Structured Outputs, defaults to `gpt-5.5`, reports the full structured guidance fields, applies safety overrides, and redacts common local paths, credentials, signed URLs, raw media, and installation identifiers from custom logs.
+
+Validation:
+
+```bash
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npx wrangler deploy --dry-run
+npx wrangler deploy --dry-run --env staging
+npx wrangler deploy --dry-run --env production
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run release:preflight:testflight
+npm --prefix expo run release:preflight:store
+```
+
+Results:
+
+- Backend typecheck passed; backend privacy, runtime, safety, interaction-mode, and prompt contracts passed `17/17`.
+- Development, staging, and production Worker dry-run bundles passed with `gpt-5.5`, prompt `2026-05-22.v1`, `json_schema_strict`, bounded runtime controls, and MiniCPM disabled.
+- Preview preflight passes with stale-smoke warnings. TestFlight/store remain blocked by the stale production smoke contract and missing real-iPhone no-screen evidence.
+- No current deployment or request IDs exist for this source yet. `npx wrangler whoami` reports `Not logged in`, the OAuth attempt timed out without a grant, and this shell has no `CLOUDFLARE_API_TOKEN`; remote secret names therefore remain unverified. Historical GPT-4.1 request IDs are not launch proof.

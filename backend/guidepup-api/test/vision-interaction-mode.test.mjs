@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import * as safetyPolicy from "../eval/safety-policy.mjs";
 import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
@@ -221,6 +222,9 @@ function loadWorker() {
       }
       if (specifier.startsWith(".")) {
         const resolved = new URL(specifier, new URL("./", moduleUrl));
+        if (resolved.pathname.endsWith("/eval/safety-policy.mjs")) {
+          return safetyPolicy;
+        }
         if (!resolved.pathname.endsWith(".ts")) {
           const fileCandidate = new URL(resolved);
           fileCandidate.pathname = `${fileCandidate.pathname}.ts`;

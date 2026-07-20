@@ -95,11 +95,13 @@ test("sanitizeLogMessage redacts signed URLs, embedded credentials, and local pa
   assert.doesNotMatch(message, /private\/var\/mobile|Users\/test|home\/guidepup|opt\/guidepup|workspace\/guidepup|usr\/local|C:\\Temp/);
 });
 
-test("Sentry and provider error paths use sanitized messages and context", () => {
+test("Sentry sanitizes context and provider errors discard raw upstream text", () => {
   assert.match(sentrySource, /const message = sanitizeLogMessage/);
   assert.match(sentrySource, /const extra = sanitizeLogData/);
   assert.doesNotMatch(sentrySource, /extra:\s*\{\s*\.\.\.context/);
-  assert.match(providerSource, /sanitizeLogMessage\(message\.refusal/);
+  assert.match(providerSource, /throw new Error\("Provider refused vision analysis\."\)/);
+  assert.match(providerSource, /throw new Error\("Provider returned an invalid structured response\."\)/);
+  assert.doesNotMatch(providerSource, /message\.refusal\s*[,)}]|\$\{[^}]*message\.refusal/);
   assert.doesNotMatch(providerSource, /body\.slice/);
 });
 

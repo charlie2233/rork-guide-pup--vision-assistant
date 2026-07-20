@@ -45,6 +45,7 @@
     "voiceOverRunning": true,
     "speechInputConfirmed": true,
     "spokenOutputConfirmed": true,
+    "voiceProcessingEnabled": true,
     "audioCuesAudible": true,
     "hapticsFelt": true
   },

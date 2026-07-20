@@ -21,11 +21,11 @@ export const CaptureHeuristicsSchema = z.object({
 });
 
 export const ObstacleSchema = z.object({
-  confidence: z.number().min(0).max(1).default(0.5),
-  distance: DistanceSchema.default("medium"),
-  position: PositionSchema.default("center"),
+  confidence: z.number().min(0).max(1),
+  distance: DistanceSchema,
+  position: PositionSchema,
   type: z.string().min(1).max(80),
-});
+}).strict();
 
 export const BaseAnalyzeVisionRequestSchema = z.object({
   appVersion: z.string().max(64).optional(),
@@ -276,19 +276,19 @@ export function validateAnalyzeVisionRequest(
 export const AnalyzeVisionRequestSchema = BaseAnalyzeVisionRequestSchema.superRefine(validateAnalyzeVisionRequest);
 
 export const ProviderVisionSchema = z.object({
-  confidence: z.number().min(0).max(1).optional(),
-  criticalHazards: z.array(z.string().min(1).max(64)).optional(),
-  hazardLevel: HazardLevelSchema.optional(),
+  confidence: z.number().min(0).max(1),
+  criticalHazards: z.array(z.string().min(1).max(64)).max(6),
+  hazardLevel: HazardLevelSchema,
   lighting: LightingSchema,
-  notes: z.string().max(280).optional(),
-  obstacles: z.array(ObstacleSchema).default([]),
-  pathClear: z.boolean().optional(),
-  recommendedDirection: DirectionSchema.optional(),
+  notes: z.string().max(280),
+  obstacles: z.array(ObstacleSchema).max(6),
+  pathClear: z.boolean(),
+  recommendedDirection: DirectionSchema,
   sceneDescription: z.string().trim().min(1).max(280),
-  shortMessage: z.string().max(120).optional(),
+  shortMessage: z.string().max(120),
   surfaceType: z.string().trim().min(1).max(80),
   walkability: WalkabilitySchema,
-});
+}).strict();
 
 export const VisionAnalyzeResponseSchema = z.object({
   confidence: z.number().min(0).max(1),

@@ -1,19 +1,35 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
+import {
+  SMOKE_ARTIFACT_VERSION,
+  SMOKE_EVIDENCE_MAX_AGE_SECONDS,
+  SMOKE_INTERACTION_MODES,
+  buildLaunchContract,
+  isGitRevision,
+  isNonEmptyString,
+  isSanitizedRequestId,
+  isWorkerIdentifier,
+  validateSmokeArtifactContract,
+  validateStructuredAnalyzeOutput,
+  validateRuntimeDeploymentIdentity,
+} from "./smoke-contract.mjs";
+import { validateEvidencePrivacy } from "../../../expo/scripts/evidence-privacy.mjs";
 
 const require = createRequire(import.meta.url);
 const { launchInputs } = require("../../../expo/release/launch-inputs.js");
+const evalDir = path.dirname(fileURLToPath(import.meta.url));
+const backendDir = path.resolve(evalDir, "..");
+const repoDir = path.resolve(backendDir, "../..");
 
 const VALID_TRACKS = new Set(["staging", "production"]);
 const TEST_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAAK0lEQVR4nO3NMQ0AAAwDoPo33ZpYsgcMkD6JWCwWi8VisVgsFovFYrFYfGcs0K5PemaPnAAAAABJRU5ErkJggg==";
-const DIRECTION_VALUES = new Set(["turn-left", "turn-right", "forward", "stop"]);
-const HAZARD_LEVEL_VALUES = new Set(["none", "low", "medium", "high"]);
-const LIGHTING_VALUES = new Set(["dark", "dim", "normal", "bright", "unknown"]);
-const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
+const SOURCE_REVISION_PREFIX = "source-revision:";
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     env: undefined,
     expectedModel: launchInputs.productionVisionModel,
@@ -58,11 +74,16 @@ function parseArgs(argv) {
     }
     if (arg === "--require-launch-contract") {
       args.requireLaunchContract = true;
-      continue;
     }
   }
 
   return args;
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
 }
 
 function getApiUrl(env) {
@@ -75,15 +96,115 @@ function getApiUrl(env) {
   return undefined;
 }
 
+export function getExpectedWorkerIdentity(env) {
+  if (env === "staging") {
+    return launchInputs.stagingWorkerName;
+  }
+  if (env === "production") {
+    return launchInputs.productionWorkerName;
+  }
+  return undefined;
+}
+
 function getOutputPath(value) {
   return value ? path.resolve(process.cwd(), value) : undefined;
+}
+
+function runCommand(command, args, cwd) {
+  return spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      WRANGLER_SEND_METRICS: "false",
+    },
+    maxBuffer: 10 * 1024 * 1024,
+  });
+}
+
+function parseJsonCommandResult(result, description) {
+  assert(result.status === 0, `${description} could not be resolved. Authenticate Wrangler and retry.`);
+  try {
+    return JSON.parse(result.stdout.trim());
+  } catch {
+    throw new Error(`${description} returned an unreadable response.`);
+  }
+}
+
+export function resolveGitRevision(commandRunner = runCommand) {
+  const result = commandRunner("git", ["rev-parse", "--verify", "HEAD"], repoDir);
+  const revision = result.status === 0 ? result.stdout.trim().toLowerCase() : undefined;
+  assert(isGitRevision(revision), "The current Git source revision could not be resolved.");
+  return revision;
+}
+
+export function parseWorkerDeploymentStatus(deployment, env) {
+  assert(deployment && typeof deployment === "object" && !Array.isArray(deployment), `${env} Worker deployment status is missing.`);
+  assert(isWorkerIdentifier(deployment.id), `${env} Worker deployment ID is missing or malformed.`);
+  assert(Array.isArray(deployment.versions), `${env} Worker deployment versions are missing.`);
+  assert(deployment.versions.length === 1, `${env} Worker must have exactly one active version for launch smoke evidence.`);
+
+  const activeVersion = deployment.versions[0];
+  const percentage = Number(activeVersion?.percentage);
+  assert(percentage === 100, `${env} Worker launch smoke requires one version serving 100 percent of traffic.`);
+  assert(isWorkerIdentifier(activeVersion?.version_id), `${env} Worker version ID is missing or malformed.`);
+
+  return {
+    workerDeploymentId: deployment.id,
+    workerVersionId: activeVersion.version_id,
+  };
+}
+
+export function parseWorkerVersionProvenance(version, expectedVersionId, sourceRevision, env) {
+  assert(version && typeof version === "object" && !Array.isArray(version), `${env} Worker version metadata is missing.`);
+  assert(version.id === expectedVersionId, `${env} Worker version metadata does not match the active deployment.`);
+  assert(isWorkerIdentifier(version.id), `${env} Worker version ID is missing or malformed.`);
+  const workerVersionCreatedAt = version.metadata?.created_on;
+  assert(Number.isFinite(Date.parse(workerVersionCreatedAt)), `${env} Worker version creation timestamp is missing.`);
+  assert(
+    version.annotations?.["workers/message"] === `${SOURCE_REVISION_PREFIX}${sourceRevision}`,
+    `${env} Worker version is not bound to the current Git source revision. Deploy through the provenanced package script first.`,
+  );
+
+  return {
+    workerVersionCreatedAt,
+  };
+}
+
+export function readWorkerDeploymentStatus(env, commandRunner = runCommand) {
+  const result = commandRunner(
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    ["wrangler", "deployments", "status", "--env", env, "--json"],
+    backendDir,
+  );
+  return parseWorkerDeploymentStatus(
+    parseJsonCommandResult(result, `${env} Worker deployment status`),
+    env,
+  );
+}
+
+export function resolveWorkerProvenance(env, sourceRevision, commandRunner = runCommand) {
+  const deployment = readWorkerDeploymentStatus(env, commandRunner);
+  const result = commandRunner(
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    ["wrangler", "versions", "view", deployment.workerVersionId, "--env", env, "--json"],
+    backendDir,
+  );
+  const version = parseJsonCommandResult(result, `${env} Worker version metadata`);
+  return {
+    ...deployment,
+    ...parseWorkerVersionProvenance(version, deployment.workerVersionId, sourceRevision, env),
+    sourceRevision,
+    workerIdentity: getExpectedWorkerIdentity(env),
+  };
 }
 
 async function fetchJson(url, init) {
   const startedAt = performance.now();
   const response = await fetch(url, init);
   const roundTripLatencyMs = Math.round(performance.now() - startedAt);
-  const requestId = response.headers.get("x-request-id")?.trim() || undefined;
+  const responseRequestId = response.headers.get("x-request-id")?.trim();
+  const requestId = isSanitizedRequestId(responseRequestId) ? responseRequestId : undefined;
   const rawText = await response.text();
   let json;
 
@@ -93,94 +214,21 @@ async function fetchJson(url, init) {
     json = undefined;
   }
 
-  return {
-    json,
-    rawText,
-    requestId,
-    response,
-    roundTripLatencyMs,
-  };
-}
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
+  return { json, requestId, response, roundTripLatencyMs };
 }
 
 function getDeviceIdSuffix(deviceId) {
-  if (!deviceId) {
+  if (!isNonEmptyString(deviceId) || deviceId.length < 8) {
     return undefined;
   }
-
-  return deviceId.length > 8 ? deviceId.slice(-8) : deviceId;
+  const suffix = deviceId.slice(-8);
+  return /^[A-Za-z0-9]{8}$/.test(suffix) ? suffix : undefined;
 }
 
-function isNonEmptyString(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function modelMatchesExpected(value, expected) {
-  return typeof value === "string" && (value === expected || value.startsWith(`${expected}-`));
-}
-
-function validateStructuredAnalyzeOutput(responseBody) {
-  const missingFields = [];
-  const invalidFields = [];
-
-  const requireField = (fieldName, validator) => {
-    if (!(fieldName in responseBody) || responseBody[fieldName] === undefined || responseBody[fieldName] === null) {
-      missingFields.push(fieldName);
-      return;
-    }
-
-    if (!validator(responseBody[fieldName])) {
-      invalidFields.push(fieldName);
-    }
-  };
-
-  if (!responseBody || typeof responseBody !== "object" || Array.isArray(responseBody)) {
-    return {
-      invalidFields: ["response"],
-      missingFields,
-      valid: false,
-    };
-  }
-
-  requireField("confidence", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1);
-  requireField("direction", (value) => DIRECTION_VALUES.has(value));
-  requireField("hazardLevel", (value) => HAZARD_LEVEL_VALUES.has(value));
-  requireField("latencyMs", (value) => typeof value === "number" && Number.isFinite(value) && value >= 0);
-  requireField("lighting", (value) => LIGHTING_VALUES.has(value));
-  requireField("message", isNonEmptyString);
-  requireField("model", isNonEmptyString);
-  requireField("obstacle", (value) => typeof value === "boolean");
-  requireField("promptVersion", isNonEmptyString);
-  requireField("provider", isNonEmptyString);
-  requireField("sceneDescription", isNonEmptyString);
-  requireField("surfaceType", isNonEmptyString);
-  requireField("walkability", (value) => WALKABILITY_VALUES.has(value));
-
-  if (!("fallbackReason" in responseBody)) {
-    missingFields.push("fallbackReason");
-  } else if (
-    responseBody.fallbackReason !== null &&
-    responseBody.fallbackReason !== undefined &&
-    !isNonEmptyString(responseBody.fallbackReason)
-  ) {
-    invalidFields.push("fallbackReason");
-  }
-
-  return {
-    invalidFields,
-    missingFields,
-    valid: missingFields.length === 0 && invalidFields.length === 0,
-  };
-}
-
-function buildAnalyzeRequestPayload(env) {
-  const timestampMs = Date.now();
-  const sessionId = `smoke-${env}-${timestampMs}`;
+export function buildAnalyzeRequestPayload(env, interactionMode, runTimestampMs = Date.now()) {
+  assert(SMOKE_INTERACTION_MODES.includes(interactionMode), `Unsupported smoke interaction mode: ${interactionMode}.`);
+  const modeLabel = interactionMode === "scene-query" ? "scene-query" : "guidance";
+  const sessionId = `smoke-${env}-${runTimestampMs}`;
 
   return {
     appVersion: "1.0.0",
@@ -192,23 +240,27 @@ function buildAnalyzeRequestPayload(env) {
       uploadedWidth: 40,
     },
     detail: "low",
-    frameId: `${sessionId}-frame-1`,
-    frameSummary: "Synthetic sampled js-fallback smoke frame, source 40x40, upload 40x40.",
+    frameId: `${sessionId}-${modeLabel}-frame`,
+    frameSummary: `Synthetic sampled js-fallback ${modeLabel} smoke frame, source 40x40, upload 40x40.`,
     hasImage: true,
     imageBase64: TEST_IMAGE_BASE64,
+    interactionMode,
     mimeType: "image/png",
     nativePath: "js-fallback",
     platform: "ios",
-    priorGuidance: "Synthetic smoke sample; no previous spoken guidance.",
+    priorGuidance:
+      interactionMode === "scene-query"
+        ? "Synthetic guidance lane completed; describe the current scene without changing settings."
+        : "Synthetic smoke sample; no previous spoken guidance.",
     sampledFrame: true,
     sessionId,
     sourceHeight: 40,
     sourceWidth: 40,
-    timestampMs,
+    timestampMs: runTimestampMs,
   };
 }
 
-function sanitizeAnalyzeRequestEnvelope(payload) {
+export function sanitizeAnalyzeRequestEnvelope(payload) {
   return {
     appVersion: payload.appVersion,
     captureHeuristics: payload.captureHeuristics,
@@ -216,6 +268,7 @@ function sanitizeAnalyzeRequestEnvelope(payload) {
     frameId: payload.frameId,
     frameSummary: payload.frameSummary,
     hasImage: payload.hasImage,
+    interactionMode: payload.interactionMode,
     mimeType: payload.mimeType,
     nativePath: payload.nativePath,
     platform: payload.platform,
@@ -228,129 +281,17 @@ function sanitizeAnalyzeRequestEnvelope(payload) {
   };
 }
 
-function hasBoundedRuntimeControls(healthJson) {
-  return (
-    Number.isInteger(healthJson?.defaultMaxCompletionTokens) &&
-    healthJson.defaultMaxCompletionTokens >= 128 &&
-    healthJson.defaultMaxCompletionTokens <= 1200 &&
-    Number.isInteger(healthJson?.defaultRequestTimeoutMs) &&
-    healthJson.defaultRequestTimeoutMs >= 3000 &&
-    healthJson.defaultRequestTimeoutMs <= 30000 &&
-    Number.isInteger(healthJson?.defaultRetryCount) &&
-    healthJson.defaultRetryCount >= 0 &&
-    healthJson.defaultRetryCount <= 2 &&
-    Number.isInteger(healthJson?.defaultRetryDelayMs) &&
-    healthJson.defaultRetryDelayMs >= 0 &&
-    healthJson.defaultRetryDelayMs <= 2000
-  );
-}
-
-function hasStrictStructuredOutputs(healthJson) {
-  return healthJson?.structuredOutputMode === "json_schema_strict";
-}
-
-function hasSampledFrameEnvelope(envelope) {
-  return (
-    envelope?.sampledFrame === true &&
-    envelope.hasImage === true &&
-    isNonEmptyString(envelope.appVersion) &&
-    isNonEmptyString(envelope.sessionId) &&
-    isNonEmptyString(envelope.frameId) &&
-    isNonEmptyString(envelope.frameSummary) &&
-    Number.isInteger(envelope.timestampMs) &&
-    envelope.timestampMs > 0 &&
-    (envelope.nativePath === "native-core" || envelope.nativePath === "js-fallback") &&
-    ["ios", "android", "web", "unknown"].includes(envelope.platform) &&
-    (envelope.detail === "low" || envelope.detail === "high") &&
-    Number.isInteger(envelope.sourceHeight) &&
-    envelope.sourceHeight > 0 &&
-    Number.isInteger(envelope.sourceWidth) &&
-    envelope.sourceWidth > 0 &&
-    envelope.captureHeuristics &&
-    typeof envelope.captureHeuristics === "object" &&
-    !Array.isArray(envelope.captureHeuristics) &&
-    ["uri", "base64", "unknown"].includes(envelope.captureHeuristics.imageSource) &&
-    typeof envelope.captureHeuristics.resizedForUpload === "boolean" &&
-    Number.isInteger(envelope.captureHeuristics.uploadedHeight) &&
-    envelope.captureHeuristics.uploadedHeight > 0 &&
-    Number.isInteger(envelope.captureHeuristics.uploadedWidth) &&
-    envelope.captureHeuristics.uploadedWidth > 0 &&
-    typeof envelope.captureHeuristics.frameAgeMs === "number" &&
-    Number.isFinite(envelope.captureHeuristics.frameAgeMs) &&
-    envelope.captureHeuristics.frameAgeMs >= 0
-  );
-}
-
-function buildLaunchContract({ analyzeSummary, healthJson, requestEnvelope }) {
-  const runtimeControlsPresent = hasBoundedRuntimeControls(healthJson);
-  const sampledFrameEnvelopeValid = hasSampledFrameEnvelope(requestEnvelope);
-  const strictStructuredOutputsPresent = hasStrictStructuredOutputs(healthJson);
-  const structuredOutputValid = analyzeSummary.structuredOutputValid === true;
-
-  return {
-    runtimeControlsPresent,
-    sampledFrameEnvelopeValid,
-    strictStructuredOutputsPresent,
-    structuredOutputValid,
-    valid: runtimeControlsPresent && sampledFrameEnvelopeValid && strictStructuredOutputsPresent && structuredOutputValid,
-  };
-}
-
-function validateLaunchReadinessArtifact(artifact, { expectedModel, expectedPromptVersion }) {
-  const issues = [];
-
-  if (artifact.providerBacked !== true || artifact.analyze.executionPath !== "provider-backed") {
-    issues.push(`analyze execution path is "${artifact.analyze.executionPath || "missing"}", not provider-backed`);
-  }
-
-  if (!artifact.launchContract.valid) {
-    issues.push("launch contract is not valid");
-  }
-
-  if (artifact.launchContract.strictStructuredOutputsPresent !== true) {
-    issues.push(`strict Structured Outputs mode is "${artifact.health.structuredOutputMode || "missing"}"`);
-  }
-
-  if (expectedModel) {
-    if (!modelMatchesExpected(artifact.health.defaultModel, expectedModel)) {
-      issues.push(`health model is "${artifact.health.defaultModel || "missing"}", expected "${expectedModel}"`);
-    }
-    if (!modelMatchesExpected(artifact.analyze.model, expectedModel)) {
-      issues.push(`analyze model is "${artifact.analyze.model || "missing"}", expected "${expectedModel}"`);
-    }
-  }
-
-  if (expectedPromptVersion) {
-    if (artifact.health.promptVersion !== expectedPromptVersion) {
-      issues.push(`health prompt version is "${artifact.health.promptVersion || "missing"}", expected "${expectedPromptVersion}"`);
-    }
-    if (artifact.analyze.promptVersion !== expectedPromptVersion) {
-      issues.push(`analyze prompt version is "${artifact.analyze.promptVersion || "missing"}", expected "${expectedPromptVersion}"`);
-    }
-  }
-
-  if (Array.isArray(artifact.analyze.structuredOutputMissingFields) && artifact.analyze.structuredOutputMissingFields.length > 0) {
-    issues.push(`structured output missing fields: ${artifact.analyze.structuredOutputMissingFields.join(", ")}`);
-  }
-
-  if (Array.isArray(artifact.analyze.structuredOutputInvalidFields) && artifact.analyze.structuredOutputInvalidFields.length > 0) {
-    issues.push(`structured output invalid fields: ${artifact.analyze.structuredOutputInvalidFields.join(", ")}`);
-  }
-
-  return issues;
-}
-
-function deriveAnalyzeSummary(result) {
+export function deriveAnalyzeSummary(result, interactionMode) {
   if (result.response.ok && result.json) {
     const structuredOutput = validateStructuredAnalyzeOutput(result.json);
     return {
       confidence: result.json.confidence,
       direction: result.json.direction,
       errorCode: undefined,
-      errorMessage: undefined,
       executionPath: "provider-backed",
       fallbackReason: result.json.fallbackReason ?? null,
       hazardLevel: result.json.hazardLevel,
+      interactionMode,
       latencyMs: result.json.latencyMs,
       lighting: result.json.lighting,
       message: result.json.message,
@@ -362,8 +303,9 @@ function deriveAnalyzeSummary(result) {
       roundTripLatencyMs: result.roundTripLatencyMs,
       sceneDescription: result.json.sceneDescription,
       statusCode: result.response.status,
-      structuredOutputInvalidFields: structuredOutput.invalidFields,
-      structuredOutputMissingFields: structuredOutput.missingFields,
+      statusText: result.response.statusText || "",
+      structuredOutputInvalidFields: structuredOutput.invalid,
+      structuredOutputMissingFields: structuredOutput.missing,
       structuredOutputValid: structuredOutput.valid,
       surfaceType: result.json.surfaceType,
       walkability: result.json.walkability,
@@ -372,23 +314,18 @@ function deriveAnalyzeSummary(result) {
 
   const safeResponse = result.json?.safeResponse;
   const errorCode = result.json?.error?.code;
-  const errorMessage = result.json?.error?.message;
   const structuredOutput = safeResponse
     ? validateStructuredAnalyzeOutput(safeResponse)
-    : {
-        invalidFields: [],
-        missingFields: ["safeResponse"],
-        valid: false,
-      };
+    : { invalid: [], missing: ["safeResponse"], valid: false };
 
   return {
     confidence: safeResponse?.confidence,
     direction: safeResponse?.direction,
     errorCode,
-    errorMessage,
     executionPath: safeResponse ? "safe-fallback" : "failed",
     fallbackReason: errorCode,
     hazardLevel: safeResponse?.hazardLevel,
+    interactionMode,
     latencyMs: safeResponse?.latencyMs,
     lighting: safeResponse?.lighting,
     message: safeResponse?.message,
@@ -400,155 +337,278 @@ function deriveAnalyzeSummary(result) {
     roundTripLatencyMs: result.roundTripLatencyMs,
     sceneDescription: safeResponse?.sceneDescription,
     statusCode: result.response.status,
-    structuredOutputInvalidFields: structuredOutput.invalidFields,
-    structuredOutputMissingFields: structuredOutput.missingFields,
+    statusText: result.response.statusText || "",
+    structuredOutputInvalidFields: structuredOutput.invalid,
+    structuredOutputMissingFields: structuredOutput.missing,
     structuredOutputValid: structuredOutput.valid,
     surfaceType: safeResponse?.surfaceType,
     walkability: safeResponse?.walkability,
   };
 }
 
-function toMarkdown(artifact) {
+export async function runAnalyzeLanes({
+  apiUrl,
+  deviceId,
+  env,
+  fetcher = fetchJson,
+  runTimestampMs,
+  sessionToken,
+}) {
+  const lanes = {};
+  for (const interactionMode of SMOKE_INTERACTION_MODES) {
+    const payload = buildAnalyzeRequestPayload(env, interactionMode, runTimestampMs);
+    const result = await fetcher(`${apiUrl}/v1/vision/analyze`, {
+      body: JSON.stringify(payload),
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        "content-type": "application/json",
+        "x-guidepup-device-id": deviceId,
+      },
+      method: "POST",
+    });
+    lanes[interactionMode] = {
+      analyze: deriveAnalyzeSummary(result, interactionMode),
+      interactionMode,
+      requestEnvelope: sanitizeAnalyzeRequestEnvelope(payload),
+    };
+  }
+  return lanes;
+}
+
+export function validateLaunchReadinessArtifact(artifact, options) {
+  const result = validateSmokeArtifactContract(artifact, options);
+  const privacy = validateEvidencePrivacy(artifact);
+  return [
+    ...result.missing.map((field) => `missing ${field}`),
+    ...result.invalid.map((field) => `invalid ${field}`),
+    ...privacy.disallowedKeys.map((field) => `privacy disallowed field ${field}`),
+    ...privacy.sensitivePatterns.map((pattern) => `privacy sensitive pattern ${pattern}`),
+  ];
+}
+
+export function formatSmokeArtifactStdout(artifact) {
+  const privacy = validateEvidencePrivacy(artifact);
+  if (privacy.disallowedKeys.length > 0 || privacy.sensitivePatterns.length > 0) {
+    return `${JSON.stringify({ privacySafe: false, suppressed: true }, null, 2)}\n`;
+  }
+  return `${JSON.stringify(artifact, null, 2)}\n`;
+}
+
+function formatLaneMarkdown(mode, lane) {
+  const analyze = lane.analyze;
+  const envelope = lane.requestEnvelope;
+  return [
+    `### ${mode}`,
+    "",
+    `- request id: \`${analyze.requestId || "not-found"}\``,
+    `- status: \`${analyze.statusCode} ${analyze.statusText}\``,
+    `- execution path: \`${analyze.executionPath}\``,
+    `- provider/model: \`${analyze.provider || "not-found"} / ${analyze.model || "not-found"}\``,
+    `- prompt version: \`${analyze.promptVersion || "not-found"}\``,
+    `- structured output valid: \`${analyze.structuredOutputValid ? "yes" : "no"}\``,
+    `- direction/hazard/walkability: \`${analyze.direction || "not-found"} / ${analyze.hazardLevel || "not-found"} / ${analyze.walkability || "not-found"}\``,
+    `- obstacle/confidence: \`${String(analyze.obstacle)} / ${analyze.confidence ?? "not-found"}\``,
+    `- lighting/surface: \`${analyze.lighting || "not-found"} / ${analyze.surfaceType || "not-found"}\``,
+    `- fallback reason: \`${analyze.fallbackReason || "none"}\``,
+    `- message: \`${analyze.message || "not-found"}\``,
+    `- scene description: \`${analyze.sceneDescription || "not-found"}\``,
+    `- sampled frame: \`${envelope.sampledFrame ? "yes" : "no"}\``,
+    `- native path: \`${envelope.nativePath}\``,
+    `- dimensions: \`${envelope.sourceWidth}x${envelope.sourceHeight}\``,
+    `- frame summary: \`${envelope.frameSummary}\``,
+    "",
+  ];
+}
+
+export function toMarkdown(artifact) {
   const lines = [
     "# Guide Pup Smoke Results",
     "",
     `Date: ${artifact.generatedAt.slice(0, 10)}`,
     `Environment: ${artifact.environment}`,
     `Operator: ${artifact.operator}`,
+    `Artifact version: ${artifact.artifactVersion}`,
     "",
-    "## Target URLs",
+    "## Provenance and freshness",
     "",
-    `- API: \`${artifact.apiUrl}\``,
+    `- Worker deployment: \`${artifact.provenance.workerDeploymentId}\``,
+    `- Worker version: \`${artifact.provenance.workerVersionId}\``,
+    `- Worker identity: \`${artifact.provenance.workerIdentity}\``,
+    `- Worker version created: \`${artifact.provenance.workerVersionCreatedAt}\``,
+    `- source revision: \`${artifact.provenance.sourceRevision}\``,
+    `- evidence expires: \`${artifact.freshness.expiresAt}\``,
+    `- maximum age: \`${artifact.freshness.maxAgeSeconds}s\``,
     "",
     "## Worker smoke",
     "",
-    "- `GET /health`",
-    `  - status: \`${artifact.health.statusCode} ${artifact.health.statusText}\``,
-    `  - request id: \`${artifact.health.requestId || "not-found"}\``,
-    `  - provider: \`${artifact.health.defaultProvider || "not-found"}\``,
-    `  - model: \`${artifact.health.defaultModel || "not-found"}\``,
-    `  - reasoning effort: \`${artifact.health.defaultReasoningEffort || "not-found"}\``,
-    `  - max completion tokens: \`${artifact.health.defaultMaxCompletionTokens ?? "not-found"}\``,
-    `  - request timeout: \`${artifact.health.defaultRequestTimeoutMs ?? "not-found"}ms\``,
-    `  - retry count: \`${artifact.health.defaultRetryCount ?? "not-found"}\``,
-    `  - retry delay: \`${artifact.health.defaultRetryDelayMs ?? "not-found"}ms\``,
-    `  - structured output mode: \`${artifact.health.structuredOutputMode || "not-found"}\``,
-    `  - prompt version: \`${artifact.health.promptVersion || "not-found"}\``,
-    `  - latency: \`${artifact.health.roundTripLatencyMs}ms\``,
-    "- `POST /v1/device/bootstrap`",
-    `  - status: \`${artifact.bootstrap.statusCode} ${artifact.bootstrap.statusText}\``,
-    `  - request id: \`${artifact.bootstrap.requestId || "not-found"}\``,
-    `  - device id suffix: \`${artifact.bootstrap.deviceIdSuffix || "not-found"}\``,
-    `  - latency: \`${artifact.bootstrap.roundTripLatencyMs}ms\``,
-    "- `POST /v1/vision/analyze`",
-    `  - status: \`${artifact.analyze.statusCode} ${artifact.analyze.statusText}\``,
-    `  - request id: \`${artifact.analyze.requestId || "not-found"}\``,
-    `  - execution path: \`${artifact.analyze.executionPath}\``,
-    `  - provider: \`${artifact.analyze.provider || "not-found"}\``,
-    `  - model: \`${artifact.analyze.model || "not-found"}\``,
-    `  - prompt version: \`${artifact.analyze.promptVersion || "not-found"}\``,
-    `  - request latency: \`${artifact.analyze.roundTripLatencyMs}ms\``,
-    `  - service latency: \`${typeof artifact.analyze.latencyMs === "number" ? `${artifact.analyze.latencyMs}ms` : "not-found"}\``,
-    `  - structured output valid: \`${artifact.analyze.structuredOutputValid ? "yes" : "no"}\``,
-    `  - structured output missing fields: \`${artifact.analyze.structuredOutputMissingFields?.join(", ") || "none"}\``,
-    `  - structured output invalid fields: \`${artifact.analyze.structuredOutputInvalidFields?.join(", ") || "none"}\``,
-    `  - obstacle: \`${typeof artifact.analyze.obstacle === "boolean" ? String(artifact.analyze.obstacle) : "not-found"}\``,
-    `  - hazard level: \`${artifact.analyze.hazardLevel || "not-found"}\``,
-    `  - confidence: \`${typeof artifact.analyze.confidence === "number" ? artifact.analyze.confidence : "not-found"}\``,
-    `  - lighting: \`${artifact.analyze.lighting || "not-found"}\``,
-    `  - surface type: \`${artifact.analyze.surfaceType || "not-found"}\``,
-    `  - walkability: \`${artifact.analyze.walkability || "not-found"}\``,
-    `  - scene description: \`${artifact.analyze.sceneDescription || "not-found"}\``,
-    `  - fallback reason: \`${artifact.analyze.fallbackReason || "none"}\``,
-    `  - message: \`${artifact.analyze.message || artifact.analyze.errorMessage || "not-found"}\``,
+    `- API: \`${artifact.apiUrl}\``,
+    `- health: \`${artifact.health.statusCode} ${artifact.health.statusText}\`, request \`${artifact.health.requestId || "not-found"}\``,
+    `- bootstrap: \`${artifact.bootstrap.statusCode} ${artifact.bootstrap.statusText}\`, request \`${artifact.bootstrap.requestId || "not-found"}\``,
+    `- provider/model: \`${artifact.health.defaultProvider || "not-found"} / ${artifact.health.defaultModel || "not-found"}\``,
+    `- prompt version: \`${artifact.health.promptVersion || "not-found"}\``,
+    `- structured output mode: \`${artifact.health.structuredOutputMode || "not-found"}\``,
+    `- runtime Worker version: \`${artifact.health.workerVersionId || "not-found"}\``,
+    `- runtime source revision: \`${artifact.health.sourceRevision || "not-found"}\``,
     "",
-    "## Launch contract",
+    "## Analyze lanes",
     "",
-    `- provider backed: \`${artifact.providerBacked ? "yes" : "no"}\``,
-    `- launch contract valid: \`${artifact.launchContract.valid ? "yes" : "no"}\``,
-    `- structured output valid: \`${artifact.launchContract.structuredOutputValid ? "yes" : "no"}\``,
-    `- strict Structured Outputs present: \`${artifact.launchContract.strictStructuredOutputsPresent ? "yes" : "no"}\``,
-    `- sampled-frame envelope valid: \`${artifact.launchContract.sampledFrameEnvelopeValid ? "yes" : "no"}\``,
-    `- runtime controls present: \`${artifact.launchContract.runtimeControlsPresent ? "yes" : "no"}\``,
-    "",
-    "## Analyze request envelope",
-    "",
-    `- sampled frame: \`${artifact.requestEnvelope.sampledFrame ? "yes" : "no"}\``,
-    `- image included: \`${artifact.requestEnvelope.hasImage ? "yes" : "no"}\``,
-    `- app version: \`${artifact.requestEnvelope.appVersion}\``,
-    `- session id: \`${artifact.requestEnvelope.sessionId}\``,
-    `- frame id: \`${artifact.requestEnvelope.frameId}\``,
-    `- frame summary: \`${artifact.requestEnvelope.frameSummary}\``,
-    `- timestamp ms: \`${artifact.requestEnvelope.timestampMs}\``,
-    `- native path: \`${artifact.requestEnvelope.nativePath}\``,
-    `- platform: \`${artifact.requestEnvelope.platform}\``,
-    `- detail: \`${artifact.requestEnvelope.detail}\``,
-    `- dimensions: \`${artifact.requestEnvelope.sourceWidth}x${artifact.requestEnvelope.sourceHeight}\``,
-    `- capture heuristics: \`${JSON.stringify(artifact.requestEnvelope.captureHeuristics)}\``,
-    `- prior guidance: \`${artifact.requestEnvelope.priorGuidance}\``,
   ];
 
+  for (const mode of SMOKE_INTERACTION_MODES) {
+    lines.push(...formatLaneMarkdown(mode, artifact.lanes[mode]));
+  }
+
+  lines.push(
+    "## Launch contract",
+    "",
+    ...Object.entries(artifact.launchContract).map(([key, value]) => `- ${key}: \`${value ? "yes" : "no"}\``),
+  );
   return `${lines.join("\n")}\n`;
+}
+
+function writeOutputsAtomically(outputs, fileSystem = fs) {
+  const transactionId = `${process.pid}-${Date.now()}`;
+  let committed = false;
+  const states = outputs.map(({ content, filePath }, index) => ({
+    backupPath: `${filePath}.backup-${transactionId}-${index}`,
+    backedUp: false,
+    content,
+    filePath,
+    hadOriginal: false,
+    promoted: false,
+    temporaryPath: `${filePath}.tmp-${transactionId}-${index}`,
+  }));
+
+  try {
+    for (const state of states) {
+      fileSystem.mkdirSync(path.dirname(state.filePath), { recursive: true });
+      fileSystem.writeFileSync(state.temporaryPath, state.content);
+    }
+
+    for (const state of states) {
+      state.hadOriginal = fileSystem.existsSync(state.filePath);
+      if (state.hadOriginal) {
+        fileSystem.renameSync(state.filePath, state.backupPath);
+        state.backedUp = true;
+      }
+      fileSystem.renameSync(state.temporaryPath, state.filePath);
+      state.promoted = true;
+    }
+    committed = true;
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const state of [...states].reverse()) {
+      try {
+        if (state.promoted) {
+          fileSystem.rmSync(state.filePath, { force: true });
+        }
+        if (state.backedUp) {
+          fileSystem.renameSync(state.backupPath, state.filePath);
+          state.backedUp = false;
+        }
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError);
+      }
+    }
+    if (rollbackErrors.length > 0) {
+      throw new AggregateError([error, ...rollbackErrors], "Smoke output publication and rollback failed");
+    }
+    throw error;
+  } finally {
+    for (const state of states) {
+      fileSystem.rmSync(state.temporaryPath, { force: true });
+      if (committed || !state.backedUp) {
+        fileSystem.rmSync(state.backupPath, { force: true });
+      }
+    }
+  }
+}
+
+export function writeSmokeOutputsIfValid(
+  artifact,
+  { fileSystem = fs, outputJsonPath, outputMdPath, validationOptions },
+) {
+  const privacy = validateEvidencePrivacy(artifact);
+  const privacySafe = privacy.disallowedKeys.length === 0 && privacy.sensitivePatterns.length === 0;
+  const issues = validateLaunchReadinessArtifact(artifact, validationOptions);
+  if (issues.length > 0) {
+    return { issues, privacySafe, written: false };
+  }
+
+  const outputs = [];
+  if (outputJsonPath) {
+    outputs.push({
+      content: `${JSON.stringify(artifact, null, 2)}\n`,
+      filePath: outputJsonPath,
+    });
+  }
+  if (outputMdPath) {
+    outputs.push({ content: toMarkdown(artifact), filePath: outputMdPath });
+  }
+  writeOutputsAtomically(outputs, fileSystem);
+  return { issues, privacySafe, written: true };
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   assert(args.env && VALID_TRACKS.has(args.env), "Use --env staging or --env production.");
+  assert(isNonEmptyString(args.operator) && args.operator.length <= 80, "Operator must be a short nonempty label.");
 
   const apiUrl = getApiUrl(args.env);
   assert(apiUrl && !apiUrl.startsWith("TODO_"), `No API URL configured for ${args.env}.`);
 
+  const sourceRevision = resolveGitRevision();
+  const initialProvenance = resolveWorkerProvenance(args.env, sourceRevision);
+  const expectedWorkerIdentity = getExpectedWorkerIdentity(args.env);
   const health = await fetchJson(`${apiUrl}/health`, {
-    headers: {
-      "content-type": "application/json",
-    },
+    headers: { "content-type": "application/json" },
     method: "GET",
   });
-
+  const runtimeIdentity = validateRuntimeDeploymentIdentity(health.json, {
+    expectedApiUrl: apiUrl,
+    expectedEnvironment: args.env,
+    expectedSourceRevision: sourceRevision,
+    expectedWorkerIdentity,
+    expectedWorkerVersionId: initialProvenance.workerVersionId,
+  });
+  assert(
+    runtimeIdentity.valid,
+    `${args.env} /health is not bound to the authenticated active Worker: ${runtimeIdentity.invalid.join(", ")}.`,
+  );
   assert(health.response.ok, `${args.env} /health failed with ${health.response.status}.`);
 
   const bootstrap = await fetchJson(`${apiUrl}/v1/device/bootstrap`, {
-    body: JSON.stringify({
-      appVersion: "1.0.0",
-      platform: "ios",
-    }),
-    headers: {
-      "content-type": "application/json",
-    },
+    body: JSON.stringify({ appVersion: "1.0.0", platform: "ios" }),
+    headers: { "content-type": "application/json" },
     method: "POST",
   });
-
   assert(bootstrap.response.ok, `${args.env} /v1/device/bootstrap failed with ${bootstrap.response.status}.`);
 
   const sessionToken = bootstrap.json?.sessionToken;
   const deviceId = bootstrap.json?.deviceId;
-  assert(sessionToken, `${args.env} bootstrap did not return a sessionToken.`);
-  assert(deviceId, `${args.env} bootstrap did not return a deviceId.`);
+  assert(isNonEmptyString(sessionToken), `${args.env} bootstrap did not return a session token.`);
+  assert(isNonEmptyString(deviceId), `${args.env} bootstrap did not return a device identifier.`);
 
-  const analyzePayload = buildAnalyzeRequestPayload(args.env);
-  const analyze = await fetchJson(`${apiUrl}/v1/vision/analyze`, {
-    body: JSON.stringify(analyzePayload),
-    headers: {
-      authorization: `Bearer ${sessionToken}`,
-      "content-type": "application/json",
-      "x-guidepup-device-id": deviceId,
-    },
-    method: "POST",
-  });
-
-  const analyzeSummary = deriveAnalyzeSummary(analyze);
-  const requestEnvelope = sanitizeAnalyzeRequestEnvelope(analyzePayload);
-  const launchContract = buildLaunchContract({
-    analyzeSummary,
-    healthJson: health.json,
-    requestEnvelope,
-  });
-  const artifact = {
-    analyze: {
-      ...analyzeSummary,
-      statusText: analyze.response.statusText || "",
-    },
+  const runTimestampMs = Date.now();
+  const lanes = await runAnalyzeLanes({
     apiUrl,
+    deviceId,
+    env: args.env,
+    runTimestampMs,
+    sessionToken,
+  });
+
+  const finalDeployment = readWorkerDeploymentStatus(args.env);
+  assert(
+    finalDeployment.workerDeploymentId === initialProvenance.workerDeploymentId &&
+      finalDeployment.workerVersionId === initialProvenance.workerVersionId,
+    `${args.env} Worker deployment changed during the smoke run; discard this evidence and retry.`,
+  );
+
+  const generatedAt = new Date().toISOString();
+  const artifact = {
+    apiUrl,
+    artifactVersion: SMOKE_ARTIFACT_VERSION,
     bootstrap: {
       deviceIdSuffix: getDeviceIdSuffix(deviceId),
       expiresAt: bootstrap.json?.expiresAt,
@@ -560,9 +620,17 @@ async function main() {
       statusText: bootstrap.response.statusText || "",
     },
     environment: args.env,
-    generatedAt: new Date().toISOString(),
+    freshness: {
+      expiresAt: new Date(Date.parse(generatedAt) + SMOKE_EVIDENCE_MAX_AGE_SECONDS * 1000).toISOString(),
+      maxAgeSeconds: SMOKE_EVIDENCE_MAX_AGE_SECONDS,
+    },
+    generatedAt,
     health: {
+      analyzeDeviceRateLimitPerMinute: health.json?.analyzeDeviceRateLimitPerMinute,
+      analyzeIpRateLimitPerMinute: health.json?.analyzeIpRateLimitPerMinute,
+      apiUrl: health.json?.apiUrl,
       benchmarkProviders: health.json?.benchmarkProviders,
+      bootstrapIpRateLimitPerMinute: health.json?.bootstrapIpRateLimitPerMinute,
       defaultMaxCompletionTokens: health.json?.defaultMaxCompletionTokens,
       defaultModel: health.json?.defaultModel,
       defaultProvider: health.json?.defaultProvider,
@@ -570,52 +638,64 @@ async function main() {
       defaultRequestTimeoutMs: health.json?.defaultRequestTimeoutMs,
       defaultRetryCount: health.json?.defaultRetryCount,
       defaultRetryDelayMs: health.json?.defaultRetryDelayMs,
+      deploymentIdentityValid: health.json?.deploymentIdentityValid,
       environment: health.json?.environment,
+      expectedApiUrl: health.json?.expectedApiUrl,
       promptVersion: health.json?.promptVersion,
+      providerGlobalCallLimitPerMinute: health.json?.providerGlobalCallLimitPerMinute,
       requestId: health.requestId,
       roundTripLatencyMs: health.roundTripLatencyMs,
       statusCode: health.response.status,
       statusText: health.response.statusText || "",
+      sessionTtlSeconds: health.json?.sessionTtlSeconds,
+      sourceRevision: health.json?.sourceRevision,
       structuredOutputMode: health.json?.structuredOutputMode,
+      workerIdentity: health.json?.workerIdentity,
+      workerVersionId: health.json?.workerVersionId,
     },
-    launchContract,
+    lanes,
     operator: args.operator,
-    providerBacked: analyzeSummary.executionPath === "provider-backed",
-    requestEnvelope,
+    provenance: initialProvenance,
+    providerBacked: SMOKE_INTERACTION_MODES.every(
+      (mode) => lanes[mode].analyze.executionPath === "provider-backed",
+    ),
   };
+  artifact.launchContract = buildLaunchContract({ artifact });
 
   const outputJsonPath = getOutputPath(args.outputJson);
   const outputMdPath = getOutputPath(args.outputMd);
-
-  if (outputJsonPath) {
-    fs.mkdirSync(path.dirname(outputJsonPath), { recursive: true });
-    fs.writeFileSync(outputJsonPath, `${JSON.stringify(artifact, null, 2)}\n`);
-  }
-
-  if (outputMdPath) {
-    fs.mkdirSync(path.dirname(outputMdPath), { recursive: true });
-    fs.writeFileSync(outputMdPath, toMarkdown(artifact));
-  }
-
-  process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
-
-  if (args.requireLaunchContract) {
-    const issues = validateLaunchReadinessArtifact(artifact, {
+  const outputResult = writeSmokeOutputsIfValid(artifact, {
+    outputJsonPath,
+    outputMdPath,
+    validationOptions: {
+      expectedApiUrl: apiUrl,
+      expectedEnvironment: args.env,
       expectedModel: args.expectedModel,
       expectedPromptVersion: args.expectedPromptVersion,
-    });
-
-    if (issues.length > 0) {
-      console.error(`${args.env} smoke evidence was written, but it is not launch-valid:`);
-      for (const issue of issues) {
-        console.error(`- ${issue}`);
-      }
-      process.exit(1);
+      expectedSourceRevision: sourceRevision,
+      expectedWorkerIdentity,
+      expectedWorkerVersionId: initialProvenance.workerVersionId,
+      requireAggregateControls: true,
+      requireRuntimeIdentity: true,
+      nowMs: Date.now(),
+    },
+  });
+  process.stdout.write(formatSmokeArtifactStdout(artifact));
+  if (outputResult.issues.length > 0) {
+    console.error(`${args.env} smoke evidence is not launch-valid; latest outputs were left unchanged:`);
+    for (const issue of outputResult.issues) {
+      console.error(`- ${issue}`);
+    }
+    if (args.requireLaunchContract || outputJsonPath || outputMdPath) {
+      process.exitCode = 1;
     }
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

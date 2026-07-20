@@ -4,8 +4,20 @@ import {
   findDisallowedKeys,
   findSensitivePatterns,
 } from "./evidence-privacy.mjs";
+import {
+  isGitRevision,
+  isSanitizedRequestId,
+  isWorkerIdentifier,
+  SMOKE_ARTIFACT_VERSION,
+  SMOKE_CLOCK_SKEW_MS,
+  SMOKE_EVIDENCE_MAX_AGE_SECONDS,
+} from "../../backend/guidepup-api/eval/smoke-contract.mjs";
 
 export const NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH = "release/no-screen-smoke.latest.json";
+export const NO_SCREEN_EVIDENCE_MAX_AGE_SECONDS = SMOKE_EVIDENCE_MAX_AGE_SECONDS;
+export const NO_SCREEN_EVIDENCE_CLOCK_SKEW_MS = SMOKE_CLOCK_SKEW_MS;
+
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 export const REQUIRED_NO_SCREEN_SEQUENCE = [
   "cold-prompt",
@@ -109,6 +121,7 @@ export function readNoScreenSmokeEvidenceArtifact(projectDir, relativePath = NO_
 export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   const missing = [];
   const invalid = [];
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
 
   const requireField = (fieldPath, validator, label = fieldPath) => {
     const value = getPathValue(artifact, fieldPath);
@@ -139,6 +152,8 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("provenance.artifactType", (value) => value === "real-iphone-no-screen-smoke");
   requireField("provenance.generatedAt", isIsoDate);
   requireField("provenance.runId", isNonEmptyString);
+  requireField("provenance.sourceRevision", isGitRevision);
+  requireField("provenance.candidateBinarySha256", (value) => SHA256_PATTERN.test(value));
   requireField("provenance.releaseTrack", (value) => ["preview", "testflight", "store"].includes(value));
   requireField("provenance.buildProfile", (value) => ["preview", "testflight", "store"].includes(value));
   requireField("provenance.appVersion", isNonEmptyString);
@@ -146,6 +161,16 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("provenance.bundleIdentifier", isNonEmptyString);
   requireField("provenance.apiEnvironment", (value) => ["staging", "production"].includes(value));
   requireField("provenance.apiBaseUrlLabel", (value) => ["staging", "production"].includes(value));
+
+  const generatedAtMs = Date.parse(artifact.generatedAt);
+  if (Number.isFinite(generatedAtMs)) {
+    if (generatedAtMs > nowMs + NO_SCREEN_EVIDENCE_CLOCK_SKEW_MS) {
+      invalid.push("generatedAt.in-future");
+    }
+    if (generatedAtMs < nowMs - NO_SCREEN_EVIDENCE_MAX_AGE_SECONDS * 1000) {
+      invalid.push("generatedAt.stale");
+    }
+  }
 
   requireField("noScreen.noScreenUsed", isBooleanTrue);
   requireField("noScreen.screenReadingUsed", isBooleanFalse);
@@ -174,12 +199,60 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   if (options.expectedBundleIdentifier && artifact.provenance?.bundleIdentifier !== options.expectedBundleIdentifier) {
     invalid.push(`provenance.bundleIdentifier:${artifact.provenance?.bundleIdentifier ?? "missing"}`);
   }
+  if (options.expectedAppVersion && artifact.device?.appVersion !== options.expectedAppVersion) {
+    invalid.push(`device.appVersion:${artifact.device?.appVersion ?? "missing"}`);
+  }
+  if (options.expectedAppVersion && artifact.provenance?.appVersion !== options.expectedAppVersion) {
+    invalid.push(`provenance.appVersion:${artifact.provenance?.appVersion ?? "missing"}`);
+  }
+  if (options.expectedBuildNumber && artifact.device?.buildNumber !== options.expectedBuildNumber) {
+    invalid.push(`device.buildNumber:${artifact.device?.buildNumber ?? "missing"}`);
+  }
+  if (options.expectedBuildNumber && artifact.provenance?.buildNumber !== options.expectedBuildNumber) {
+    invalid.push(`provenance.buildNumber:${artifact.provenance?.buildNumber ?? "missing"}`);
+  }
+  if (options.expectedReleaseTrack && artifact.provenance?.releaseTrack !== options.expectedReleaseTrack) {
+    invalid.push(`provenance.releaseTrack:${artifact.provenance?.releaseTrack ?? "missing"}`);
+  }
+  if (options.expectedBuildProfile && artifact.device?.buildProfile !== options.expectedBuildProfile) {
+    invalid.push(`device.buildProfile:${artifact.device?.buildProfile ?? "missing"}`);
+  }
+  if (options.expectedBuildProfile && artifact.provenance?.buildProfile !== options.expectedBuildProfile) {
+    invalid.push(`provenance.buildProfile:${artifact.provenance?.buildProfile ?? "missing"}`);
+  }
+  if (options.expectedSourceRevision && artifact.provenance?.sourceRevision !== options.expectedSourceRevision) {
+    invalid.push("provenance.sourceRevision-mismatch");
+  }
+  if (
+    options.expectedCandidateBinarySha256 &&
+    artifact.provenance?.candidateBinarySha256 !== options.expectedCandidateBinarySha256
+  ) {
+    invalid.push("provenance.candidateBinarySha256-mismatch");
+  }
+  if (options.expectedApiEnvironment && artifact.backendSmoke?.environment !== options.expectedApiEnvironment) {
+    invalid.push(`backendSmoke.environment:${artifact.backendSmoke?.environment ?? "missing"}`);
+  }
+  if (options.expectedApiEnvironment && artifact.provenance?.apiEnvironment !== options.expectedApiEnvironment) {
+    invalid.push(`provenance.apiEnvironment:${artifact.provenance?.apiEnvironment ?? "missing"}`);
+  }
+  if (options.requireCandidateBinding && !isGitRevision(options.expectedSourceRevision)) {
+    invalid.push("provenance.expectedSourceRevision-unavailable");
+  }
+  if (
+    options.requireCandidateBinding &&
+    !SHA256_PATTERN.test(options.expectedCandidateBinarySha256 ?? "")
+  ) {
+    invalid.push("provenance.expectedCandidateBinarySha256-unavailable");
+  }
 
+  requireMatchingFields(artifact, ["generatedAt", "provenance.generatedAt"], invalid);
   requireMatchingFields(artifact, ["device.appVersion", "provenance.appVersion"], invalid);
   requireMatchingFields(artifact, ["device.buildNumber", "provenance.buildNumber"], invalid);
   requireMatchingFields(artifact, ["device.buildProfile", "provenance.buildProfile"], invalid);
+  requireMatchingFields(artifact, ["provenance.releaseTrack", "provenance.buildProfile"], invalid);
   requireMatchingFields(artifact, ["device.bundleIdentifier", "provenance.bundleIdentifier"], invalid);
   requireMatchingFields(artifact, ["backendSmoke.environment", "provenance.apiEnvironment", "provenance.apiBaseUrlLabel"], invalid);
+  requireMatchingFields(artifact, ["backendSmoke.provenance.sourceRevision", "provenance.sourceRevision"], invalid);
 
   requireField("deviceReadiness.result", (value) => value === "ready");
   requireField("deviceReadiness.paired", isBooleanTrue);
@@ -191,6 +264,7 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("assistiveTech.voiceOverRunning", isBooleanTrue);
   requireField("assistiveTech.speechInputConfirmed", isBooleanTrue);
   requireField("assistiveTech.spokenOutputConfirmed", isBooleanTrue);
+  requireField("assistiveTech.voiceProcessingEnabled", isBooleanTrue);
   requireField("assistiveTech.audioCuesAudible", isBooleanTrue);
   requireField("assistiveTech.hapticsFelt", isBooleanTrue);
 
@@ -205,9 +279,52 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("backendSmoke.walkability", (value) => ["clear", "caution", "uncertain"].includes(value));
   requireField("backendSmoke.model", (value) => modelMatchesExpected(value, options.expectedVisionModel));
   requireField("backendSmoke.promptVersion", (value) => isNonEmptyString(value) && (!options.expectedPromptVersion || value === options.expectedPromptVersion));
-  requireField("backendSmoke.requestIds.health", isUuidLike);
-  requireField("backendSmoke.requestIds.bootstrap", isUuidLike);
+  requireField("backendSmoke.artifactVersion", (value) => value === SMOKE_ARTIFACT_VERSION);
+  requireField("backendSmoke.generatedAt", isIsoDate);
+  requireField("backendSmoke.provenance.sourceRevision", isGitRevision);
+  requireField("backendSmoke.provenance.workerDeploymentId", isWorkerIdentifier);
+  requireField("backendSmoke.provenance.workerVersionId", isWorkerIdentifier);
+  requireField("backendSmoke.provenance.workerVersionCreatedAt", isIsoDate);
+  requireField("backendSmoke.requestIds.health", isSanitizedRequestId);
+  requireField("backendSmoke.requestIds.bootstrap", isSanitizedRequestId);
   requireField("backendSmoke.requestIds.analyze", isUuidLike);
+  requireField("backendSmoke.requestIds.guidanceAnalyze", isSanitizedRequestId);
+  requireField("backendSmoke.requestIds.sceneQueryAnalyze", isSanitizedRequestId);
+
+  const backendGeneratedAtMs = Date.parse(artifact.backendSmoke?.generatedAt);
+  if (
+    Number.isFinite(generatedAtMs) &&
+    Number.isFinite(backendGeneratedAtMs) &&
+    backendGeneratedAtMs > generatedAtMs + NO_SCREEN_EVIDENCE_CLOCK_SKEW_MS
+  ) {
+    invalid.push("backendSmoke.generatedAt.after-no-screen-evidence");
+  }
+
+  const expectedBackendSmoke = options.expectedBackendSmokeArtifact;
+  if (options.requireCandidateBinding && (!expectedBackendSmoke || typeof expectedBackendSmoke !== "object")) {
+    invalid.push("backendSmoke.expectedArtifact-unavailable");
+  }
+  if (expectedBackendSmoke && typeof expectedBackendSmoke === "object") {
+    const expectedBindings = [
+      ["backendSmoke.artifactVersion", expectedBackendSmoke.artifactVersion],
+      ["backendSmoke.generatedAt", expectedBackendSmoke.generatedAt],
+      ["backendSmoke.provenance.sourceRevision", expectedBackendSmoke.provenance?.sourceRevision],
+      ["backendSmoke.provenance.workerDeploymentId", expectedBackendSmoke.provenance?.workerDeploymentId],
+      ["backendSmoke.provenance.workerVersionId", expectedBackendSmoke.provenance?.workerVersionId],
+      ["backendSmoke.provenance.workerVersionCreatedAt", expectedBackendSmoke.provenance?.workerVersionCreatedAt],
+      ["backendSmoke.requestIds.health", expectedBackendSmoke.health?.requestId],
+      ["backendSmoke.requestIds.bootstrap", expectedBackendSmoke.bootstrap?.requestId],
+      ["backendSmoke.requestIds.guidanceAnalyze", expectedBackendSmoke.lanes?.guidance?.analyze?.requestId],
+      ["backendSmoke.requestIds.sceneQueryAnalyze", expectedBackendSmoke.lanes?.["scene-query"]?.analyze?.requestId],
+    ];
+    for (const [fieldPath, expectedValue] of expectedBindings) {
+      if (expectedValue === undefined || expectedValue === null || expectedValue === "") {
+        invalid.push(`${fieldPath}.expected-unavailable`);
+      } else if (getPathValue(artifact, fieldPath) !== expectedValue) {
+        invalid.push(`${fieldPath}.candidate-mismatch`);
+      }
+    }
+  }
 
   requireField("diagnostics.speechListeningInvariant", (value) => value === "PASS");
   requireField("diagnostics.unexpectedSpeechListeningOverlapCount", (value) => value === 0);
@@ -221,11 +338,15 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("diagnostics.audioCues.successCount", (value) => Number.isInteger(value) && value > 0);
 
   requireField("stopBargeIn.attemptedDuringSpeech", isBooleanTrue);
+  requireField("stopBargeIn.analysisInactiveAfterStop", isBooleanTrue);
   requireField("stopBargeIn.armedDuringSpeech", isBooleanTrue);
   requireField("stopBargeIn.audioCueAttempted", isBooleanTrue);
+  requireField("stopBargeIn.cameraInactiveAfterStop", isBooleanTrue);
   requireField("stopBargeIn.cutThrough", isBooleanTrue);
   requireField("stopBargeIn.hapticAttempted", isBooleanTrue);
   requireField("stopBargeIn.lastSpeechListeningOverlapReason", (value) => value === "stop-barge-in");
+  requireField("stopBargeIn.listeningStoppedAfterStop", isBooleanTrue);
+  requireField("stopBargeIn.postStopObservedAt", (value) => Number.isFinite(value) && value > 0);
   requireField("stopBargeIn.recognizedCommand", (value) => value === "stop-guidance-partial");
   requireField("stopBargeIn.recognizedDuringSpeech", isBooleanTrue);
   requireField("stopBargeIn.recognizedPhase", (value) => value === "partial");

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { logWarn } from "./logging";
+import { getBootstrapSigningSecret } from "./session";
 
 const STORAGE_KEY = "rate-limit-state";
 
@@ -16,17 +17,49 @@ export type RateLimitDecision = {
   resetAt: string;
 };
 
+const RATE_LIMIT_BOUNDS = {
+  analyzeDevice: { fallback: 20, max: 60, min: 1 },
+  analyzeIp: { fallback: 60, max: 300, min: 10 },
+  bootstrap: { fallback: 10, max: 60, min: 1 },
+  providerGlobal: { fallback: 120, max: 600, min: 20 },
+} as const;
+
+function parseBoundedLimit(
+  value: string | undefined,
+  bounds: { fallback: number; max: number; min: number },
+) {
+  const parsed = Number.parseInt(value || "", 10);
+  const candidate = Number.isFinite(parsed) ? parsed : bounds.fallback;
+  return Math.min(Math.max(candidate, bounds.min), bounds.max);
+}
+
 function getWindowDurationMs() {
   return 60_000;
 }
 
 export function getRateLimitPerMinute(env: Env) {
-  const parsed = Number.parseInt(env.RATE_LIMIT_PER_MINUTE || "20", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+  return parseBoundedLimit(env.RATE_LIMIT_PER_MINUTE, RATE_LIMIT_BOUNDS.analyzeDevice);
 }
 
-export function getBootstrapRateLimitPerMinute() {
-  return 10;
+export function getAnalyzeIpRateLimitPerMinute(env: Env) {
+  return parseBoundedLimit(env.ANALYZE_IP_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_BOUNDS.analyzeIp);
+}
+
+export function getBootstrapRateLimitPerMinute(env: Env) {
+  return parseBoundedLimit(env.BOOTSTRAP_RATE_LIMIT_PER_MINUTE, RATE_LIMIT_BOUNDS.bootstrap);
+}
+
+export function getProviderGlobalCallLimitPerMinute(env: Env) {
+  return parseBoundedLimit(env.PROVIDER_GLOBAL_CALL_LIMIT_PER_MINUTE, RATE_LIMIT_BOUNDS.providerGlobal);
+}
+
+export function getRateLimitCaps(env: Env) {
+  return {
+    analyzeDevicePerMinute: getRateLimitPerMinute(env),
+    analyzeIpPerMinute: getAnalyzeIpRateLimitPerMinute(env),
+    bootstrapIpPerMinute: getBootstrapRateLimitPerMinute(env),
+    providerCallsGlobalPerMinute: getProviderGlobalCallLimitPerMinute(env),
+  };
 }
 
 function unavailableDecision(limit: number): RateLimitDecision {
@@ -146,7 +179,7 @@ export async function enforceRateLimit(deviceId: string, env: Env) {
 async function hashBootstrapSubject(value: string, env: Env) {
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(env.BOOTSTRAP_SIGNING_SECRET || "guidepup-bootstrap-rate-limit-v1"),
+    new TextEncoder().encode(getBootstrapSigningSecret(env)),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -158,11 +191,39 @@ async function hashBootstrapSubject(value: string, env: Env) {
 }
 
 export async function enforceBootstrapRateLimit(request: Request, env: Env) {
-  const clientAddress = request.headers.get("cf-connecting-ip")?.trim() || "unavailable";
-  const subjectHash = await hashBootstrapSubject(`guidepup-bootstrap:${clientAddress}`, env);
+  const limit = getBootstrapRateLimitPerMinute(env);
+  try {
+    const clientAddress = request.headers.get("cf-connecting-ip")?.trim() || "unavailable";
+    const subjectHash = await hashBootstrapSubject(`guidepup-bootstrap:${clientAddress}`, env);
+    return enforceRateLimitForSubject(`bootstrap:${subjectHash}`, env, limit);
+  } catch (error) {
+    logWarn("rate_limit.subject_hash_unavailable", {
+      message: error instanceof Error ? error.message : String(error),
+      scope: "bootstrap",
+    });
+    return unavailableDecision(limit);
+  }
+}
+
+export async function enforceAnalyzeIpRateLimit(request: Request, env: Env) {
+  const limit = getAnalyzeIpRateLimitPerMinute(env);
+  try {
+    const clientAddress = request.headers.get("cf-connecting-ip")?.trim() || "unavailable";
+    const subjectHash = await hashBootstrapSubject(`guidepup-analyze:${clientAddress}`, env);
+    return enforceRateLimitForSubject(`analyze-ip:${subjectHash}`, env, limit);
+  } catch (error) {
+    logWarn("rate_limit.subject_hash_unavailable", {
+      message: error instanceof Error ? error.message : String(error),
+      scope: "analyze-ip",
+    });
+    return unavailableDecision(limit);
+  }
+}
+
+export async function enforceProviderCallLimit(env: Env) {
   return enforceRateLimitForSubject(
-    `bootstrap:${subjectHash}`,
+    "provider-calls:global:v1",
     env,
-    getBootstrapRateLimitPerMinute(),
+    getProviderGlobalCallLimitPerMinute(env),
   );
 }
