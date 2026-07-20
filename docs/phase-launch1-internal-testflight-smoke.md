@@ -4,14 +4,14 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `c2b8781`
 
-## Current gate on 2026-07-19
+## Current gate on 2026-07-20
 
-- App Store Connect is authenticated and identifies Guide Pup as app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, team `K99RADPB9G`, and copyright `2026 XIANMIN CHEN`. Build `4` is the next candidate; the only existing TestFlight build is expired build `2`.
-- Apple distribution signing and the matching App Store provisioning profile are present. The direct Xcode archive/upload path is available even though EAS CLI is not authenticated.
-- The final build `4` arm64 Release simulator build exited `0` with signing and Sentry upload disabled. Artifact inspection confirmed bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, the privacy manifest, production Worker URL, and no provider-key/direct-OpenAI/Sentry-DSN pattern. This does not satisfy the signed archive, TestFlight, screenshot, or hardware gates.
-- Wrangler OAuth and both required staging/production secret names are verified. Exact-source deployment and strict dual-lane smoke are still pending, so no current provider-backed request IDs are claimed yet.
-- App Store Connect still has no candidate build attached, no screenshots, App Privacy not started, and a blank Support URL. Those fields must not be completed as launch-ready until the exact candidate clears cloud and physical-device gates.
-- Current blockers are the build `4` physical no-screen artifact, exact signed archive/TestFlight install, current provider-backed production evidence, screenshots from the candidate, matching privacy answers, build attachment, and final metadata review. App Store submission is not authorized by local tests alone.
+- Apple identifiers are resolved: app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, team `K99RADPB9G`, and copyright `2026 XIANMIN CHEN`. The current App Store Connect tab has returned to Apple sign-in, so no current metadata mutation or submission is claimed.
+- Apple Developer remains authenticated. Distribution signing, the App Store profile, and a newly generated one-device Ad Hoc profile are present. The Ad Hoc profile permits exact archive installation for blind validation while retaining `get-task-allow=false` and the Apple Distribution identity.
+- A signed build `4` archive and exported App Store IPA were already produced from commit `a0a467e`; deep codesign, privacy manifests, production API routing, and client secret/direct-provider scans passed. Release-evidence parsing is now fixed for real Xcode date/data plists, so the candidate will be rebuilt from the post-fix commit rather than reusing the older binary.
+- Exact-commit staging and production Workers from `a0a467e` passed strict provider-backed guidance and scene-query smoke with `gpt-5.6-sol` and prompt `2026-07-18.v1`. Because release tooling changed after that commit, deployment provenance and request IDs must be refreshed from the final source revision before candidate evidence is accepted.
+- Two factual 6.9-inch simulator screenshots exist at `expo/store-assets/screenshots/01-home-6.9.jpg` and `02-settings-6.9.jpg`, both `1320x2868`. They are store-asset candidates, not proof of the physical no-screen flow.
+- App Store Connect still has no candidate build attached, App Privacy is not completed, and the Support URL/build/screenshots need final review in the authenticated session. Submission remains blocked until the real-iPhone no-screen artifact passes, the same final archive is exported/uploaded, and the processed TestFlight build passes the no-screen smoke.
 
 All later dated evidence is retained as phase history. Older authentication, model, device, and unresolved-input statements below do not override the current gate above.
 

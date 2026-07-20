@@ -156,7 +156,7 @@ mustInclude(homeScreen, "hasAnnouncedReadyPromptRef", "Home ready prompt one-sho
 mustInclude(homeScreen, "speakVoiceResponseRef", "Home ready prompt is not coupled to settings-change effect cleanup");
 mustInclude(homeScreen, "startGuidanceFromHome", "Home guidance handoff helper");
 mustInclude(homeScreen, "lastSpokenMessageRef.current = \"Guidance started. Analyzing your surroundings.\"", "Home handoff seeds Navigation repeat text");
-mustInclude(homeScreen, "if (isFocusedRef.current)", "Home stale voice-session restart guard");
+mustInclude(homeScreen, "if (responseIsCurrent())", "Home stale voice-session restart guard");
 mustNotInclude(homeScreen, "Guidance starting. Say stop guidance any time to pause.", "Home must not speak overlapping start prompt during Navigation handoff");
 
 const settingsProvider = read("../src/providers/SettingsProvider.tsx");
@@ -297,5 +297,11 @@ const iosDeviceReady = read("../scripts/check-ios-device-ready.mjs");
 mustInclude(iosDeviceReady, "--json", "iOS device readiness JSON output");
 mustInclude(iosDeviceReady, "identifierHandling", "iOS device readiness suffix-only evidence");
 mustInclude(iosDeviceReady, "containsFullDeviceIds", "iOS device readiness privacy guard");
+mustInclude(iosDeviceReady, "probeCoreDeviceExecution", "iOS device readiness active CoreDevice probe");
+
+const iosDeviceReadiness = read("../scripts/ios-device-readiness.mjs");
+mustInclude(iosDeviceReadiness, "devicectl-process-info", "iOS device active probe type");
+mustInclude(iosDeviceReadiness, "coreDeviceExecutionReady", "iOS device executable readiness result");
+mustInclude(iosDeviceReadiness, "guidepup-coredevice-", "iOS device private temporary probe output");
 
 console.log("No-screen smoke contract passed. Real iPhone validation is still required for hardware proof.");

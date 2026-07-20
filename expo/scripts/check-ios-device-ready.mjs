@@ -1,6 +1,12 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildDeviceReadinessReport,
+  parseDevicectlJson,
+  probeCoreDeviceExecution,
+  selectUniqueTargetDevice,
+} from "./ios-device-readiness.mjs";
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const targetName = process.env.GUIDEPUP_IOS_DEVICE_NAME || "charlie的iPhone";
@@ -30,6 +36,13 @@ function exitWithBlockedJson(reason, details = {}) {
     },
     deviceReadiness: {
       ddiServicesAvailable: false,
+      coreDeviceExecutionReady: false,
+      coreDeviceProbe: {
+        checkedAt: "not-run",
+        exitStatus: null,
+        outcome: "not-run",
+        type: "devicectl-process-info",
+      },
       developerModeEnabled: false,
       lastConnectionDate: "not-found",
       paired: false,
@@ -51,66 +64,6 @@ function exitWithBlockedJson(reason, details = {}) {
   process.exit(1);
 }
 
-function parseDevicectlJson(output) {
-  const jsonStart = output.indexOf("{");
-  if (jsonStart === -1) {
-    throw new Error("devicectl did not return JSON output.");
-  }
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = jsonStart; index < output.length; index += 1) {
-    const char = output[index];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = true;
-      continue;
-    }
-
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return JSON.parse(output.slice(jsonStart, index + 1));
-      }
-    }
-  }
-
-  throw new Error("devicectl JSON output was incomplete.");
-}
-
-function suffix(value) {
-  if (!value || typeof value !== "string") {
-    return "not-found";
-  }
-
-  return value.length > 8 ? value.slice(-8) : value;
-}
-
-function findTargetDevice(devicectlPayload) {
-  const devices = devicectlPayload?.result?.devices;
-  if (!Array.isArray(devices)) {
-    return undefined;
-  }
-
-  return devices.find((device) => device?.deviceProperties?.name === targetName)
-    || devices.find((device) => device?.hardwareProperties?.deviceType === "iPhone");
-}
-
 const devicectl = run("xcrun", ["devicectl", "list", "devices", "--json-output", "-"]);
 if (!devicectl.ok) {
   if (outputJson) {
@@ -125,9 +78,9 @@ if (!devicectl.ok) {
   process.exit(1);
 }
 
-let device;
+let selection;
 try {
-  device = findTargetDevice(parseDevicectlJson(devicectl.output));
+  selection = selectUniqueTargetDevice(parseDevicectlJson(devicectl.output), targetName);
 } catch (error) {
   if (outputJson) {
     exitWithBlockedJson("devicectl JSON parse failed", {
@@ -143,6 +96,19 @@ try {
   process.exit(1);
 }
 
+if (!selection.device) {
+  if (outputJson) {
+    exitWithBlockedJson(selection.reason);
+  }
+  console.log("Guide Pup iPhone readiness check");
+  console.log("");
+  console.log("Result: BLOCKED");
+  console.log(`- ${selection.reason}.`);
+  process.exit(1);
+}
+
+const device = selection.device;
+
 const xctrace = run("xcrun", ["xctrace", "list", "devices"]);
 const usb = run("system_profiler", ["SPUSBDataType"]);
 const destinations = run("xcodebuild", [
@@ -152,67 +118,20 @@ const destinations = run("xcodebuild", [
   scheme,
   "-showdestinations",
 ]);
-
-const deviceName = device?.deviceProperties?.name || "not-found";
-const identifierSuffix = suffix(device?.identifier);
-const udidSuffix = suffix(device?.hardwareProperties?.udid);
-const tableState = devicectl.output
-  .split("\n")
-  .find((line) => deviceName !== "not-found" && line.includes(deviceName))
-  ?.match(/\s(available|unavailable|connected|disconnected)(?:\s|$)/)?.[1];
-const pairingState = device?.connectionProperties?.pairingState || "unknown";
-const developerMode = device?.deviceProperties?.developerModeStatus || "unknown";
-const ddiServicesAvailable = device?.deviceProperties?.ddiServicesAvailable;
-const tunnelState = device?.connectionProperties?.tunnelState || "unknown";
-const inferredState =
-  ddiServicesAvailable === false || tunnelState === "unavailable" ? "unavailable" : "unknown";
-const state = tableState || device?.connectionProperties?.status || inferredState;
-const lastConnectionDate = device?.connectionProperties?.lastConnectionDate || "not-found";
-const usbPresent = /iphone|apple mobile/i.test(usb.output);
-const xctraceVisible = deviceName !== "not-found" && xctrace.output.includes(deviceName);
-const xcodeDestinationVisible = deviceName !== "not-found" && destinations.output.includes(deviceName);
-const executionVisible =
-  ddiServicesAvailable === true &&
-  tunnelState === "connected" &&
-  xctraceVisible &&
-  xcodeDestinationVisible;
-const stateSupportsExecution =
-  state === "available" ||
-  state === "connected" ||
-  (state === "unknown" && executionVisible);
-
-const ready =
-  stateSupportsExecution &&
-  pairingState === "paired" &&
-  developerMode === "enabled" &&
-  ddiServicesAvailable === true &&
-  xctraceVisible &&
-  xcodeDestinationVisible;
-
-const readinessReport = {
-  device: {
-    hardwareUdidSuffix: udidSuffix,
-    identifierSuffix,
-    name: deviceName,
-  },
-  deviceReadiness: {
-    ddiServicesAvailable: ddiServicesAvailable === true,
-    developerModeEnabled: developerMode === "enabled",
-    lastConnectionDate,
-    paired: pairingState === "paired",
-    result: ready ? "ready" : "blocked",
-    trusted: pairingState === "paired",
-    tunnelConnected: tunnelState === "connected",
-    usbOrSameLan: usbPresent || tunnelState === "connected",
-    xcodeDestinationAvailable: xcodeDestinationVisible,
-    xctraceVisible,
-  },
-  privacy: {
-    containsFullDeviceIds: false,
-    identifierHandling: "suffix-only",
-  },
+const coreDeviceProbe = probeCoreDeviceExecution({
+  deviceIdentifier: device.identifier,
+  projectDir,
+});
+const readinessReport = buildDeviceReadinessReport({
+  coreDeviceProbe,
+  destinationsOutput: destinations.output,
+  device,
+  devicectlOutput: devicectl.output,
   targetName,
-};
+  usbOutput: usb.output,
+  xctraceOutput: xctrace.output,
+});
+const ready = readinessReport.deviceReadiness.result === "ready";
 
 if (outputJson) {
   console.log(JSON.stringify(readinessReport, null, 2));
@@ -221,19 +140,20 @@ if (outputJson) {
 
 console.log("Guide Pup iPhone readiness check");
 console.log("");
-console.log(`Target: ${deviceName}`);
+console.log(`Target: ${readinessReport.device.name}`);
 console.log(`Result: ${ready ? "READY" : "BLOCKED"}`);
-console.log(`- Device identifier suffix: ${identifierSuffix}`);
-console.log(`- Hardware UDID suffix: ${udidSuffix}`);
-console.log(`- devicectl state: ${state}`);
-console.log(`- Pairing state: ${pairingState}`);
-console.log(`- Developer Mode: ${developerMode}`);
-console.log(`- DDI services available: ${typeof ddiServicesAvailable === "boolean" ? String(ddiServicesAvailable) : "unknown"}`);
-console.log(`- Tunnel state: ${tunnelState}`);
-console.log(`- Last connection: ${lastConnectionDate}`);
-console.log(`- USB iPhone present: ${usbPresent ? "yes" : "no"}`);
-console.log(`- xctrace visibility: ${xctraceVisible ? "yes" : "no"}`);
-console.log(`- xcodebuild destination visibility: ${xcodeDestinationVisible ? "yes" : "no"}`);
+console.log(`- Device identifier suffix: ${readinessReport.device.identifierSuffix}`);
+console.log(`- Hardware UDID suffix: ${readinessReport.device.hardwareUdidSuffix}`);
+console.log(`- devicectl listed state: ${readinessReport.deviceReadiness.listedState}`);
+console.log(`- Pairing state: ${readinessReport.deviceReadiness.paired ? "paired" : "not paired"}`);
+console.log(`- Developer Mode: ${readinessReport.deviceReadiness.developerModeEnabled ? "enabled" : "not enabled"}`);
+console.log(`- DDI services snapshot: ${readinessReport.deviceReadiness.ddiServicesAvailable ? "available" : "not available"}`);
+console.log(`- Tunnel snapshot: ${readinessReport.deviceReadiness.tunnelConnected ? "connected" : "not connected"}`);
+console.log(`- Last connection: ${readinessReport.deviceReadiness.lastConnectionDate}`);
+console.log(`- USB or connected tunnel snapshot: ${readinessReport.deviceReadiness.usbOrSameLan ? "yes" : "no"}`);
+console.log(`- xctrace visibility: ${readinessReport.deviceReadiness.xctraceVisible ? "yes" : "no"}`);
+console.log(`- xcodebuild destination visibility: ${readinessReport.deviceReadiness.xcodeDestinationAvailable ? "yes" : "no"}`);
+console.log(`- Active CoreDevice probe: ${readinessReport.deviceReadiness.coreDeviceProbe.outcome}`);
 
 if (!ready) {
   console.log("");

@@ -48,27 +48,48 @@ function requireCommand(commandRunner, command, args, options = {}) {
   return result;
 }
 
-function parsePlistJson(commandRunner, xml, label) {
-  const result = requireCommand(
-    commandRunner,
-    "plutil",
-    ["-convert", "json", "-o", "-", "--", "-"],
-    { input: xml },
-  );
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    throw new Error(`${label} did not convert to valid JSON.`);
-  }
+function plistKeyPath(components) {
+  return components
+    .map((component) => String(component).replaceAll("\\", "\\\\").replaceAll(".", "\\."))
+    .join(".");
 }
 
-function readPlist(commandRunner, filePath, label) {
-  const result = requireCommand(commandRunner, "plutil", ["-convert", "json", "-o", "-", filePath]);
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    throw new Error(`${label} did not convert to valid JSON.`);
+function extractPlistRaw(commandRunner, source, components, label, expectedType) {
+  const args = ["-extract", plistKeyPath(components), "raw"];
+  if (expectedType) {
+    args.push("-expect", expectedType);
   }
+  args.push("-n", "-o", "-", "--", source.filePath ?? "-");
+  const result = requireCommand(commandRunner, "plutil", args, {
+    input: source.input,
+  });
+  if (typeof result.stdout !== "string") {
+    throw new Error(`${label} did not produce a plist value.`);
+  }
+  return result.stdout;
+}
+
+function extractPlistBoolean(commandRunner, source, components, label) {
+  const value = extractPlistRaw(commandRunner, source, components, label, "bool");
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${label} did not produce a valid boolean.`);
+}
+
+function readPlistDictionaryFields(commandRunner, source, components, fields, label) {
+  const keys = new Set(
+    extractPlistRaw(commandRunner, source, components, label, "dictionary")
+      .split(/\r?\n/u)
+      .filter((key) => key.length > 0),
+  );
+  return Object.fromEntries(
+    fields
+      .filter((field) => keys.has(field))
+      .map((field) => [
+        field,
+        extractPlistRaw(commandRunner, source, [...components, field], `${label}.${field}`),
+      ]),
+  );
 }
 
 function assertInsideDirectory(parentPath, childPath, label) {
@@ -274,14 +295,54 @@ export async function inspectReleaseCandidate(options) {
     throw new Error("Candidate IPA does not exist.");
   }
 
-  const archiveInfo = readPlist(commandRunner, path.join(archivePath, "Info.plist"), "Archive Info.plist");
-  const archiveProperties = archiveInfo.ApplicationProperties ?? {};
+  const archiveInfoSource = { filePath: path.join(archivePath, "Info.plist") };
+  const archiveProperties = readPlistDictionaryFields(
+    commandRunner,
+    archiveInfoSource,
+    ["ApplicationProperties"],
+    [
+      "ApplicationPath",
+      "CFBundleIdentifier",
+      "CFBundleShortVersionString",
+      "CFBundleVersion",
+      "SigningIdentity",
+      "Team",
+    ],
+    "Archive ApplicationProperties",
+  );
   const appPath = resolveArchivedAppPath(
     archivePath,
     archiveProperties.ApplicationPath,
     fileExists,
   );
-  const appInfo = readPlist(commandRunner, path.join(appPath, "Info.plist"), "App Info.plist");
+  const appInfoSource = { filePath: path.join(appPath, "Info.plist") };
+  const appInfo = {
+    CFBundleExecutable: extractPlistRaw(
+      commandRunner,
+      appInfoSource,
+      ["CFBundleExecutable"],
+      "App CFBundleExecutable",
+      "string",
+    ),
+    CFBundleIdentifier: extractPlistRaw(
+      commandRunner,
+      appInfoSource,
+      ["CFBundleIdentifier"],
+      "App CFBundleIdentifier",
+    ),
+    CFBundleShortVersionString: extractPlistRaw(
+      commandRunner,
+      appInfoSource,
+      ["CFBundleShortVersionString"],
+      "App CFBundleShortVersionString",
+    ),
+    CFBundleVersion: extractPlistRaw(
+      commandRunner,
+      appInfoSource,
+      ["CFBundleVersion"],
+      "App CFBundleVersion",
+    ),
+  };
   const binaryName = appInfo.CFBundleExecutable;
   if (!isNonEmptyString(binaryName) || !SAFE_ARTIFACT_NAME_PATTERN.test(binaryName)) {
     throw new Error("App CFBundleExecutable must be a file name only.");
@@ -311,8 +372,39 @@ export async function inspectReleaseCandidate(options) {
     "security",
     ["cms", "-D", "-i", path.join(appPath, "embedded.mobileprovision")],
   ).stdout;
-  const profile = parsePlistJson(commandRunner, profileXml, "Embedded provisioning profile");
-  const profileTeam = Array.isArray(profile.TeamIdentifier) ? profile.TeamIdentifier[0] : undefined;
+  const profileSource = { input: profileXml };
+  extractPlistRaw(
+    commandRunner,
+    profileSource,
+    ["TeamIdentifier"],
+    "Provisioning profile TeamIdentifier",
+    "array",
+  );
+  const profileTeam = extractPlistRaw(
+    commandRunner,
+    profileSource,
+    ["TeamIdentifier", 0],
+    "Provisioning profile team identifier",
+  );
+  extractPlistRaw(
+    commandRunner,
+    profileSource,
+    ["Entitlements"],
+    "Provisioning profile Entitlements",
+    "dictionary",
+  );
+  const profileApplicationIdentifier = extractPlistRaw(
+    commandRunner,
+    profileSource,
+    ["Entitlements", "application-identifier"],
+    "Profile application identifier",
+  );
+  const profileGetTaskAllow = extractPlistBoolean(
+    commandRunner,
+    profileSource,
+    ["Entitlements", "get-task-allow"],
+    "Profile get-task-allow",
+  );
   expectEqual(profileTeam, expected.teamIdentifier, "Provisioning profile team identifier");
 
   requireCommand(commandRunner, "codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath]);
@@ -321,16 +413,34 @@ export async function inspectReleaseCandidate(options) {
     "codesign",
     ["-d", "--entitlements", ":-", appPath],
   ).stdout;
-  const entitlements = parsePlistJson(commandRunner, entitlementXml, "Codesign entitlements");
+  const entitlementSource = { input: entitlementXml };
+  const codesignApplicationIdentifier = extractPlistRaw(
+    commandRunner,
+    entitlementSource,
+    ["application-identifier"],
+    "Codesign application identifier",
+  );
+  const codesignTeamIdentifier = extractPlistRaw(
+    commandRunner,
+    entitlementSource,
+    ["com.apple.developer.team-identifier"],
+    "Codesign team identifier",
+  );
+  const codesignGetTaskAllow = extractPlistBoolean(
+    commandRunner,
+    entitlementSource,
+    ["get-task-allow"],
+    "Codesign get-task-allow",
+  );
   const signingDetails = requireCommand(commandRunner, "codesign", ["-dvv", "--verbose=4", appPath]);
   const signingText = `${signingDetails.stdout}\n${signingDetails.stderr}`;
 
   const applicationIdentifier = `${expected.teamIdentifier}.${expected.bundleIdentifier}`;
-  expectEqual(profile.Entitlements?.["application-identifier"], applicationIdentifier, "Profile application identifier");
-  expectEqual(entitlements["application-identifier"], applicationIdentifier, "Codesign application identifier");
-  expectEqual(entitlements["com.apple.developer.team-identifier"], expected.teamIdentifier, "Codesign team identifier");
-  requireFalse(profile.Entitlements?.["get-task-allow"], "Profile get-task-allow");
-  requireFalse(entitlements["get-task-allow"], "Codesign get-task-allow");
+  expectEqual(profileApplicationIdentifier, applicationIdentifier, "Profile application identifier");
+  expectEqual(codesignApplicationIdentifier, applicationIdentifier, "Codesign application identifier");
+  expectEqual(codesignTeamIdentifier, expected.teamIdentifier, "Codesign team identifier");
+  requireFalse(profileGetTaskAllow, "Profile get-task-allow");
+  requireFalse(codesignGetTaskAllow, "Codesign get-task-allow");
   if (!/Authority=Apple Distribution(?::|\n|$)/.test(signingText) && !String(archiveProperties.SigningIdentity ?? "").startsWith("Apple Distribution")) {
     throw new Error("Codesign identity is not an Apple Distribution identity.");
   }

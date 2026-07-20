@@ -11,8 +11,8 @@ The Diagnostics screen can export a sanitized `Export no-screen JSON draft` payl
 - Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
 - Signed-candidate evidence from `expo/release/candidate-build.latest.json`; copy its `archive.binarySha256` into `provenance.candidateBinarySha256` before the run.
 - Backend environment and API base URL label: staging, production, or local.
-- Device state: paired/trusted, Developer Mode enabled, network path confirmed, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
-- Structured device-readiness JSON from `npm --prefix expo run check:ios-device -- --json`. This output is suffix-only and can be copied into the evidence packet when it reports `deviceReadiness.result: "ready"`.
+- Device state: paired/trusted, Developer Mode enabled, Xcode visibility, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
+- Structured device-readiness JSON from `npm --prefix expo run check:ios-device -- --json`. This output is suffix-only and can be copied into the evidence packet when it reports both `deviceReadiness.result: "ready"` and `deviceReadiness.coreDeviceExecutionReady: true`. DDI, tunnel, and USB fields are informational snapshots because CoreDevice may establish them only while the bounded probe runs.
 - Diagnostics export from the app after the run.
 - Sanitized no-screen JSON draft from the Diagnostics screen after the run.
 - Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.

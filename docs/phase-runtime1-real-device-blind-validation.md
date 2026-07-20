@@ -5,14 +5,33 @@ Branch: `codex/guidepup-credentialed-launch`
 Continuation start: `efa5e34`
 Latest continuation start: `b5c1c5e`
 
-## Current gate on 2026-07-19
+## Current gate on 2026-07-20
 
 - The launch candidate is version `1.0.0`, build `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`.
 - Native voice startup now requires `.voiceChat` plus `AVAudioInputNode` voice processing, reports `voiceProcessingEnabled`, and fails closed if acoustic echo cancellation cannot be enabled. Explicit STOP is never discarded by text-based echo suppression.
-- Native command sessions use owner tokens. A stale successful or rejected start can clean up only its own native session and cannot stop a newer listener. Focused behavioral and contract coverage passed `29/29`.
-- The final build `4` arm64 Release simulator compile and artifact inspection passed, including bundle/version/build, privacy manifest, production backend URL, and client secret/direct-provider checks. This remains simulator evidence and does not attest speech, VoiceOver, camera, haptics, audio cues, or interruptions on the connected iPhone.
-- The current suffix-only readiness check is still `blocked`: the phone is paired and trusted, Developer Mode is enabled, and Xcode/xctrace can see it, but DDI services, the CoreDevice tunnel, and a USB/same-LAN execution path are unavailable in the latest snapshot.
+- Native command sessions use owner tokens. A stale successful or rejected start can clean up only its own native session and cannot stop a newer listener. Focused behavioral and contract coverage passed before this continuation; the expanded suite now also covers active CoreDevice readiness and privacy-safe cleanup.
+- Apple Developer generated Ad Hoc profile `GuidePup Build 4 Blind Validation 20260720` for the exact Guide Pup bundle, current Apple Distribution certificate, and registered validation iPhone. Local decoding confirmed the team/application identifier, `get-task-allow=false`, one matching provisioned device, and certificate equality without checking in the profile or full device identifier.
+- The suffix-only readiness check now reports `ready`: the wired phone is paired/trusted, Developer Mode is enabled, Xcode and xctrace see it, and a bounded read-only `devicectl device info processes` probe exits `0` with a structured success result. Idle DDI/tunnel fields remain false as truthful snapshots and are no longer mistaken for an execution failure.
 - No current `expo/release/no-screen-smoke.latest.json` exists. Physical speech input, confirmations, haptics, earcons, VoiceOver, interruption recovery, settings persistence, native camera capture, JS fallback, and STOP cut-through remain unvalidated for build `4`.
+
+## 2026-07-20 device and signing evidence
+
+Commands:
+
+```bash
+npm --prefix expo run test:ios-device-readiness
+npm --prefix expo run check:ios-device -- --json
+security cms -D -i /private/tmp/GuidePup-AdHoc-Build4-20260720.mobileprovision
+xcrun devicectl device info processes --device '<internal-identifier>' --timeout 30 --quiet --json-output '<private-temporary-file>'
+```
+
+Results:
+
+- Device-readiness behavior tests passed `16/16`, including false idle DDI/tunnel snapshots with a successful active probe, failed-probe precedence, pairing/Developer Mode/Xcode blockers, missing/ambiguous target rejection, malformed output, timeouts, temporary-file cleanup, and suffix-only evidence.
+- Live readiness returned `deviceReadiness.result: "ready"` and `coreDeviceExecutionReady: true`; the report included only the device identifier suffix `0B5CE6D3` and hardware suffix `1178001C`.
+- The active probe reads a process list only from a private temporary file, emits no process names/arguments/full identifiers, and removes the file before returning. It does not inspect app data or replace the sensory no-screen run.
+- The Ad Hoc profile expires `2027-07-19`, matches team `K99RADPB9G` and bundle `app.rork.guide-pup-vision-assist`, and contains the validation iPhone. Raw profile data, certificate data, and full device identifiers are omitted.
+- The next archive must be rebuilt from the post-fix Git revision with this Ad Hoc profile, installed on the phone, and exported from the same archive for the App Store candidate.
 
 ## Scope
 

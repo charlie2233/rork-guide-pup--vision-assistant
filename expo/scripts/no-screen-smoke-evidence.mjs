@@ -258,8 +258,9 @@ export function validateNoScreenSmokeEvidenceArtifact(artifact, options = {}) {
   requireField("deviceReadiness.paired", isBooleanTrue);
   requireField("deviceReadiness.trusted", isBooleanTrue);
   requireField("deviceReadiness.developerModeEnabled", isBooleanTrue);
-  requireField("deviceReadiness.usbOrSameLan", isBooleanTrue);
+  requireField("deviceReadiness.coreDeviceExecutionReady", isBooleanTrue);
   requireField("deviceReadiness.xcodeDestinationAvailable", isBooleanTrue);
+  requireField("deviceReadiness.xctraceVisible", isBooleanTrue);
 
   requireField("assistiveTech.voiceOverRunning", isBooleanTrue);
   requireField("assistiveTech.speechInputConfirmed", isBooleanTrue);

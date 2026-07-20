@@ -31,8 +31,12 @@
     "paired": true,
     "trusted": true,
     "developerModeEnabled": true,
-    "usbOrSameLan": true,
-    "xcodeDestinationAvailable": true
+    "coreDeviceExecutionReady": true,
+    "ddiServicesAvailable": false,
+    "tunnelConnected": false,
+    "usbOrSameLan": false,
+    "xcodeDestinationAvailable": true,
+    "xctraceVisible": true
   },
   "noScreen": {
     "noScreenUsed": true,

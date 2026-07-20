@@ -178,12 +178,16 @@ function buildValidArtifact(overrides = {}) {
       osVersion: "26.4.2",
     },
     deviceReadiness: {
+      coreDeviceExecutionReady: true,
+      ddiServicesAvailable: false,
       developerModeEnabled: true,
       paired: true,
       result: "ready",
       trusted: true,
-      usbOrSameLan: true,
+      tunnelConnected: false,
+      usbOrSameLan: false,
       xcodeDestinationAvailable: true,
+      xctraceVisible: true,
     },
     diagnostics: {
       audioCues: {
@@ -292,6 +296,19 @@ test("valid no-screen smoke evidence passes the launch schema", () => {
   const result = validateCandidate(buildValidArtifact());
 
   assert.deepEqual(result, { invalid: [], missing: [], valid: true });
+});
+
+test("no-screen evidence requires an executable CoreDevice probe, not a transport snapshot", () => {
+  const artifact = buildValidArtifact();
+  artifact.deviceReadiness.coreDeviceExecutionReady = false;
+  artifact.deviceReadiness.ddiServicesAvailable = true;
+  artifact.deviceReadiness.tunnelConnected = true;
+  artifact.deviceReadiness.usbOrSameLan = true;
+
+  const result = validateCandidate(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(result.invalid.join(","), /deviceReadiness\.coreDeviceExecutionReady/);
 });
 
 test("no-screen smoke evidence rejects missing STOP barge-in proof", () => {
@@ -453,7 +470,7 @@ test("no-screen smoke evidence rejects camera heuristic upload dimensions that d
 test("no-screen smoke evidence rejects raw media and full identifiers", () => {
   const artifact = buildValidArtifact({
     rawImage: "data:image/png;base64,AAAA",
-    udid: "00008130-000A001A1178001C",
+    udid: "00000000-0000000000000000",
   });
 
   const result = validateCandidate(artifact);
