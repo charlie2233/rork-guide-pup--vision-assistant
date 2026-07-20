@@ -164,6 +164,25 @@ test("freshness gate rejects old and pre-recovery frames before upload", () => {
   }));
 });
 
+test("camera fallback validation is explicit and never overrides normal native selection", () => {
+  const {
+    JS_FALLBACK_VALIDATION_CAMERA_PATH,
+    resolveInitialNavigationCorePath,
+    shouldForceJsFallbackValidation,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+
+  assert.equal(shouldForceJsFallbackValidation(JS_FALLBACK_VALIDATION_CAMERA_PATH), true);
+  assert.equal(shouldForceJsFallbackValidation([JS_FALLBACK_VALIDATION_CAMERA_PATH]), true);
+  assert.equal(shouldForceJsFallbackValidation("native-core"), false);
+  assert.equal(shouldForceJsFallbackValidation(undefined), false);
+  assert.equal(resolveInitialNavigationCorePath({ nativeAvailable: true }), "native-core");
+  assert.equal(resolveInitialNavigationCorePath({ nativeAvailable: false }), "js-fallback");
+  assert.equal(resolveInitialNavigationCorePath({
+    nativeAvailable: true,
+    requestedCameraPath: JS_FALLBACK_VALIDATION_CAMERA_PATH,
+  }), "js-fallback");
+});
+
 test("STOP remains deterministic while spoken guidance is active", () => {
   const {
     canKeepListeningForStopBargeInDuringSpeech,

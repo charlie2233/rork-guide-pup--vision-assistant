@@ -7,9 +7,11 @@ Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
 ## Current gate on 2026-07-19
 
 - Wrangler OAuth is authenticated to the intended Cloudflare account. Staging and production each expose the required secret names `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; secret values were not read, printed, or written to the repository.
-- The prepared Worker contract uses `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, explicit guidance and scene-query lanes, bounded retries/cost controls, deterministic STOP overrides, provider allowlists, privacy-safe rate-limit subjects, and stamped runtime provenance.
+- Commit `da95d8e` was deployed to staging Worker version `7dad98be-c5d8-4acf-9530-7acdba48ab0a` and production Worker version `2a71cbcc-bb23-4181-8389-b95e78c4a889`. Both strict dual-lane smokes passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, compact sampled-frame context, bounded retries/cost controls, deterministic STOP overrides, and stamped runtime provenance.
+- Staging request IDs: health `aab9772c-433f-4c33-9394-aca51f5ef6fa`, bootstrap `cc948ee8-0ea7-4a5a-829b-dac136784f18`, guidance `9ac44901-039b-465b-b0bc-1c62dfd962fe`, and scene query `db9e28d0-c397-4c6e-8fcd-e00fc721b6de`.
+- Production request IDs: health `ec9a6521-5029-49f2-8b5d-3b4fae132af2`, bootstrap `c72b69a2-3435-40ac-8628-5d5e5b0efeaa`, guidance `4d494d55-17c1-4615-9a03-1c96c6e2f7ec`, and scene query `76ba74e2-4dda-4465-a748-c1f74afdc4ce`.
 - Backend privacy/runtime tests passed `50/50`; backend smoke and release-evidence tests passed `23/23`; typecheck and staging/production Wrangler dry-runs passed.
-- Deployment is intentionally pending the exact clean committed source. Therefore no new launch-valid staging or production request IDs are claimed in this section yet; historical GPT-4.1 IDs below remain historical only.
+- Any later tracked source commit must be redeployed and re-smoked before its signed candidate is accepted. The generated `smoke-results-*.latest` artifacts are the machine-readable authority for that exact revision and intentionally contain no raw media, credentials, tokens, signed URLs, or full device identifiers.
 
 All later dated sections are retained as phase history. Their older model, authentication, device, request-ID, and blocker statements are not current launch claims; the gate above is authoritative for this candidate.
 

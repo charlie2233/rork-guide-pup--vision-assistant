@@ -1,28 +1,28 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Current decision
 
-Guide Pup is **not ready for App Store submission yet**. Local source, config, privacy, and release gates are substantially hardened, and Apple identifiers are resolved, but submission is intentionally blocked until both current provider-backed cloud smoke and real-iPhone no-screen evidence exist for the exact candidate.
+Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, Apple identifiers, distribution signing, and executable iPhone readiness are verified, but submission remains intentionally blocked on sensory no-screen evidence, an exact post-fix candidate, TestFlight retest, and final App Store Connect completion.
 
 Current hard blockers:
 
-- Staging/production deployment of the exact committed source and strict `gpt-5.6-sol` / `2026-07-18.v1` provider-backed smoke with current sanitized request IDs for both guidance and scene-query lanes. Wrangler OAuth and both required secret names are verified.
-- A stable iPhone execution path and the complete no-screen hardware sequence with persisted sanitized evidence. The latest check sees the paired/trusted Developer Mode phone in Xcode/xctrace, but DDI, tunnel, and USB/same-LAN execution remain unavailable.
-- Exact distribution archive/TestFlight validation, real screenshots, matching App Privacy answers, attached build, and final App Review metadata verification.
+- Rebuild the exact post-fix revision, install it on the wired iPhone, and complete the no-screen sequence with spoken input/output, VoiceOver, audible earcons, felt haptics, interruption recovery, settings persistence, native camera capture, explicit JS fallback capture, and partial STOP cut-through. No sensory pass is inferred from process liveness.
+- Redeploy and strictly smoke staging/production after the final tracked commit, then bind the sanitized request IDs and signed binary hash into candidate and no-screen evidence.
+- Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, Support URL, build selection, agreements, and App Review metadata in App Store Connect.
 
 Sentry is deliberately disabled, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
 
 Current local evidence:
 
-- Expo scripted tests: `93/93`; backend privacy/runtime tests: `50/50`; backend smoke/release-evidence tests: `23/23`; both typechecks, Expo lint, voice-command checks, and static no-screen checks passed.
-- Focused iOS runtime safety tests pass `29/29`, including deterministic STOP parsing, owner-scoped delayed/rejected starts and cleanup, fail-closed camera/analysis STOP observation, VoiceOver cancellation, and speech cancellation behavior.
-- A fresh arm64 Release simulator build for build `4` exited `0` after the final safety/privacy changes. The built app reports bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, iOS `15.1`, includes `PrivacyInfo.xcprivacy` and the production Worker URL, and contains no provider-key, direct OpenAI endpoint, or Sentry DSN pattern. This is compile/store-validation evidence, not a signed archive or device/TestFlight result.
-- Simulator speech-rate, detail, and haptics settings persisted across a stop/relaunch cycle. This does not prove real audio, haptics, VoiceOver, camera capture, or no-screen behavior.
-- Preview preflight passes with warnings; TestFlight/store preflights intentionally fail on stale production launch smoke and missing real-iPhone no-screen evidence.
-- The controllable in-app Browser is authenticated to App Store Connect and Apple Developer. It confirms version `1.0.0` is `Prepare for Submission`, build `2` is the only TestFlight build and is expired, App Privacy is not started, no screenshots or candidate build are attached, and the Support URL is blank.
-- Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Their values were not read or logged.
+- Commit `da95d8e` is deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. Any later tracked revision must be redeployed before candidate evidence is valid.
+- A signed `da95d8e` Ad Hoc archive installed and launched on the paired/trusted Developer Mode iPhone; the suffix-only CoreDevice readiness probe passed. That archive and its App Store IPA passed deep codesign, entitlements, privacy-manifest, endpoint, and client-secret scans, but are superseded by the final privacy/fallback fixes.
+- Apple's Environment Scanning category is now declared as linked, App Functionality only, no tracking. Privacy contract tests pass `12/12`, focused runtime/source-contract tests pass `26/26`, no-screen evidence tests pass `23/23`, and TypeScript, lint, voice, release-evidence, smoke-evidence, and static no-screen checks pass.
+- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. The last authenticated read showed build `2` expired, no current build selected, App Privacy not started, no screenshots attached, and Support URL blank; reauthenticate before mutation.
+- Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Secret values were not read or logged.
+
+All detailed backend and release sections below are retained as phase history. The decision and evidence above are authoritative for the current candidate.
 
 ## Public site
 

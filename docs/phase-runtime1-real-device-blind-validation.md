@@ -12,6 +12,8 @@ Latest continuation start: `b5c1c5e`
 - Native command sessions use owner tokens. A stale successful or rejected start can clean up only its own native session and cannot stop a newer listener. Focused behavioral and contract coverage passed before this continuation; the expanded suite now also covers active CoreDevice readiness and privacy-safe cleanup.
 - Apple Developer generated Ad Hoc profile `GuidePup Build 4 Blind Validation 20260720` for the exact Guide Pup bundle, current Apple Distribution certificate, and registered validation iPhone. Local decoding confirmed the team/application identifier, `get-task-allow=false`, one matching provisioned device, and certificate equality without checking in the profile or full device identifier.
 - The suffix-only readiness check now reports `ready`: the wired phone is paired/trusted, Developer Mode is enabled, Xcode and xctrace see it, and a bounded read-only `devicectl device info processes` probe exits `0` with a structured success result. Idle DDI/tunnel fields remain false as truthful snapshots and are no longer mistaken for an execution failure.
+- The exact `da95d8e` Ad Hoc app installed and launched through CoreDevice, and a read-only process query found one running Guide Pup process. This proves executable device readiness only, not audio, speech, haptics, VoiceOver, or camera behavior.
+- Settings now exposes an explicit VoiceOver-reachable `Camera fallback check`. That temporary route forces `js-fallback` only for the validation session, announces the choice aloud, keeps deterministic STOP and all safety guards unchanged, and leaves normal navigation on `native-core` whenever available.
 - No current `expo/release/no-screen-smoke.latest.json` exists. Physical speech input, confirmations, haptics, earcons, VoiceOver, interruption recovery, settings persistence, native camera capture, JS fallback, and STOP cut-through remain unvalidated for build `4`.
 
 ## 2026-07-20 device and signing evidence
@@ -32,6 +34,7 @@ Results:
 - The active probe reads a process list only from a private temporary file, emits no process names/arguments/full identifiers, and removes the file before returning. It does not inspect app data or replace the sensory no-screen run.
 - The Ad Hoc profile expires `2027-07-19`, matches team `K99RADPB9G` and bundle `app.rork.guide-pup-vision-assist`, and contains the validation iPhone. Raw profile data, certificate data, and full device identifiers are omitted.
 - The next archive must be rebuilt from the post-fix Git revision with this Ad Hoc profile, installed on the phone, and exported from the same archive for the App Store candidate.
+- Focused fallback-selection and runtime/source-contract tests passed `26/26`; TypeScript, lint, privacy launch contract `12/12`, static no-screen contract, and no-screen evidence schema `23/23` also passed. These remain local proof only.
 
 ## Scope
 

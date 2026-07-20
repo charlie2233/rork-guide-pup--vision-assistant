@@ -1,6 +1,28 @@
 export const MAX_FRAME_AGE_BEFORE_UPLOAD_MS = 2_000;
 export const MAX_FRAME_AGE_AT_ACTUATION_MS = 5_000;
 export const MAX_ANALYSIS_LATENCY_AT_ACTUATION_MS = 4_500;
+export const JS_FALLBACK_VALIDATION_CAMERA_PATH = "js-fallback-validation";
+
+type NavigationCameraPathRequest = string | string[] | undefined;
+
+export function shouldForceJsFallbackValidation(requestedCameraPath: NavigationCameraPathRequest) {
+  const normalizedRequest = Array.isArray(requestedCameraPath)
+    ? requestedCameraPath[0]
+    : requestedCameraPath;
+
+  return normalizedRequest === JS_FALLBACK_VALIDATION_CAMERA_PATH;
+}
+
+export function resolveInitialNavigationCorePath(input: {
+  nativeAvailable: boolean;
+  requestedCameraPath?: NavigationCameraPathRequest;
+}): "js-fallback" | "native-core" {
+  if (shouldForceJsFallbackValidation(input.requestedCameraPath)) {
+    return "js-fallback";
+  }
+
+  return input.nativeAvailable ? "native-core" : "js-fallback";
+}
 
 export type RuntimeSafetyStopReason =
   | "analysis-latency"

@@ -11,7 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useFocusEffect, useNavigation } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useVoice } from "@/src/components/VoiceAnnouncer";
@@ -56,7 +56,9 @@ import {
   evaluateStopRuntimeObservation,
   isAbortError,
   isStaleFrameError,
+  resolveInitialNavigationCorePath,
   shouldOwnFallbackCamera,
+  shouldForceJsFallbackValidation,
 } from "@/src/lib/runtimeSafety";
 import { useGuidePupRouter } from "@/src/lib/router";
 import {
@@ -125,6 +127,8 @@ function getStatusColors(tone: StatusTone) {
 export default function NavigationScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
+  const { cameraPath } = useLocalSearchParams<{ cameraPath?: string | string[] }>();
+  const forceJsFallbackValidation = shouldForceJsFallbackValidation(cameraPath);
   const { speak, stop: stopVoice, isSpeaking } = useVoice();
   const {
     settings,
@@ -139,7 +143,10 @@ export default function NavigationScreen() {
   const [runtimeSafetyHold, setRuntimeSafetyHold] = useState(false);
   const [isScreenFocused, setIsScreenFocused] = useState(false);
   const [navigationCorePath, setNavigationCorePath] = useState<GuidePupNavigationCoreExecutionPath>(
-    GuidePupNavigationCore.isNativeAvailable() ? "native-core" : "js-fallback",
+    () => resolveInitialNavigationCorePath({
+      nativeAvailable: GuidePupNavigationCore.isNativeAvailable(),
+      requestedCameraPath: cameraPath,
+    }),
   );
   const [fallbackCameraError, setFallbackCameraError] = useState<string | null>(null);
   const [fallbackCameraReady, setFallbackCameraReady] = useState(false);
@@ -253,7 +260,9 @@ export default function NavigationScreen() {
       ]);
       const moduleAvailable = GuidePupNavigationCore.isNativeAvailable();
       const executionPath: GuidePupNavigationCoreExecutionPath =
-        partial?.executionPath ?? (moduleAvailable && runtimeAvailable ? "native-core" : "js-fallback");
+        forceJsFallbackValidation
+          ? "js-fallback"
+          : partial?.executionPath ?? (moduleAvailable && runtimeAvailable ? "native-core" : "js-fallback");
       setNavigationCorePath(executionPath);
       recordNavigationLoopSnapshot({
         available: moduleAvailable,
@@ -266,7 +275,7 @@ export default function NavigationScreen() {
         voiceOverRunning: state?.voiceOverRunning,
       });
     },
-    [],
+    [forceJsFallbackValidation],
   );
 
   const syncVoiceState = useCallback(async () => {
@@ -1046,15 +1055,18 @@ export default function NavigationScreen() {
 
       if (!hasAnnouncedStartRef.current) {
         hasAnnouncedStartRef.current = true;
-        lastGuidanceMessageRef.current = "Guidance started. Analyzing your surroundings.";
-        lastSpokenMessageRef.current = "Guidance started. Analyzing your surroundings.";
-        speakCommandResponse("Guidance started. Analyzing your surroundings.", undefined, {
+        const startMessage = forceJsFallbackValidation
+          ? "JavaScript camera fallback validation started. Safety controls are unchanged. Analyzing your surroundings."
+          : "Guidance started. Analyzing your surroundings.";
+        lastGuidanceMessageRef.current = startMessage;
+        lastSpokenMessageRef.current = startMessage;
+        speakCommandResponse(startMessage, undefined, {
           keepListeningDuringSpeech: true,
         });
         void GuidePupNavigationCore.playAudioCue("success");
       }
     }
-  }, [isGuiding, permission, refreshNavigationCoreState, speakCommandResponse]);
+  }, [forceJsFallbackValidation, isGuiding, permission, refreshNavigationCoreState, speakCommandResponse]);
 
   useEffect(() => {
     if (permission?.status === "undetermined") {

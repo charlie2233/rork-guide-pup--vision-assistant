@@ -143,19 +143,34 @@ test("Sentry integration sanitizes every approved event surface and captures a n
 
 test("native manifest, in-app summary, and public privacy policy disclose the same launch data classes", () => {
   const manifest = plist.parse(read("../ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy"));
+  const collectedEntries = manifest.NSPrivacyCollectedDataTypes;
   const collectedTypes = new Set(
-    manifest.NSPrivacyCollectedDataTypes.map((entry) => entry.NSPrivacyCollectedDataType),
+    collectedEntries.map((entry) => entry.NSPrivacyCollectedDataType),
   );
   assert.deepEqual(
     collectedTypes,
     new Set([
       "NSPrivacyCollectedDataTypeAudioData",
       "NSPrivacyCollectedDataTypeDeviceID",
+      "NSPrivacyCollectedDataTypeEnvironmentScanning",
       "NSPrivacyCollectedDataTypeOtherDiagnosticData",
       "NSPrivacyCollectedDataTypePerformanceData",
       "NSPrivacyCollectedDataTypePhotosorVideos",
       "NSPrivacyCollectedDataTypeProductInteraction",
     ]),
+  );
+  const environmentScanningEntry = collectedEntries.find(
+      (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeEnvironmentScanning",
+    );
+  assert.ok(environmentScanningEntry);
+  assert.deepEqual(
+    { ...environmentScanningEntry },
+    {
+      NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeEnvironmentScanning",
+      NSPrivacyCollectedDataTypeLinked: true,
+      NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+      NSPrivacyCollectedDataTypeTracking: false,
+    },
   );
 
   const inAppSummary = normalizeWhitespace(read("../src/screens/InfoScreen.tsx"));
@@ -172,6 +187,7 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
   const publicPolicy = normalizeWhitespace(read("../../site/privacy/index.html"));
   for (const disclosure of [
     "sampled camera frames",
+    "image-derived environment-scanning data",
     "voice audio used for Apple speech recognition",
     "installation-scoped device identifier",
     "product interactions, request identifiers",

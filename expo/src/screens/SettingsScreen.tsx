@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { useGuidePupRouter } from "@/src/lib/router";
+import { JS_FALLBACK_VALIDATION_CAMERA_PATH } from "@/src/lib/runtimeSafety";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
@@ -115,6 +116,13 @@ export default function SettingsScreen() {
 
   const openDiagnostics = useCallback(() => {
     router.push("/diagnostics" as never);
+  }, [router]);
+
+  const openFallbackCameraValidation = useCallback(() => {
+    router.push({
+      pathname: "/navigation",
+      params: { cameraPath: JS_FALLBACK_VALIDATION_CAMERA_PATH },
+    } as never);
   }, [router]);
 
   const handleVersionPress = useCallback(() => {
@@ -297,6 +305,14 @@ export default function SettingsScreen() {
               onPress={openDiagnostics}
               testID="settings-diagnostics-link"
               title="Diagnostics"
+            />
+            <InfoLinkButton
+              accessibilityHint="Double tap to start guidance with the backup camera path"
+              accessibilityLabel="Validate backup camera path"
+              description="Checks the fallback camera used when native capture is unavailable."
+              onPress={openFallbackCameraValidation}
+              testID="settings-fallback-camera-validation"
+              title="Camera fallback check"
             />
           </View>
         </View>

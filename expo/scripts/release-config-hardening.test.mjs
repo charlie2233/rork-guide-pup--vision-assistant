@@ -159,10 +159,16 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     const interactionEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
       (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeProductInteraction",
     );
-    assert.ok(audioEntry && photosEntry && interactionEntry);
+    const environmentScanningEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
+      (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeEnvironmentScanning",
+    );
+    assert.ok(audioEntry && photosEntry && interactionEntry && environmentScanningEntry);
     audioEntry.NSPrivacyCollectedDataTypeLinked = false;
     photosEntry.NSPrivacyCollectedDataTypeTracking = true;
     interactionEntry.NSPrivacyCollectedDataTypePurposes = ["NSPrivacyCollectedDataTypePurposeAnalytics"];
+    environmentScanningEntry.NSPrivacyCollectedDataTypeLinked = false;
+    environmentScanningEntry.NSPrivacyCollectedDataTypeTracking = true;
+    environmentScanningEntry.NSPrivacyCollectedDataTypePurposes = ["NSPrivacyCollectedDataTypePurposeAnalytics"];
     privacyManifest.NSPrivacyCollectedDataTypes = privacyManifest.NSPrivacyCollectedDataTypes.filter(
       (entry) => entry.NSPrivacyCollectedDataType !== "NSPrivacyCollectedDataTypeOtherDiagnosticData",
     );
@@ -277,6 +283,9 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     assert.match(output, /AudioData linked flag must be "true", found "false"/);
     assert.match(output, /PhotosorVideos tracking flag must be "false", found "true"/);
     assert.match(output, /ProductInteraction purposes must be exactly/);
+    assert.match(output, /EnvironmentScanning linked flag must be "true", found "false"/);
+    assert.match(output, /EnvironmentScanning tracking flag must be "false", found "true"/);
+    assert.match(output, /EnvironmentScanning purposes must be exactly: NSPrivacyCollectedDataTypePurposeAppFunctionality/);
     assert.match(output, /must disclose NSPrivacyCollectedDataTypeOtherDiagnosticData/);
   } finally {
     rmSync(fixtureRoot, { force: true, recursive: true });

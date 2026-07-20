@@ -5,14 +5,15 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `52e28d2`
 Contract-tightening continuation start: `bf3da45`
 
-## Current gate on 2026-07-19
+## Current gate on 2026-07-20
 
 - The cloud contract now uses `gpt-5.6-sol` with strict Structured Outputs for direction, hazard level, obstacle, message, scene description, walkability, surface type, lighting, confidence, provider, model, prompt version, and fallback reason.
 - Guidance and `what do you see` are separate cloud interaction modes. The conversation lane can update repeat memory but cannot mutate deterministic navigation, settings, camera timing, STOP, haptics, VoiceOver, or guidance smoothing.
 - Sampled images and compact frame context are bounded; shipping-client provider calls remain prohibited. Backend redaction tests cover raw media, credentials, bearer values, signed URLs, local paths, and provider response bodies.
 - Backend privacy/runtime tests passed `50/50`, backend smoke/release tests passed `23/23`, and the full Expo scripted suite passed `93/93`.
-- The final build `4` arm64 Release simulator build and artifact inspection passed with the production Worker URL and privacy manifest present and provider-key/direct-OpenAI/Sentry-DSN patterns absent. This is not provider-backed live smoke or physical guidance-quality evidence.
-- Live staging/production deployment, strict provider-backed dual-lane smoke, a labeled live vision eval, and blind-user physical validation remain open. Local tests and dry-runs are not quality or launch proof for the deployed candidate.
+- Commit `da95d8e` was deployed to staging and production. Strict guidance and scene-query smokes passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, sampled-frame provenance, structured walkability/surface/lighting fields, and deterministic STOP-safe fallbacks. Current request IDs are recorded in `phase-backend1-provider-backed-analyze-smoke.md` and the generated smoke artifacts.
+- The signed `da95d8e` build `4` archive and IPA passed production-URL, privacy-manifest, provider-key/direct-OpenAI, Sentry-disabled, and deep-codesign inspection. The new Environment Scanning declaration and explicit JS fallback validation path require an exact-revision rebuild before hardware validation.
+- A labeled live vision eval and blind-user physical validation remain open. Provider-backed smoke proves routing and contract behavior, not guidance quality in real walking scenes.
 
 All later dated sections are retained as historical phase evidence. Their older model, authentication, and Worker-state statements are not current launch claims; the gate above is authoritative.
 

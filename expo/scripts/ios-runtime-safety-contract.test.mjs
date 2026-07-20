@@ -141,6 +141,8 @@ test("native frames expire and camera ownership is released before JS fallback",
   const cameraController = read("../modules/guidepup-navigation-core/ios/GuidePupCameraSessionController.swift");
   const navigation = read("../src/screens/NavigationScreen.tsx");
   const navigationWrapper = read("../src/native/GuidePupNavigationCore.ts");
+  const runtimeSafety = read("../src/lib/runtimeSafety.ts");
+  const settings = read("../src/screens/SettingsScreen.tsx");
 
   assert.match(cameraController, /maximumSampleAgeMs = 1_500\.0/);
   assert.match(cameraController, /CMSampleBufferGetPresentationTimeStamp/);
@@ -158,6 +160,12 @@ test("native frames expire and camera ownership is released before JS fallback",
     /if \(navigationCorePath === "native-core"\) \{\s*await GuidePupNavigationCore\.stopSession\(\)[\s\S]*setNavigationCorePath\("js-fallback"\)/,
   );
   assert.match(navigation, /navigationCorePath === "js-fallback"[\s\S]*GuidePupNavigationCore\.stopSession\(\)/);
+  assert.match(runtimeSafety, /JS_FALLBACK_VALIDATION_CAMERA_PATH = "js-fallback-validation"/);
+  assert.match(settings, /accessibilityLabel="Validate backup camera path"/);
+  assert.match(settings, /params: \{ cameraPath: JS_FALLBACK_VALIDATION_CAMERA_PATH \}/);
+  assert.match(navigation, /useLocalSearchParams<\{ cameraPath\?: string \| string\[\] \}>\(\)/);
+  assert.match(navigation, /forceJsFallbackValidation\s*\? "js-fallback"/);
+  assert.match(navigation, /JavaScript camera fallback validation started\. Safety controls are unchanged\./);
 });
 
 test("speech delivery uses one VoiceOver-aware channel and stop control is explicit", () => {
