@@ -2283,9 +2283,9 @@ test("aborting navigation cancels an in-flight analyze upload without failure te
         recordHealthCheckSnapshot: () => undefined,
         sanitizeMessage: (value) => value,
       }],
-      ["./sentry", {
+      ["./clientDiagnostics", {
         addBreadcrumb: (event) => breadcrumbs.push(event),
-        setSentryTag: () => undefined,
+        setDiagnosticTag: () => undefined,
       }],
     ]);
     const { analyzeVision } = loadTsModule(new URL("../src/lib/api.ts", import.meta.url), mocks);
@@ -2333,7 +2333,7 @@ test("abort during JS preprocessing prevents the upload from starting", async ()
     }],
     ["@/src/lib/diagnostics", { recordAnalyzeEvent: () => undefined }],
     ["@/src/lib/runtimeSafety", runtimeSafety],
-    ["@/src/lib/sentry", { captureAppError: () => undefined }],
+    ["@/src/lib/clientDiagnostics", { captureAppError: () => undefined }],
   ]);
   const { VisionAI } = loadTsModule(new URL("../src/logic/VisionAI.ts", import.meta.url), mocks);
   const controller = new AbortController();

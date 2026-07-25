@@ -3,7 +3,6 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 const { launchInputs } = require("./release/launch-inputs.js") as {
   launchInputs: {
     iosBundleIdentifier: string;
-    sentryMode: "disabled" | "enabled";
   };
 };
 
@@ -22,10 +21,6 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
 
   return {
     ...resolvedConfig,
-    extra: {
-      ...resolvedConfig.extra,
-      launchSentryMode: launchInputs.sentryMode,
-    },
     ios: {
       ...resolvedConfig.ios,
       bundleIdentifier: launchInputs.iosBundleIdentifier,

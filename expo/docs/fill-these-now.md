@@ -11,7 +11,7 @@
 ## Optional or post-beta inputs
 
 - Website custom-domain override; the current Pages URL and derived privacy/support/safety URLs are already configured.
-- Sentry DSN and release-upload credentials. Launch mode is deliberately `disabled`; enabling Sentry is a separate decision that requires updated privacy answers.
+- A future crash-reporting SDK. The launch client deliberately vendors none; adding one later requires a new binary and updated privacy answers.
 - Final Android package name for a later Android release.
 
 ## Resolved locally and in Apple portals by 2026-07-19
@@ -34,8 +34,8 @@
 - Copyright and App Review contact: resolved from authenticated Apple records on 2026-07-17
   - Evidence: Apple Developer shows an Individual membership under `XIANMIN CHEN` and the membership phone used in release inputs; the user-provided support email is the review email. App Store Connect retained `2026 XIANMIN CHEN` as copyright and manual release after reload.
   - Live evidence: before a build was attached, App Store Connect retained copyright and manual release after reload. The no-sign-in selection, contact fields, and review notes reverted, so they must be re-entered and rechecked after a build is attached.
-- Sentry mode: `disabled`
-  - Evidence: `expo/release/launch-inputs.js` carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight requires preview/TestFlight/store to set `SENTRY_DISABLE_AUTO_UPLOAD=true`, keeps `EXPO_PUBLIC_SENTRY_DSN` blank, and verifies the local Xcode default.
+- Sentry mode: `disabled`, SDK absent
+  - Evidence: `expo/release/launch-inputs.js` carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight rejects the dependency, Expo plugin, CocoaPods entries, native upload phases/bundles, DSN variables, and archive Crash Data/Sentry markers.
 - Support email: `charliehan112@gmail.com`
   - Evidence: provided by Charlie on 2026-07-17 and mirrored into `expo/release/launch-inputs.js`, `expo/eas.json`, and `site/support/index.html`.
 - Emergency / safety disclaimer: resolved on 2026-07-17
@@ -66,6 +66,6 @@
 
 - `CLOUDFLARE_API_TOKEN` is not set locally and Wrangler is not yet authenticated. OAuth reached GitHub sign-in in the in-app Browser; deployment and secret-name verification remain blocked until that login/authorization completes.
 - `EXPO_TOKEN` is not set locally and EAS is not authenticated. This blocks the EAS path, not direct Xcode/App Store upload.
-- Sentry is intentionally disabled for launch; missing Sentry credentials are not a blocker unless that decision changes.
+- The launch client contains no Sentry SDK; missing Sentry credentials are not a blocker.
 
 After updating them, rerun the matching iOS track gate from `expo/`, for example `npm run release:preflight:testflight`.

@@ -20,7 +20,7 @@ const CANDIDATE_BINARY_SHA256 = "c".repeat(64);
 function buildCandidateEvidence(sourceRevision) {
   return {
     artifactType: "guidepup-ios-release-candidate",
-    artifactVersion: 1,
+    artifactVersion: 2,
     generatedAt: new Date(Date.now() - 500).toISOString(),
     sourceRevision,
     archive: {
@@ -35,7 +35,8 @@ function buildCandidateEvidence(sourceRevision) {
       name: `GuidePup-${launchInputs.iosMarketingVersion}-${launchInputs.iosBuildNumber}.xcarchive`,
       sentry: {
         configuredDsnFound: false,
-        runtimeModeDisabled: true,
+        crashDataManifestFound: false,
+        sdkEmbedded: false,
       },
       signing: {
         certificateClass: "Apple Distribution",

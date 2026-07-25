@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useNavigationContainerRef, useRootNavigationState } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
@@ -10,7 +10,6 @@ import { DiagnosticsProvider } from "@/src/providers/DiagnosticsProvider";
 import { SettingsProvider } from "@/src/providers/SettingsProvider";
 import { VoiceProvider } from "@/src/components/VoiceAnnouncer";
 import { appConfig } from "@/src/lib/config";
-import { initializeSentry, installFetchTelemetry, registerNavigationContainer } from "@/src/lib/sentry";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,24 +38,6 @@ function RootLayoutNav() {
   );
 }
 
-function SentryNavigationBridge() {
-  const navigationRef = useNavigationContainerRef();
-  const rootNavigationState = useRootNavigationState();
-
-  useEffect(() => {
-    initializeSentry();
-    installFetchTelemetry();
-
-    if (!rootNavigationState?.key) {
-      return;
-    }
-
-    registerNavigationContainer(navigationRef);
-  }, [navigationRef, rootNavigationState?.key]);
-
-  return null;
-}
-
 export default function RootLayout() {
   useEffect(() => {
     setTimeout(() => {
@@ -70,7 +51,6 @@ export default function RootLayout() {
         <DiagnosticsProvider>
           <VoiceProvider>
             <GestureHandlerRootView style={styles.root}>
-              <SentryNavigationBridge />
               <RootLayoutNav />
             </GestureHandlerRootView>
           </VoiceProvider>

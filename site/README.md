@@ -18,7 +18,7 @@ Current live Pages URL:
 - Camera frames are sent to the Guide Pup backend.
 - Frames may be processed by third-party AI providers.
 - Anonymous device and session bootstrap state is used.
-- Crash reporting is disabled in the current launch configuration unless Sentry mode is explicitly enabled later.
+- The launch iOS client does not vendor a crash-reporting SDK.
 - Optional voice commands use microphone and speech-recognition permissions for a bounded command set.
 - Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
 - Guide Pup provides assistive guidance only and does not guarantee hazard detection or emergency response.

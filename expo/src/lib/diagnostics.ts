@@ -37,7 +37,7 @@ export interface DiagnosticsRuntimeSnapshot {
   experimentalTabsEnabled: boolean;
   privacyPolicyUrl?: string;
   releaseTrack: string;
-  sentryEnabled: boolean;
+  crashReportingEnabled: boolean;
   slug?: string;
   supportEmail?: string;
   supportUrl?: string;
@@ -225,7 +225,7 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
   experimentalTabsEnabled: appConfig.enableExperimentalTabs,
   privacyPolicyUrl: appConfig.privacyPolicyUrl,
   releaseTrack: appConfig.releaseTrack,
-  sentryEnabled: Boolean(appConfig.sentryDsn),
+  crashReportingEnabled: false,
   slug: undefined,
   supportEmail: appConfig.supportEmail,
   supportUrl: appConfig.supportUrl,
@@ -1104,7 +1104,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Build: ${runtime.buildVersion || "Not found in repo"}`);
   lines.push(`- Bundle ID: ${runtime.bundleIdentifier || "Not found in repo"}`);
   lines.push(`- API base URL: ${runtime.apiBaseUrl || "Not configured"}`);
-  lines.push(`- Sentry: ${runtime.sentryEnabled ? "enabled" : "disabled"}`);
+  lines.push(`- Crash reporting: ${runtime.crashReportingEnabled ? "enabled" : "not embedded"}`);
   lines.push(`- Experimental tabs: ${runtime.experimentalTabsEnabled ? "enabled" : "disabled"}`);
   lines.push(`- Website: ${runtime.websiteUrl || "Not found in repo"}`);
   lines.push(`- Privacy URL: ${runtime.privacyPolicyUrl || "Not found in repo"}`);

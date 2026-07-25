@@ -12,7 +12,7 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 | Third-party AI processing | The backend may send frames to an OpenAI-compatible provider, and benchmark-only MiniCPM-o stays non-production. | Disclose third-party processing in review notes and privacy policy. |
 | Anonymous device/session bootstrap | The app stores an installation-scoped device ID and session token in `expo-secure-store`, then sends them to the backend for rate limiting and request authorization. SecureStore uses the iOS Keychain, so these values may persist after uninstall; uninstall is not a deletion guarantee. A user can request deletion by emailing `charliehan112@gmail.com`. | Answer `Yes` for Device ID used for App Functionality. Conservatively mark collected data as linked because the installation ID can be associated with requests and provider/platform context. |
 | Cloudflare request observability | Cloudflare platform invocation logs are explicitly disabled in development, staging, and production to avoid automatic header and request capture. Sanitized custom Guide Pup request/quality logs remain enabled and record bounded fields such as request ID, latency, provider/model, prompt version, result class, and sanitized errors. They redact raw frames, credentials, tokens, signed URLs, authorization values, and device IDs. Cloudflare documents a maximum Workers Logs retention of 3 days on Free plans and 7 days on Paid plans; because the account plan is not verified, disclose custom-log retention as up to 7 days. Cloudflare still processes network and platform data to provide the service. | Answer `Yes` for Product Interaction, Performance Data, and Other Diagnostic Data for App Functionality and Analytics. Conservatively mark them linked. Cite [Cloudflare Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and do not claim zero retention. |
-| Crash reporting | `@sentry/react-native` is present, but the intended shipping configuration sets `sentryMode: "disabled"`, leaves the runtime DSN blank, and disables uploads. | Answer `No` for Crash Data only if the submitted archive proves the runtime DSN is blank and uploads are disabled. If Sentry is enabled, reassess Crash Data, Performance Data, and Other Diagnostic Data before submission. |
+| Crash reporting | The launch iOS client does not vendor a crash-reporting SDK, Sentry plugin, pod, upload phase, or DSN. The backend production and staging secret-name inventories also contain no `SENTRY_DSN`. | Answer `No` for Crash Data only if the submitted archive proves no crash SDK payload or Crash Data privacy-manifest declaration is embedded. Backend sanitized request errors remain Other Diagnostic Data, not Crash Data. |
 | Microphone / speech recognition | Optional hands-free commands request microphone and iOS speech-recognition access. The native request prefers on-device recognition when Apple reports support and otherwise retains Apple speech-service fallback. For third-party Speech Recognition, Apple states that audio may be sent to Apple; unless the user has enabled Improve Siri & Dictation, audio is not stored, while transcripts and related request data associated with a rotating random identifier may be retained for up to two years. Spoken commands remain in a deterministic bounded command set. Guide Pup does not intentionally log raw voice audio or send it to its vision provider. | Answer `Yes` for Audio Data used for App Functionality, conservatively linked, with no tracking. Cite [Ask Siri, Dictation & Privacy](https://www.apple.com/legal/privacy/data/en/ask-siri-dictation/). |
 | Health / location / contacts | Not collected in the shipping path. No location APIs are used in the current shipping path. | Answer `No` for health, precise location, coarse location, and contacts. |
 
@@ -22,7 +22,9 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - Frame preprocessing and upload: `expo/src/logic/VisionAI.ts`
 - Backend analyze request and request IDs: `expo/src/lib/api.ts`
 - Anonymous device/session storage: `expo/src/lib/device.ts`
-- Sentry SDK init and privacy scrubbing: `expo/src/lib/sentry.ts`
+- Local-only client error sanitization: `expo/src/lib/clientDiagnostics.ts`
+- Fail-closed no-Sentry dependency/pod/project gate: `expo/scripts/release-preflight.mjs`
+- Archive SDK/DSN/Crash Data manifest scan: `expo/scripts/release-candidate-evidence.mjs`
 - Voice permission copy and bounded commands: `expo/app.json`, `expo/src/lib/voiceCommands.ts`, `expo/modules/guidepup-voice-control`
 - OpenAI-compatible provider default and MiniCPM benchmark-only flag: `backend/guidepup-api/wrangler.jsonc`
 - iOS privacy manifest discloses Photos or Videos, Environment Scanning, Audio Data, Device ID, Product Interaction, Performance Data, and Other Diagnostic Data: `expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy`
@@ -39,7 +41,7 @@ Do not claim deletion, retention, or purpose limits that are not implemented in 
 - Product Interaction: `Yes`, linked, for App Functionality and Analytics.
 - Performance Data: `Yes`, linked, for App Functionality and Analytics.
 - Other Diagnostic Data: `Yes`, linked, for App Functionality and Analytics.
-- Crash Data: `No` only for the intended shipping build with a blank runtime Sentry DSN and disabled uploads, pending submitted-archive proof.
+- Crash Data: `No` only for a submitted archive that proves no Sentry SDK payload, configured DSN, or Crash Data privacy-manifest declaration is embedded.
 - Location: `No`.
 - Purchases / financial data: `No`.
 

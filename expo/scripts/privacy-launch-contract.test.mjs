@@ -127,37 +127,27 @@ test("privacy sanitizer recursively bounds collections, depth, cycles, keys, and
   assert.doesNotMatch(serialized, /fake-key|fake-authorization|hidden/);
 });
 
-test("Sentry integration sanitizes every approved event surface and captures a new safe Error", () => {
-  const source = read("../src/lib/sentry.ts");
+test("shipping client diagnostics stay local and no Sentry SDK is vendored", () => {
+  const source = read("../src/lib/clientDiagnostics.ts");
+  const packageJson = JSON.parse(read("../package.json"));
+  const appJson = JSON.parse(read("../app.json"));
+  const project = read("../ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj");
+  const podfileLock = read("../ios/Podfile.lock");
 
   assert.match(source, /import \{ sanitizePrivacyString, sanitizePrivacyValue \} from "\.\/privacySanitizer"/);
-  assert.match(source, /event\.message = sanitizePrivacyString\(event\.message\)/);
-  assert.match(source, /event\.logentry\.params = sanitizePrivacyValue\(event\.logentry\.params\)/);
-  assert.match(source, /value: exception\.value \? sanitizePrivacyString\(exception\.value\)/);
-  assert.match(source, /abs_path: frame\.abs_path \? sanitizePrivacyString\(frame\.abs_path\)/);
-  assert.match(source, /filename: frame\.filename \? sanitizePrivacyString\(frame\.filename\)/);
-  assert.match(source, /event\.breadcrumbs = event\.breadcrumbs\.map/);
-  assert.match(source, /event\.tags = sanitizePrivacyValue\(event\.tags\)/);
-  assert.match(source, /event\.extra = sanitizePrivacyValue\(event\.extra\)/);
-  assert.match(source, /event\.contexts = sanitizePrivacyValue\(event\.contexts\)/);
-  assert.match(source, /event\.transaction = sanitizePrivacyString\(event\.transaction\)/);
-  assert.match(source, /event\.spans = event\.spans\.map\(\(span\) => sanitizeSpan\(span\)\)/);
-  assert.match(source, /delete event\.user/);
-  assert.match(source, /delete event\.server_name/);
-  for (const field of ["headers", "data", "cookies", "query", "query_string", "env", "fragment"]) {
-    assert.match(source, new RegExp(`delete request\\.${field}`));
-  }
-  assert.match(source, /beforeSend\(event\) \{\s*return sanitizeEvent\(event\)/);
-  assert.match(source, /beforeSendSpan\(span\) \{\s*return sanitizeSpan\(span\)/);
-  assert.match(source, /beforeSendTransaction\(event\) \{\s*return sanitizeEvent\(event\)/);
-  assert.match(source, /category: breadcrumb\.category \? sanitizePrivacyString\(breadcrumb\.category\)/);
-  assert.match(source, /message: breadcrumb\.message \? sanitizePrivacyString\(breadcrumb\.message\)/);
-  assert.match(source, /type: breadcrumb\.type \? sanitizePrivacyString\(breadcrumb\.type\)/);
-  assert.match(source, /Sentry\.setTag\(sanitizePrivacyString\(key\), sanitizePrivacyString\(String\(value\)\)\)/);
-  assert.match(source, /const sanitizedError = new Error\(sanitizedMessage\)/);
-  assert.match(source, /Sentry\.captureException\(sanitizedError\)/);
-  assert.doesNotMatch(source, /Sentry\.captureException\(error\)/);
+  assert.match(source, /const sanitizedMessage = sanitizePrivacyString\(rawMessage\)/);
+  assert.match(source, /const sanitizedContext = sanitizePrivacyValue\(context\)/);
   assert.match(source, /console\.error\("\[GuidePupError\]", \{\s*context: sanitizedContext,\s*message: sanitizedMessage/);
+  assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|captureException|@sentry|Sentry\./);
+  assert.equal(packageJson.dependencies?.["@sentry/react-native"], undefined);
+  assert.equal(packageJson.devDependencies?.["@sentry/react-native"], undefined);
+  assert.ok(
+    !appJson.expo.plugins.some((plugin) =>
+      (Array.isArray(plugin) ? plugin[0] : plugin) === "@sentry/react-native/expo"
+    ),
+  );
+  assert.doesNotMatch(project, /@sentry\/react-native|Upload Debug Symbols to Sentry|sentry-xcode|Sentry\.bundle/);
+  assert.doesNotMatch(podfileLock, /RNSentry|(?:^|[^A-Za-z])Sentry(?:[^A-Za-z]|$)/m);
 });
 
 test("native manifest, in-app summary, and public privacy policy disclose the same launch data classes", () => {
@@ -385,32 +375,31 @@ test("checked-in reviewer notes and screenshot plan remain launch-safe", () => {
 
   assert.match(screenshotPlan, /authenticated read-only observation on 2026-07-24/i);
   assert.match(screenshotPlan, /6\.5-inch Display/i);
-  assert.match(screenshotPlan, /0\/10 screenshots/i);
+  assert.match(screenshotPlan, /accepted `4\/10 screenshots`/i);
   assert.match(screenshotPlan, /`1242 x 2688` or `1284 x 2778`/i);
-  assert.match(screenshotPlan, /Prefer direct capture at `1284 x 2778`/i);
+  assert.match(screenshotPlan, /four direct Release-app captures at `1284 x 2778`/i);
   assert.match(screenshotPlan, /final authenticated App Store Connect recheck/i);
   assert.doesNotMatch(screenshotPlan, /1320 x 2868|planned 6\.9-inch/i);
-  assert.match(screenshotPlan, /The first screen with `Start Guidance` visible and no permission sheet/);
-  assert.match(screenshotPlan, /consented, staged empty indoor path with no people or private text/);
-  assert.match(screenshotPlan, /real `Guidance active` state plus the current direction and message from a provider-backed result/);
-  assert.match(screenshotPlan, /Spoken output by itself is not screenshot evidence/);
-  assert.match(screenshotPlan, /Deliberately remove network access/);
-  assert.match(screenshotPlan, /real `Backend unavailable` safe STOP state/);
-  assert.match(screenshotPlan, /then restore network access\. Do not mock/);
-  assert.match(screenshotPlan, /`Speech`, `Descriptions`, and `Haptics` visible\. No Bounding boxes control is present/);
-  assert.match(screenshotPlan, /assistive-only limitation and emergency disclaimer visible/);
+  assert.match(screenshotPlan, /`01-welcome\.png`/i);
+  assert.match(screenshotPlan, /`02-how-to-use\.png`/i);
+  assert.match(screenshotPlan, /`03-voice-settings\.png`/i);
+  assert.match(screenshotPlan, /`04-safe-stop-fallback\.png`/i);
+  assert.match(screenshotPlan, /real `Backup camera unavailable` conservative STOP state/i);
+  assert.match(screenshotPlan, /not labeled as provider-backed, network-loss, or physical-camera evidence/i);
   assert.match(screenshotPlan, /Do not show raw camera content/);
   assert.match(screenshotPlan, /Do not mock guidance, failures, banners, directions, or messages/);
-  assert.match(screenshotPlan, /does not claim that screenshots have been uploaded or that accessibility validation is complete/);
+  assert.match(screenshotPlan, /screenshot upload is complete/i);
+  assert.match(screenshotPlan, /does not claim that physical blind-user, VoiceOver, TestFlight-install, or App Review validation is complete/i);
 
-  assert.match(launchPhaseReport, /authenticated read-only observation on 2026-07-24/i);
-  assert.match(launchPhaseReport, /6\.5-inch Display/i);
-  assert.match(launchPhaseReport, /0\/10 screenshots/i);
-  assert.match(launchPhaseReport, /`1242 x 2688` or `1284 x 2778`/i);
-  assert.match(launchPhaseReport, /prefer direct capture at `1284 x 2778`/i);
-  assert.match(launchPhaseReport, /final authenticated recheck before upload/i);
+  assert.match(launchPhaseReport, /four truthful direct-capture iPhone screenshots/i);
+  assert.match(launchPhaseReport, /`1284 x 2778`/i);
+  assert.match(
+    launchPhaseReport,
+    /`01-welcome\.png`, `02-how-to-use\.png`, `03-voice-settings\.png`, `04-safe-stop-fallback\.png`/i,
+  );
+  assert.match(launchPhaseReport, /App Store Connect accepted all four/i);
   assert.match(launchPhaseReport, /No current build is selected/i);
-  assert.match(launchPhaseReport, /App Review Notes are stale/i);
+  assert.match(launchPhaseReport, /Current review metadata/i);
   assert.doesNotMatch(launchPhaseReport, /accepted `1320x2868`/i);
 
   assert.match(qualityReport, /earlier provider smoke at `3cc852c` is superseded historical proof only/i);

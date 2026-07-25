@@ -21,7 +21,7 @@ Guide Pup is an assistive vision and navigation aid for blind and low-vision use
 - Guide Pup is assistive and may miss hazards. The user should stop whenever the scene or guidance is uncertain.
 - Guide Pup does not provide emergency response or an SOS action. In immediate danger, the user must contact local emergency services or nearby people directly.
 - The app is designed to fail safe and return `STOP` when the scene is unclear, the backend is unavailable, or the response is invalid.
-- Crash reporting is currently disabled in the release source of truth. If Sentry is enabled later, the SDK is configured to avoid collecting default PII and App Privacy answers must be updated.
+- The launch iOS client does not embed a crash-reporting SDK. Sanitized backend request errors are disclosed as Other Diagnostic Data.
 
 ## No-Screen Review Sequence
 

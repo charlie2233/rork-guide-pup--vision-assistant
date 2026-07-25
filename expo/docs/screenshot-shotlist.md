@@ -1,16 +1,17 @@
 # Guide Pup Screenshot Shot List
 
-Capture these screens directly from the shipping app for App Store Connect. An authenticated read-only observation on 2026-07-24 showed the live iOS 1.0.0 iPhone slot labeled `6.5-inch Display`, accepting portrait `1242 x 2688` or `1284 x 2778` plus landscape equivalents, with `0/10 screenshots`. Prefer direct capture at `1284 x 2778` when the simulator or device can produce it. Perform a final authenticated App Store Connect recheck before upload; this observation does not claim that a screenshot asset exists.
+An authenticated read-only observation on 2026-07-24 established that the live iOS 1.0.0 iPhone slot is labeled `6.5-inch Display` and accepts portrait `1242 x 2688` or `1284 x 2778` plus landscape equivalents. Four direct Release-app captures at `1284 x 2778` were subsequently uploaded with the user's authorization. App Store Connect accepted `4/10 screenshots` and confirms the order below.
 
-## Capture Set
+## Accepted Set
 
-| Shot | Visible target | Trigger | Scroll position |
+| Order | File | Visible target | Evidence boundary |
 | --- | --- | --- | --- |
-| Home | The first screen with `Start Guidance` visible and no permission sheet. | Complete onboarding and dismiss or resolve any permission sheet before capture. | Initial position; do not scroll. |
-| Active guidance | A consented, staged empty indoor path with no people or private text. Show the real `Guidance active` state plus the current direction and message from a provider-backed result. Spoken output by itself is not screenshot evidence. | With network access available and permissions granted, say `start guidance`; wait for a real provider-backed result before capture. | Initial guidance position; do not scroll. |
-| Safe STOP | The real `Backend unavailable` safe STOP state after at least one provider-backed result. | Deliberately remove network access, wait for the app to enter the real safe STOP state, capture it, then restore network access. Do not mock the result or UI state. | Initial guidance position; do not scroll. |
-| Settings | `Speech`, `Descriptions`, and `Haptics` visible. No Bounding boxes control is present. | Open Settings from Home after permissions are settled. | Top position; do not scroll. |
-| Optional Safety / emergency | The assistive-only limitation and emergency disclaimer visible. | Open `Safety / emergency` from Settings. | Top position; do not scroll. |
+| 1 | `01-welcome.png` | Welcome, core safety disclosure, privacy/support links, and `Continue`. | Truthful onboarding state; no permission sheet or private content. |
+| 2 | `02-how-to-use.png` | Spoken movement cues, forward-facing phone guidance, STOP/reorient behavior, settings, and compressed-frame disclosure. | Truthful onboarding instructions; no claim of provider or hardware validation. |
+| 3 | `03-voice-settings.png` | `Speech`, `Descriptions`, `Haptics`, and privacy/safety links. | Truthful settings state; no Bounding boxes control or experimental feature is shown. |
+| 4 | `04-safe-stop-fallback.png` | Real `Backup camera unavailable` conservative STOP state. | Direct simulator fallback behavior; it is not labeled as provider-backed, network-loss, or physical-camera evidence. |
+
+The first three are the App Store installation-sheet set. A final authenticated App Store Connect recheck is still required after the processed build is selected and before submission.
 
 ## Capture Rules
 
@@ -18,6 +19,7 @@ Capture these screens directly from the shipping app for App Store Connect. An a
 - Keep the production visual style and exclude debug overlays, experimental tabs, diagnostics evidence, and internal-validation wording.
 - Do not show raw camera content or any personal, sensitive, or identifying information.
 - Use only real app and provider states. Do not mock guidance, failures, banners, directions, or messages.
-- Treat the Safety / emergency page as optional; keep the focused set to three to five screenshots.
+- Do not describe the safe-stop screenshot as physical camera, provider, or network-loss proof.
+- Keep the focused set to three to five screenshots unless the final processed build exposes a materially better truthful state.
 
-This plan does not claim that screenshots have been uploaded or that accessibility validation is complete.
+The screenshot upload is complete. This document does not claim that physical blind-user, VoiceOver, TestFlight-install, or App Review validation is complete.

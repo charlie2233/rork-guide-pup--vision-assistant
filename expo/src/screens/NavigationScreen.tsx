@@ -34,7 +34,7 @@ import {
   fasterSpeechRate,
   slowerSpeechRate,
 } from "@/src/lib/voiceSettings";
-import { captureAppError } from "@/src/lib/sentry";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 import { planVisionLaneResult } from "@/src/lib/conversationLane";
 import {
   invalidateOwnedVoiceSessionAttempts,

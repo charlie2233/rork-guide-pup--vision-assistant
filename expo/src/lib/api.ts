@@ -16,7 +16,7 @@ import {
   isAbortError,
   throwIfAborted,
 } from "./runtimeSafety";
-import { addBreadcrumb, setSentryTag } from "./sentry";
+import { addBreadcrumb, setDiagnosticTag } from "./clientDiagnostics";
 
 export const VisionAnalyzeResponseSchema = z.object({
   confidence: z.number().min(0).max(1),
@@ -520,10 +520,10 @@ export async function analyzeVision(
           walkability: safeResponse.walkability,
         });
         analyzeTelemetryRecorded = true;
-        setSentryTag("vision.provider", safeResponse.provider);
-        setSentryTag("vision.model", safeResponse.model);
-        setSentryTag("vision.promptVersion", safeResponse.promptVersion);
-        setSentryTag("vision.requestId", requestId);
+        setDiagnosticTag("vision.provider", safeResponse.provider);
+        setDiagnosticTag("vision.model", safeResponse.model);
+        setDiagnosticTag("vision.promptVersion", safeResponse.promptVersion);
+        setDiagnosticTag("vision.requestId", requestId);
         addBreadcrumb({
           category: "api.analyze",
           data: {
@@ -608,10 +608,10 @@ export async function analyzeVision(
       walkability: result.walkability,
     });
     analyzeTelemetryRecorded = true;
-    setSentryTag("vision.provider", result.provider);
-    setSentryTag("vision.model", result.model);
-    setSentryTag("vision.promptVersion", result.promptVersion);
-    setSentryTag("vision.requestId", requestId);
+    setDiagnosticTag("vision.provider", result.provider);
+    setDiagnosticTag("vision.model", result.model);
+    setDiagnosticTag("vision.promptVersion", result.promptVersion);
+    setDiagnosticTag("vision.requestId", requestId);
     addBreadcrumb({
       category: "api.analyze",
       data: {

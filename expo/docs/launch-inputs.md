@@ -29,7 +29,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - App Review sign-in required / demo account required: `false`
 - Copyright: `2026 XIANMIN CHEN`
 - App Review contact: `XIANMIN CHEN`; email `charliehan112@gmail.com`; phone configured from the authenticated Individual membership record
-- Sentry mode: `disabled`
+- Sentry mode: `disabled`; no client SDK vendored
 - Support email: `charliehan112@gmail.com`
 - Emergency / safety disclaimer: `Guide Pup provides assistive guidance, not guaranteed hazard detection or emergency response. If the app cannot confidently analyze the scene, it stops and tells the user to pause and reorient. If you are in immediate danger, stop using the app and contact local emergency services or nearby people directly.`
 
@@ -43,8 +43,7 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Preview API base URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`; deploy and smoke the current source before launch
 - Staging bootstrap secret: last verified configured as a Wrangler secret on `2026-04-01`; current presence requires authenticated revalidation
 - Staging provider key: `OPENAI_API_KEY` was last verified configured by a provider-backed smoke on `2026-04-29`; current presence requires authenticated revalidation
-- Production Sentry DSN: blank while Sentry mode is `disabled`
-- Sentry release upload credentials: required only if Sentry mode changes to `enabled`
+- Production Sentry DSN: blank; the launch client contains no Sentry SDK
 - Production backend bootstrap secret: last verified configured as a Wrangler secret on `2026-04-01`; current presence requires authenticated revalidation
 - Production backend provider key: `OPENAI_API_KEY` was last verified configured by a provider-backed smoke on `2026-04-29`; current presence requires authenticated revalidation
 
@@ -55,11 +54,11 @@ Update that file first, then mirror the same values here for reviewer-facing doc
 - Active Apple Team ID `K99RADPB9G` was verified in the authenticated Apple Developer portal on 2026-07-17. The old local identity for `SBSJ3MX9GZ` is historical evidence and is not current release configuration.
 - The authenticated App Store Connect distribution record remains version `1.0.0` and `Prepare for Submission` on 2026-07-19. Its only TestFlight build is expired build `2`, so app, native configuration, and release inputs use version `1.0.0` and build `4` as the next explicit candidate. No build `4` upload or submission occurred.
 - The current Apple Distribution identity is `XIANMIN CHEN (K99RADPB9G)`. The bundle's App Store provisioning profile was renewed on 2026-07-19 against that identity, installed as UUID `808b8553-e7b4-495f-83cd-4eae9f8420db`, expires 2027-07-19, and has distribution entitlements (`get-task-allow=false`).
-- The first corrected-team device build compiled and provisioned through the final React Native bundle, then failed only when the Sentry script attempted an upload while launch Sentry mode was disabled. A later clean build used the checked-in Sentry-disabled Xcode default with no one-off shell override and succeeded.
+- Historical builds contained a dormant Sentry wrapper. The current launch source removes the SDK, Expo plugin, pods, native wrapper, and upload phase instead of relying on a disabled runtime.
 - The prior signed-device baseline reports `TeamIdentifier` `K99RADPB9G`, application-identifier prefix `K99RADPB9G`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, and build `3`. It installed, launched, and remained running on the paired iPhone. This does not establish build `4`, voice, haptic, earcon, VoiceOver, interruption, settings-persistence, camera, no-screen, TestFlight, or submission behavior.
 - App Review sign-in required must be false because Guide Pup uses an installation-scoped identifier and session bootstrap with no account flow. `store.config.js` now carries `apple.review.demoRequired: false`, and release preflight rejects demo credentials for this shipping path.
 - The Apple Developer membership is enrolled as Individual under `XIANMIN CHEN`. Its authenticated membership phone and the user-provided support email resolve the App Review contact. On 2026-07-19 App Store Connect saved `2026 XIANMIN CHEN`, manual release, the no-sign-in selection, contact fields, and review notes. Recheck them after attaching the candidate build.
-- Sentry mode is explicit in `expo/release/launch-inputs.js`. While it is `disabled`, preview/TestFlight/store profiles and local Xcode default `SENTRY_DISABLE_AUTO_UPLOAD=true` and omit `EXPO_PUBLIC_SENTRY_DSN`; if changed to `enabled`, preflight rejects disabled upload and requires the production DSN plus `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` before TestFlight/store.
+- Sentry mode is explicit in `expo/release/launch-inputs.js`. While it is `disabled`, preflight requires the client dependency, plugin, pods, upload phase, DSN variables, framework/bundle payload, and Crash Data manifest declaration to be absent. Reintroducing crash reporting requires a deliberate new source/binary and privacy review.
 
 ## Final Values To Mirror
 
@@ -77,7 +76,7 @@ When Charlie fills these in, mirror the same value in the matching release docs 
 - Emergency / safety disclaimer copy
 - App Review contact name, email, and phone
 - Production API base URL
-- Sentry mode and production DSN, if crash diagnostics are enabled
+- Crash-reporting SDK and privacy disclosures, only if diagnostics are introduced later
 
 ## Public URL Mapping
 
@@ -95,7 +94,7 @@ Override the individual URLs only if they live somewhere else.
 - Optional voice commands request microphone and iOS speech-recognition access for a bounded command set.
 - Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
 - An installation-scoped identifier and session bootstrap are used for authenticated vision requests.
-- Crash reporting is currently disabled in the launch source of truth. If enabled later, Sentry release credentials and App Privacy answers must be updated first.
+- The launch iOS client contains no crash-reporting SDK. Adding one later requires a new binary and App Privacy review.
 - The app degrades to `STOP` on invalid or unavailable vision responses.
 
 ## Finalize Order

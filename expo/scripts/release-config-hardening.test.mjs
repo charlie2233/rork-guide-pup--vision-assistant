@@ -14,48 +14,13 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const plist = require("@expo/plist").default;
-const ts = require("typescript");
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoDir = path.resolve(projectDir, "..");
 const { launchInputs } = require("../release/launch-inputs.js");
-
-function loadRuntimeConfig(launchSentryMode, sentryDsn) {
-  const sourcePath = path.join(projectDir, "src/lib/config.ts");
-  const source = readFileSync(sourcePath, "utf8");
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: sourcePath,
-  }).outputText;
-  const runtimeModule = { exports: {} };
-  const runtimeRequire = (specifier) => {
-    if (specifier === "expo-constants") {
-      return {
-        __esModule: true,
-        default: { expoConfig: { extra: { launchSentryMode } } },
-      };
-    }
-    return require(specifier);
-  };
-
-  vm.runInNewContext(compiled, {
-    __DEV__: false,
-    console,
-    exports: runtimeModule.exports,
-    module: runtimeModule,
-    process: { env: { EXPO_PUBLIC_SENTRY_DSN: sentryDsn } },
-    require: runtimeRequire,
-  });
-  return runtimeModule.exports.appConfig;
-}
 
 function copyTreeWithoutBuildArtifacts(source, destination) {
   const excluded = new Set([".expo", "build", "dist", "node_modules", "Pods"]);
@@ -122,12 +87,6 @@ function createPreflightFixture(prefix) {
   return { fixtureExpo, fixtureRoot };
 }
 
-test("runtime Sentry DSN fails closed unless checked-in launch mode is enabled", () => {
-  assert.equal(loadRuntimeConfig("disabled", "https://remote.invalid/123").sentryDsn, undefined);
-  assert.equal(loadRuntimeConfig("unexpected", "https://remote.invalid/123").sentryDsn, undefined);
-  assert.equal(loadRuntimeConfig("enabled", " https://enabled.example/123 ").sentryDsn, "https://enabled.example/123");
-});
-
 test("preview preflight is order-independent and rejects unsafe release mutations", () => {
   const { fixtureExpo, fixtureRoot } = createPreflightFixture("guidepup-release-config-");
 
@@ -149,6 +108,14 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     const eas = JSON.parse(readFileSync(easPath, "utf8"));
     eas.build.preview.env.EXPO_PUBLIC_SENTRY_DSN = "https://remote.invalid/123";
     writeFileSync(easPath, `${JSON.stringify(eas, null, 2)}\n`);
+    const packagePath = path.join(fixtureExpo, "package.json");
+    const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+    packageJson.dependencies["@sentry/react-native"] = "~7.2.0";
+    writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+    const appJsonPath = path.join(fixtureExpo, "app.json");
+    const appJson = JSON.parse(readFileSync(appJsonPath, "utf8"));
+    appJson.expo.plugins.push("@sentry/react-native/expo");
+    writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
 
     const audioEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
       (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeAudioData",
@@ -217,11 +184,6 @@ test("preview preflight is order-independent and rejects unsafe release mutation
       `CURRENT_PROJECT_VERSION = ${launchInputs.iosBuildNumber};`,
       "CURRENT_PROJECT_VERSION = 902;",
     );
-    replaceOnce(
-      projectPath,
-      '. \\"$SRCROOT/.xcode.env\\"',
-      '# removed launch environment source',
-    );
     const xcodeEnvPath = path.join(fixtureExpo, "ios/.xcode.env");
     replaceOnce(
       xcodeEnvPath,
@@ -239,23 +201,43 @@ test("preview preflight is order-independent and rejects unsafe release mutation
       `${readFileSync(xcodeEnvLocalPath, "utf8")}\nif [ "\${BUNDLE_COMMAND:-}" = "export:embed" ]; then\n  OVERRIDE_KEY=EXPO_PUBLIC_SUPPORT_EMAIL\n  export "$OVERRIDE_KEY=wrong-local@example.com"\nfi\nif [ "\${EXPO_PUBLIC_RELEASE_TRACK:-}" = "testflight" ]; then\n  export EXPO_PUBLIC_API_BASE_URL=https://wrong-testflight.example\nfi\nif [ "\${EAS_BUILD_PROFILE:-}" = "store" ]; then\n  export EXPO_PUBLIC_SUPPORT_URL=https://wrong-store.example\nfi\nif [ "\${CI:-}" = "1" ] && [ "\${EAS_BUILD_RUNNER:-}" = "eas-build" ]; then\n  export EXPO_PUBLIC_PRIVACY_POLICY_URL=https://wrong-eas-runner.example\nfi\n`,
     );
 
-    replaceOnce(
+    writeFileSync(
       path.join(fixtureExpo, "app.config.ts"),
-      "launchSentryMode: launchInputs.sentryMode,",
-      'launchSentryMode: "enabled",',
+      `${readFileSync(path.join(fixtureExpo, "app.config.ts"), "utf8")}\n// launchSentryMode\n`,
     );
-    replaceOnce(
+    writeFileSync(
       path.join(fixtureExpo, "src/lib/config.ts"),
-      'return mode === "enabled" ? trimToUndefined(value) : undefined;',
-      "return trimToUndefined(value);",
+      `${readFileSync(path.join(fixtureExpo, "src/lib/config.ts"), "utf8")}\nconst sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;\n`,
+    );
+    writeFileSync(
+      projectPath,
+      `${readFileSync(projectPath, "utf8")}\n/* Upload Debug Symbols to Sentry */\n`,
+    );
+    writeFileSync(
+      path.join(fixtureExpo, "ios/Podfile.lock"),
+      `${readFileSync(path.join(fixtureExpo, "ios/Podfile.lock"), "utf8")}\nRNSentry\nSentry\n`,
+    );
+    writeFileSync(
+      xcodeEnvPath,
+      `${readFileSync(xcodeEnvPath, "utf8")}\nexport SENTRY_DISABLE_AUTO_UPLOAD=true\n`,
+    );
+    writeFileSync(
+      path.join(fixtureExpo, "ios/sentry.properties"),
+      "defaults.url=https://sentry.io/\n",
     );
 
     const mutated = runPreviewPreflight(fixtureExpo);
     const output = mutated.stdout + mutated.stderr;
     assert.equal(mutated.status, 1, output);
-    assert.match(output, /preview EXPO_PUBLIC_SENTRY_DSN must be "", found "https:\/\/remote\.invalid\/123"/);
-    assert.match(output, /Resolved Expo extra\.launchSentryMode must be "disabled", found "enabled"/);
-    assert.match(output, /Runtime config must expose a Sentry DSN only when launchSentryMode is enabled/);
+    assert.match(output, /preview must omit EXPO_PUBLIC_SENTRY_DSN while the Sentry SDK is absent/);
+    assert.match(output, /app.config.ts must not expose Sentry launch configuration/);
+    assert.match(output, /Shipping runtime config and local diagnostics must not import or configure Sentry/);
+    assert.match(output, /package.json must not include @sentry\/react-native/);
+    assert.match(output, /app.json must not include @sentry\/react-native\/expo/);
+    assert.match(output, /ios\/Podfile.lock must not include Sentry pods/);
+    assert.match(output, /Native iOS project must not contain Sentry bundle, wrapper, or upload-phase references/);
+    assert.match(output, /ios\/sentry\.properties must not exist while the Sentry SDK is absent/);
+    assert.match(output, /ios\/.xcode.env must not contain Sentry variables while the SDK is absent/);
     assert.match(output, /Debug DEVELOPMENT_TEAM must be "K99RADPB9G", found "MUTATEDDEBUGTEAM"/);
     assert.match(output, /Release DEVELOPMENT_TEAM must be "K99RADPB9G", found "MUTATEDRELEASETEAM"/);
     assert.match(output, /Debug PRODUCT_BUNDLE_IDENTIFIER must be "app\.rork\.guide-pup-vision-assist"/);
@@ -272,7 +254,6 @@ test("preview preflight is order-independent and rejects unsafe release mutation
       output,
       new RegExp(`Release CURRENT_PROJECT_VERSION must be "${launchInputs.iosBuildNumber}", found "902"`),
     );
-    assert.match(output, /Sentry upload phase must source the versioned \.xcode\.env/);
     assert.match(output, /Direct Xcode Debug EXPO_PUBLIC_API_BASE_URL must be .*found "https:\/\/invalid-staging\.example"/);
     assert.match(output, /Direct Xcode Release EXPO_PUBLIC_API_BASE_URL must be .*found "https:\/\/invalid-production\.example"/);
     assert.match(output, /Direct Xcode Debug support email must be .*found "wrong-local@example\.com"/);

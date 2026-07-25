@@ -43,9 +43,9 @@ function fileExistsAbsolute(filePath) {
 
 const appJson = readJson("app.json");
 const easJson = readJson("eas.json");
+const packageJson = readJson("package.json");
 const publicUrls = getPublicUrls();
 const validTracks = new Set(["preview", "testflight", "store", "all"]);
-const validSentryModes = new Set(["disabled", "enabled"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
 const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
@@ -57,6 +57,8 @@ const iosProjectFilePath = path.resolve(projectDir, "ios/GuidePupVisionAssistant
 const iosPrivacyManifestPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy");
 const iosXcodeEnvPath = path.resolve(projectDir, "ios/.xcode.env");
 const runtimeConfigPath = path.resolve(projectDir, "src/lib/config.ts");
+const iosPodfileLockPath = path.resolve(projectDir, "ios/Podfile.lock");
+const clientDiagnosticsPath = path.resolve(projectDir, "src/lib/clientDiagnostics.ts");
 const iosAppTargetName = "GuidePupVisionAssistant";
 
 const errors = [];
@@ -366,13 +368,10 @@ const directXcodeEnvironmentKeys = [
   "EXPO_PUBLIC_SUPPORT_URL",
   "EXPO_PUBLIC_SUPPORT_EMAIL",
   "EXPO_PUBLIC_EMERGENCY_DISCLAIMER",
-  "EXPO_PUBLIC_SENTRY_DSN",
-  "SENTRY_DISABLE_AUTO_UPLOAD",
 ];
 
 const expectedReactNativeBundleInvocation = [
   "/bin/sh",
-  "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('@sentry/react-native/package.json')) + '/scripts/sentry-xcode.sh'\"`",
   "`\"$NODE_BINARY\" --print \"require('path').dirname(require.resolve('react-native/package.json')) + '/scripts/react-native-xcode.sh'\"`",
 ].join(" ");
 const expectedEntryFileAssignment =
@@ -685,12 +684,6 @@ function validateDirectXcodeLaunchEnvironment() {
       launchInputs.emergencyDisclaimer,
       `Direct Xcode ${configuration} emergency disclaimer`,
     );
-    compare(environment.EXPO_PUBLIC_SENTRY_DSN, "", `Direct Xcode ${configuration} EXPO_PUBLIC_SENTRY_DSN`);
-    compare(
-      environment.SENTRY_DISABLE_AUTO_UPLOAD,
-      "true",
-      `Direct Xcode ${configuration} SENTRY_DISABLE_AUTO_UPLOAD`,
-    );
   }
 
   for (const [profileName, profileEnvironment, resolvedEnvironment] of resolvedEasEnvironments) {
@@ -757,10 +750,12 @@ function validateDirectXcodeLaunchEnvironment() {
   );
 }
 
-function validateSentryRuntimeWiring(sentryMode) {
+function validateSentrySdkAbsent() {
   const appConfigSource = readTextFileAbsolute(expoAppConfigPath);
   const projectText = readTextFileAbsolute(iosProjectFilePath);
   const runtimeConfigSource = readTextFileAbsolute(runtimeConfigPath);
+  const podfileLock = readTextFileAbsolute(iosPodfileLockPath);
+  const clientDiagnosticsSource = readTextFileAbsolute(clientDiagnosticsPath);
 
   expect(Boolean(appConfigSource), "Expo dynamic app config is missing: app.config.ts.");
   if (appConfigSource) {
@@ -768,10 +763,7 @@ function validateSentryRuntimeWiring(sentryMode) {
       /require\(["']\.\/release\/launch-inputs\.js["']\)/.test(appConfigSource),
       "app.config.ts must load the checked-in release launch inputs.",
     );
-    expect(
-      /launchSentryMode\s*:\s*launchInputs\.sentryMode/.test(appConfigSource),
-      "app.config.ts must inject launchInputs.sentryMode as extra.launchSentryMode.",
-    );
+    expect(!/Sentry|sentry/.test(appConfigSource), "app.config.ts must not expose Sentry launch configuration.");
   }
 
   try {
@@ -780,70 +772,61 @@ function validateSentryRuntimeWiring(sentryMode) {
       skipPlugins: true,
       skipSDKVersionRequirement: true,
     }).exp;
-    compare(resolvedConfig.extra?.launchSentryMode, sentryMode, "Resolved Expo extra.launchSentryMode");
     compare(
       resolvedConfig.ios?.bundleIdentifier,
       launchInputs.iosBundleIdentifier,
       "Resolved Expo iOS bundle identifier",
+    );
+    expect(
+      !resolvedConfig.plugins?.some((plugin) =>
+        (Array.isArray(plugin) ? plugin[0] : plugin) === "@sentry/react-native/expo"
+      ),
+      "Resolved Expo plugins must not include @sentry/react-native/expo.",
     );
   } catch (error) {
     expect(false, `Expo dynamic app config could not be resolved: ${error instanceof Error ? error.message : String(error)}.`);
   }
 
   expect(Boolean(runtimeConfigSource), "Runtime app config is missing: src/lib/config.ts.");
-  if (!runtimeConfigSource) {
-    return;
-  }
-
+  expect(Boolean(clientDiagnosticsSource), "Local client diagnostics adapter is missing.");
   expect(
-    /Constants\.expoConfig\?\.extra\?\.launchSentryMode\s*===\s*["']enabled["']/.test(runtimeConfigSource),
-    "Runtime config must fail closed unless immutable extra.launchSentryMode is enabled.",
+    !/@sentry\/react-native|EXPO_PUBLIC_SENTRY_DSN|launchSentryMode|sentryDsn/.test(
+      `${runtimeConfigSource || ""}\n${clientDiagnosticsSource || ""}`,
+    ),
+    "Shipping runtime config and local diagnostics must not import or configure Sentry.",
   );
   expect(
-    /return\s+mode\s*===\s*["']enabled["']\s*\?\s*trimToUndefined\(value\)\s*:\s*undefined;/.test(runtimeConfigSource),
-    "Runtime config must expose a Sentry DSN only when launchSentryMode is enabled.",
+    !packageJson.dependencies?.["@sentry/react-native"] && !packageJson.devDependencies?.["@sentry/react-native"],
+    "package.json must not include @sentry/react-native while launch Sentry mode is disabled.",
   );
   expect(
-    /sentryDsn\s*:\s*resolveSentryDsn\(launchSentryMode,\s*rawConfig\.sentryDsn\)/.test(runtimeConfigSource),
-    "appConfig.sentryDsn must be derived through the immutable launch-mode gate.",
-  );
-
-  expect(Boolean(projectText), "Native iOS Xcode project is missing: ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj.");
-  if (!projectText) {
-    return;
-  }
-
-  const sentryUploadScript = getPbxShellScript(projectText, "Upload Debug Symbols to Sentry");
-  expect(Boolean(sentryUploadScript), "Native iOS Sentry debug-symbol upload phase cannot be parsed.");
-  if (!sentryUploadScript) {
-    return;
-  }
-
-  const sourceEnvIndex = sentryUploadScript.indexOf('. "$SRCROOT/.xcode.env"');
-  const disableGuardIndex = sentryUploadScript.indexOf('if [ "${SENTRY_DISABLE_AUTO_UPLOAD:-}" = "true" ]; then');
-  const exitIndex = sentryUploadScript.indexOf("exit 0", disableGuardIndex);
-  const uploadIndex = sentryUploadScript.indexOf("sentry-xcode-debug-files.sh");
-  expect(
-    sourceEnvIndex >= 0,
-    "Native iOS Sentry upload phase must source the versioned .xcode.env launch defaults.",
+    !appJson.expo?.plugins?.some((plugin) =>
+      (Array.isArray(plugin) ? plugin[0] : plugin) === "@sentry/react-native/expo"
+    ),
+    "app.json must not include @sentry/react-native/expo while launch Sentry mode is disabled.",
   );
   expect(
-    disableGuardIndex > sourceEnvIndex && exitIndex > disableGuardIndex,
-    "Native iOS Sentry upload phase must exit before upload when SENTRY_DISABLE_AUTO_UPLOAD is true.",
+    !/RNSentry|(?:^|[^A-Za-z])Sentry(?:[^A-Za-z]|$)/m.test(podfileLock || ""),
+    "ios/Podfile.lock must not include Sentry pods while launch Sentry mode is disabled.",
   );
   expect(
-    uploadIndex > exitIndex,
-    "Native iOS Sentry upload invocation must occur after the disabled-upload guard.",
+    !/@sentry\/react-native|Upload Debug Symbols to Sentry|sentry-xcode|Sentry\.bundle/.test(projectText || ""),
+    "Native iOS project must not contain Sentry bundle, wrapper, or upload-phase references.",
+  );
+  expect(
+    !fileExists("ios/sentry.properties"),
+    "ios/sentry.properties must not exist while the Sentry SDK is absent.",
   );
 }
 
 function validateSentryLaunchDecision({ previewProfile, testflightProfile, storeProfile }) {
   const sentryMode = launchInputs.sentryMode;
-  expect(validSentryModes.has(sentryMode), 'launchInputs.sentryMode must be either "disabled" or "enabled".');
-  if (!validSentryModes.has(sentryMode)) {
-    return;
-  }
-  validateSentryRuntimeWiring(sentryMode);
+  compare(sentryMode, "disabled", "launchInputs.sentryMode");
+  expect(
+    !isNonEmptyString(launchInputs.productionSentryDsn),
+    "Production Sentry DSN must stay blank while the launch client contains no Sentry SDK.",
+  );
+  validateSentrySdkAbsent();
 
   const selectedProfiles = [
     ["preview", previewProfile, requiresPreview],
@@ -852,63 +835,19 @@ function validateSentryLaunchDecision({ previewProfile, testflightProfile, store
   ].filter(([, profile, shouldCheck]) => shouldCheck && profile);
   const xcodeEnv = readTextFileAbsolute(iosXcodeEnvPath);
   expect(Boolean(xcodeEnv), "Local Xcode environment source is missing: ios/.xcode.env.");
-  const xcodeDefaultsAutoUploadDisabled = Boolean(
-    xcodeEnv?.match(/^export SENTRY_DISABLE_AUTO_UPLOAD="\$\{SENTRY_DISABLE_AUTO_UPLOAD:-true\}"[ \t]*$/m),
-  );
-  if (xcodeEnv) {
-    expect(
-      !xcodeEnv.includes("SENTRY_ALLOW_FAILURE"),
-      "ios/.xcode.env must not use SENTRY_ALLOW_FAILURE; upload behavior must match the explicit launch mode.",
-    );
-  }
-
-  if (sentryMode === "disabled") {
-    expect(
-      !isNonEmptyString(launchInputs.productionSentryDsn),
-      "Production Sentry DSN must stay blank while launchInputs.sentryMode is disabled.",
-    );
-
-    for (const [profileName, profile] of selectedProfiles) {
-      const profileDsn = getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN");
-      compare(profileDsn, "", `${profileName} EXPO_PUBLIC_SENTRY_DSN`);
-      compare(
-        getOptionalEnvValue(profile, "SENTRY_DISABLE_AUTO_UPLOAD"),
-        "true",
-        `${profileName} SENTRY_DISABLE_AUTO_UPLOAD`,
-      );
-    }
-    expect(
-      xcodeDefaultsAutoUploadDisabled,
-      "ios/.xcode.env must default SENTRY_DISABLE_AUTO_UPLOAD to true while launchInputs.sentryMode is disabled.",
-    );
-    return;
-  }
-
   expect(
-    !isPlaceholderValue(launchInputs.productionSentryDsn),
-    "Production Sentry DSN is unresolved while launchInputs.sentryMode is enabled.",
+    !/SENTRY|sentry/.test(xcodeEnv || ""),
+    "ios/.xcode.env must not contain Sentry variables while the SDK is absent.",
   );
-
   for (const [profileName, profile] of selectedProfiles) {
-    compare(getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN"), launchInputs.productionSentryDsn, `${profileName} Sentry DSN`);
     expect(
-      getOptionalEnvValue(profile, "SENTRY_DISABLE_AUTO_UPLOAD")?.trim().toLowerCase() !== "true",
-      `${profileName} SENTRY_DISABLE_AUTO_UPLOAD must not be true while launchInputs.sentryMode is enabled.`,
+      getOptionalEnvValue(profile, "EXPO_PUBLIC_SENTRY_DSN") === undefined,
+      `${profileName} must omit EXPO_PUBLIC_SENTRY_DSN while the Sentry SDK is absent.`,
     );
-  }
-  expect(
-    !xcodeDefaultsAutoUploadDisabled,
-    "ios/.xcode.env must not default SENTRY_DISABLE_AUTO_UPLOAD to true while launchInputs.sentryMode is enabled.",
-  );
-
-  if (requiresStoreBackedDistribution) {
-    expect(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is required when launchInputs.sentryMode is enabled for TestFlight/store.");
-    expect(Boolean(process.env.SENTRY_ORG), "SENTRY_ORG is required when launchInputs.sentryMode is enabled for TestFlight/store.");
-    expect(Boolean(process.env.SENTRY_PROJECT), "SENTRY_PROJECT is required when launchInputs.sentryMode is enabled for TestFlight/store.");
-  } else {
-    warn(Boolean(process.env.SENTRY_AUTH_TOKEN), "SENTRY_AUTH_TOKEN is not set in the current shell while launchInputs.sentryMode is enabled.");
-    warn(Boolean(process.env.SENTRY_ORG), "SENTRY_ORG is not set in the current shell while launchInputs.sentryMode is enabled.");
-    warn(Boolean(process.env.SENTRY_PROJECT), "SENTRY_PROJECT is not set in the current shell while launchInputs.sentryMode is enabled.");
+    expect(
+      getOptionalEnvValue(profile, "SENTRY_DISABLE_AUTO_UPLOAD") === undefined,
+      `${profileName} must omit SENTRY_DISABLE_AUTO_UPLOAD while the Sentry SDK is absent.`,
+    );
   }
 }
 
@@ -1634,7 +1573,6 @@ for (const requiredEnv of [
   "EXPO_PUBLIC_APP_ENV",
   "EXPO_PUBLIC_RELEASE_TRACK",
   "EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS",
-  "EXPO_PUBLIC_SENTRY_DSN",
 ]) {
   expect(envExample.includes(`${requiredEnv}=`), `.env.example is missing ${requiredEnv}.`);
 }

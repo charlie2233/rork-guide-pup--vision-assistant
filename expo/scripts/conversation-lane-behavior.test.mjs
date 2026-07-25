@@ -114,7 +114,7 @@ test("scene-query crosses VisionAI and analyzeVision with the bounded JSON mode"
         recordHealthCheckSnapshot: () => undefined,
         sanitizeMessage: (value) => value,
       }],
-      ["./sentry", { addBreadcrumb: () => undefined, setSentryTag: () => undefined }],
+      ["./clientDiagnostics", { addBreadcrumb: () => undefined, setDiagnosticTag: () => undefined }],
     ]);
     const api = loadTsModule(new URL("../src/lib/api.ts", import.meta.url), apiMocks);
     const runtimeSafety = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
@@ -129,7 +129,7 @@ test("scene-query crosses VisionAI and analyzeVision with the bounded JSON mode"
       ["@/src/lib/api", api],
       ["@/src/lib/diagnostics", { recordAnalyzeEvent: () => undefined }],
       ["@/src/lib/runtimeSafety", runtimeSafety],
-      ["@/src/lib/sentry", { captureAppError: () => undefined }],
+      ["@/src/lib/clientDiagnostics", { captureAppError: () => undefined }],
     ]);
     const { VisionAI } = loadTsModule(new URL("../src/logic/VisionAI.ts", import.meta.url), visionMocks);
 

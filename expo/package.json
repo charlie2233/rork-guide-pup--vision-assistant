@@ -40,18 +40,15 @@
     "submit:store:ios": "npx eas-cli submit --profile store --platform ios",
     "metadata:push:ios": "npx eas-cli metadata:push --profile store",
     "lint": "expo lint",
-    "typecheck": "tsc --noEmit",
-    "sentry:upload-sourcemaps:update": "npx sentry-expo-upload-sourcemaps dist"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@nkzw/create-context-hook": "^1.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@sentry/react-native": "~7.2.0",
     "@stardazed/streams-text-encoding": "^1.0.2",
     "@tanstack/react-query": "^5.83.0",
     "@ungap/structured-clone": "^1.3.0",
-    "axios": "^1.13.2",
     "expo": "~54.0.36",
     "expo-av": "~16.0.8",
     "expo-blur": "~15.0.8",

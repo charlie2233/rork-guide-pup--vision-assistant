@@ -23,11 +23,9 @@ Update the release file first when finalizing the app identity, public URLs, and
 
 ## Observability
 
-- `@sentry/react-native` `8.6.0` is the pinned SDK.
-- `reactNavigationIntegration()` handles route transactions from the Expo Router navigation container ref.
-- `wrapExpoRouter()` is applied to router instances for the SDK's official Expo Router prefetch instrumentation.
-- This SDK does not expose a separate Expo Router route-tracking integration that replaces React Navigation tracking.
-- The app keeps privacy scrubbing enabled and disables Sentry cleanly when `EXPO_PUBLIC_SENTRY_DSN` is not set.
+- The launch iOS client does not vendor a crash-reporting SDK.
+- Sanitized local diagnostics remain available for no-screen validation and support export.
+- Backend logs retain bounded request, performance, and structured-result metadata without raw images, raw audio, credentials, signed URLs, or installation identifiers.
 
 ## Expo setup
 
@@ -59,7 +57,7 @@ cd ios
 pod install
 ```
 
-- Current machine-specific blocker from the latest validation run: `pod install` failed on CocoaPods CDN certificate verification, so a full simulator build still requires fixing local CocoaPods trust or using a machine with a working CocoaPods setup.
+- The current CocoaPods install succeeds locally with 99 dependencies and no Sentry pods.
 
 Required Expo env vars:
 
@@ -71,7 +69,6 @@ Required Expo env vars:
 Optional Expo env vars:
 
 - `EXPO_PUBLIC_API_TIMEOUT_MS`
-- `EXPO_PUBLIC_SENTRY_DSN`
 - `EXPO_PUBLIC_WEBSITE_URL`
 - `EXPO_PUBLIC_PRIVACY_POLICY_URL`
 - `EXPO_PUBLIC_SUPPORT_URL`
@@ -79,15 +76,6 @@ Optional Expo env vars:
 - `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
 
 If `EXPO_PUBLIC_WEBSITE_URL` is set, the app derives `/privacy`, `/support`, and `/safety` automatically unless a more specific URL override is provided.
-
-Sentry release env vars:
-
-- `SENTRY_AUTH_TOKEN`
-- `SENTRY_ORG`
-- `SENTRY_PROJECT`
-
-The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `npm run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
-Keep `EXPO_PUBLIC_APP_ENV`, the EAS build profile, and the backend release metadata aligned so source maps and crash events group under the same release.
 
 Run locally:
 
@@ -177,7 +165,6 @@ npx eas-cli submit --profile store --platform ios
 - `store` for final App Store submission builds
 
 Both store-upload profiles pin `macos-sequoia-15.6-xcode-26.2` to satisfy the current App Store upload requirement for Xcode 26 / iOS 26 SDK builds.
-`expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
 `testflight` and `store` now hard-fail release preflight unless `backend/guidepup-api/eval/smoke-results-production.latest.json` proves production analyze is provider-backed. `preview` keeps staging mapped, but only warns on fallback-only staging smoke unless you opt into stricter enforcement.
 
 If you need a quick release rehearsal sequence:

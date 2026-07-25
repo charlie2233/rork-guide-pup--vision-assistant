@@ -9,20 +9,21 @@ Guide Pup is **not ready for App Store submission yet**. Cloud provider routing,
 Current hard blockers:
 
 - Rebuild the exact post-fix revision, install it on the wired iPhone, and complete the no-screen sequence with spoken input/output, VoiceOver, audible earcons, felt haptics, interruption recovery, settings persistence, native camera capture, explicit JS fallback capture, and partial STOP cut-through. No sensory pass is inferred from process liveness.
-- Restore and keep the iPhone unlocked on a wired or same-LAN execution path for the exact-candidate run. A same-day sanitized probe previously passed, but the latest 2026-07-24 18:21 PDT check is blocked: paired/trusted and Developer Mode enabled, yet CoreDevice unavailable, no active process probe, no USB/LAN path, and no Xcode runnable destination. Neither transport snapshot is sensory validation.
+- Restore and keep the iPhone unlocked on a wired or same-LAN execution path for the exact-candidate run. A same-day sanitized probe previously passed, but the latest `2026-07-25T03:52:10Z` check is blocked: paired/trusted and Developer Mode enabled, yet CoreDevice unavailable, no active process probe, no USB/LAN path, and no Xcode runnable destination. Neither transport snapshot is sensory validation.
 - Redeploy and strictly smoke staging/production after the final tracked commit, then bind the sanitized request IDs and signed binary hash into candidate and no-screen evidence.
 - Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, App Accessibility, build selection, agreements, App Review metadata, and a final authenticated URL recheck in App Store Connect.
 
-Sentry is deliberately disabled, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
+The launch iOS client vendors no Sentry SDK, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
 
 Current local evidence:
 
-- Commit `3cc852c` was deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. The pending source change supersedes that proof, so both Workers must be redeployed and re-smoked after the final commit.
-- A signed `3cc852c` Ad Hoc candidate previously installed and launched on the paired/trusted Developer Mode iPhone. Its archive, IPA, candidate manifest, smoke files, and screenshots are superseded by the pending camera, voice, privacy, and reviewer-flow fixes and must not be submitted.
+- Commit `87196ef` was deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. The pending no-Sentry source supersedes that proof, so both Workers must be redeployed and re-smoked after the final commit.
+- A signed `87196ef` Ad Hoc candidate previously installed and launched on the paired/trusted Developer Mode iPhone. Its archive, IPA, candidate manifest, smoke files, and physical launch are superseded by the pending no-Sentry source and must not be submitted.
 - Apple's Environment Scanning category is declared as linked, for App Functionality and Analytics, with no tracking. Derived confidence, direction, and hazard-level results support bounded service-quality analysis; Photos or Videos remains App Functionality only.
-- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. An authenticated 2026-07-24 read showed no current build selected, App Privacy and App Accessibility not started, and `0/10` screenshots in the live 6.5-inch slot. Support, marketing, and privacy URLs are present.
+- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. No current build is selected; App Privacy and App Accessibility are not published. Four truthful `1284 x 2778` screenshots are saved in the live 6.5-inch slot, and support, marketing, and privacy URLs are present.
 - Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Secret values were not read or logged.
-- The exact pending working tree built successfully, installed, and launched in a Release iOS simulator after the native announcement policy and CocoaPods integration changed. The fresh launch log contains no GuidePup crash or runtime error. This is native integration proof only, not a signed archive, hardware validation, or TestFlight evidence.
+- Current validation passes Expo typecheck, lint, Expo Doctor `17/17`, all Expo Node contracts `153/153`, backend typecheck, backend privacy/safety `50/50`, backend smoke/evidence `23/23`, both Cloudflare required-secret checks, both Worker dry runs, and `git diff --check`. Native Release validation is tracked separately and is not physical accessibility or camera evidence.
+- The unused direct `axios` dependency is removed. `bun audit` still reports `50` advisories (`1` critical, `27` high, `17` moderate, `5` low) in Expo, React Native, Metro, Babel, ESLint, and React DevTools dependency chains. The release candidate does not apply unproven blanket overrides or a framework migration; the nonzero audit remains documented dependency-maintenance risk.
 
 All detailed backend and release sections below are retained as phase history. The decision and evidence above are authoritative for the current candidate.
 
@@ -91,9 +92,9 @@ All detailed backend and release sections below are retained as phase history. T
 - Support email: `charliehan112@gmail.com`
 - Emergency / safety disclaimer: resolved
 - Store copyright and App Review contact source values: resolved from the authenticated Individual Apple membership and user-provided support email
-- Sentry mode: `disabled`
-- Sentry upload behavior: preview/TestFlight/store set `SENTRY_DISABLE_AUTO_UPLOAD=true` and an explicit blank `EXPO_PUBLIC_SENTRY_DSN`; local Xcode builds also default upload off
-- Sentry runtime gate: Expo embeds checked-in `launchInputs.sentryMode` as immutable config extra, and runtime exposes no DSN unless that mode is enabled; resolved archive-level proof is still required before upload
+- Sentry mode: `disabled`; client SDK absent
+- Sentry build behavior: preview/TestFlight/store and direct Xcode builds contain no Sentry dependency, plugin, pod, wrapper, upload phase, or DSN variable
+- Sentry archive gate: candidate verification rejects an embedded Sentry payload, configured DSN, or Crash Data privacy-manifest declaration
 - Privacy manifest gate: preflight validates the authoritative six collected-data categories, exact purposes, linked flags, and no-tracking flags without depending on entry or purpose order
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty

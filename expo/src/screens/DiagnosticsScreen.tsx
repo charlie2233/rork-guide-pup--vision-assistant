@@ -167,7 +167,10 @@ export default function DiagnosticsScreen() {
           <KeyValue label="Environment" value={diagnostics.runtime.appEnv} />
           <KeyValue label="Release track" value={diagnostics.runtime.releaseTrack} />
           <KeyValue label="API base URL" value={diagnostics.runtime.apiBaseUrl || "Not configured"} />
-          <KeyValue label="Sentry" value={diagnostics.runtime.sentryEnabled ? "enabled" : "disabled"} />
+          <KeyValue
+            label="Crash reporting"
+            value={diagnostics.runtime.crashReportingEnabled ? "enabled" : "not embedded"}
+          />
           <KeyValue
             label="Experimental tabs"
             value={diagnostics.runtime.experimentalTabsEnabled ? "enabled" : "disabled"}

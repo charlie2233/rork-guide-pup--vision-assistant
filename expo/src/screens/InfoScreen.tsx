@@ -8,7 +8,7 @@ import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { appConfig, isConfiguredUrl } from "@/src/lib/config";
 import { useGuidePupRouter } from "@/src/lib/router";
-import { captureAppError } from "@/src/lib/sentry";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 
 type InfoPageKey = "privacy" | "support" | "safety";
 

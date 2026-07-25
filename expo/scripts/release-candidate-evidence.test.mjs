@@ -178,7 +178,11 @@ function candidateOptions(t, overrides = {}) {
       archivePath: candidate.archivePath,
       commandRunner: fakeCommandRunner(candidate, overrides),
       expected: EXPECTED,
-      inspectSentryMarkers: () => ({ configuredDsnFound: false, runtimeModeDisabled: true }),
+      inspectSentryMarkers: () => ({
+        configuredDsnFound: false,
+        crashDataManifestFound: false,
+        sdkEmbedded: false,
+      }),
       ipaPath: candidate.ipaPath,
       now: new Date("2026-07-19T22:00:00.000Z"),
     },
@@ -297,7 +301,11 @@ function makeStructuredPlistCandidate(t, options = {}) {
       archivePath: candidate.archivePath,
       commandRunner,
       expected: EXPECTED,
-      inspectSentryMarkers: () => ({ configuredDsnFound: false, runtimeModeDisabled: true }),
+      inspectSentryMarkers: () => ({
+        configuredDsnFound: false,
+        crashDataManifestFound: false,
+        sdkEmbedded: false,
+      }),
       ipaPath: candidate.ipaPath,
       now: new Date("2026-07-20T00:00:00.000Z"),
     },
@@ -398,10 +406,27 @@ test("rejects mismatched identity and distribution entitlements", async (t) => {
   );
 });
 
+test("rejects embedded crash SDK, DSN, and Crash Data manifest markers", async (t) => {
+  for (const markers of [
+    { configuredDsnFound: true, crashDataManifestFound: false, sdkEmbedded: false },
+    { configuredDsnFound: false, crashDataManifestFound: true, sdkEmbedded: false },
+    { configuredDsnFound: false, crashDataManifestFound: false, sdkEmbedded: true },
+  ]) {
+    const { options } = candidateOptions(t);
+    await assert.rejects(
+      inspectReleaseCandidate({
+        ...options,
+        inspectSentryMarkers: () => markers,
+      }),
+      /contains Sentry SDK, DSN, or Crash Data manifest markers/,
+    );
+  }
+});
+
 test("rejects artifact paths and sensitive values", () => {
   const artifact = {
     artifactType: "guidepup-ios-release-candidate",
-    artifactVersion: 1,
+    artifactVersion: 2,
     generatedAt: "2026-07-19T22:00:00.000Z",
     sourceRevision: EXPECTED.sourceRevision,
     archive: {
@@ -414,7 +439,11 @@ test("rejects artifact paths and sensitive values", () => {
       bundleIdentifier: EXPECTED.bundleIdentifier,
       getTaskAllow: false,
       name: "/private/tmp/GuidePup.xcarchive",
-      sentry: { configuredDsnFound: false, runtimeModeDisabled: true },
+      sentry: {
+        configuredDsnFound: false,
+        crashDataManifestFound: false,
+        sdkEmbedded: false,
+      },
       signing: {
         certificateClass: "Apple Distribution",
         codesignVerified: true,

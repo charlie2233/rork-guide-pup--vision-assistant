@@ -14,7 +14,7 @@ import {
   isStaleFrameError,
   throwIfAborted,
 } from "@/src/lib/runtimeSafety";
-import { captureAppError } from "@/src/lib/sentry";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 
 const MAX_UPLOAD_WIDTH = 768;
 

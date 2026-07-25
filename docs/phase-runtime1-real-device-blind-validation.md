@@ -7,13 +7,14 @@ Latest continuation start: `b5c1c5e`
 
 ## Current gate on 2026-07-24
 
-- Source commit `87196ef75b322d0b6f2f535a3164d9c098511bef` serializes native-camera and JS-fallback ownership. A fallback `CameraView` cannot mount or analyze until native shutdown resolves, stale native/fallback generations cannot reclaim ownership, and simultaneous STOP/lifecycle shutdown callers share one bounded two-attempt native-stop sequence.
+- The pending launch source serializes native-camera and JS-fallback ownership. A fallback `CameraView` cannot mount or analyze until native shutdown resolves, stale native/fallback generations cannot reclaim ownership, and simultaneous STOP/lifecycle shutdown callers share one bounded two-attempt native-stop sequence.
 - The required voice path remains deterministic: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics off/on -> repeat -> what do you see -> STOP during speech. The conversation answer remains separate from command parsing and cannot mutate navigation or settings.
-- Current local validation passed: iOS runtime safety `85/85`, privacy/launch contract `13/13`, no-screen evidence schema `23/23`, release config hardening `10/10`, Expo typecheck, lint, voice-command contract, static no-screen contract, conversation-memory isolation, smoke-evidence contract, and release-evidence contract.
-- The exact source commit also completed an official Release simulator build, install, and launch after CocoaPods included the executable native announcement policy. The launch log contains no GuidePup crash or runtime error. Simulator integration is not physical speech, VoiceOver, haptic, audio, or camera evidence.
+- The launch client now vendors no crash-reporting SDK. Sentry dependency/plugin/pods/native phases/runtime configuration and the orphaned native properties file are removed; release gates reject their return.
+- Current local validation passed: all Expo Node contracts `153/153`, including iOS runtime safety `85/85`, privacy, no-screen schema, release configuration/evidence, conversation-lane isolation, and STOP behavior; Expo typecheck, lint, and Expo Doctor `17/17` also pass.
 - These checks are source/static proof only. They do not prove that speech input is recognized, confirmations and earcons are audible, haptics are felt, VoiceOver announces correctly, STOP cuts through physical playback, settings survive a real relaunch, or either camera path captures on an iPhone.
-- A 2026-07-24 sanitized readiness recheck previously reported `ready`, proving the paired/trusted Developer Mode phone could execute a bounded CoreDevice process probe at that moment. The latest 18:21 PDT recheck is `blocked`: the phone is still paired/trusted and visible to `xctrace`, but CoreDevice lists it unavailable, the process probe fails, no USB or same-LAN path is detected, and Xcode has no runnable destination. Only identifier suffixes are retained in checked-in evidence.
-- The earlier `3cc852c` Ad Hoc install and process-liveness check are superseded by source `87196ef` and cannot satisfy this phase. No signed `87196ef` candidate or current `expo/release/no-screen-smoke.latest.json` exists.
+- A prior sanitized readiness check reached `ready`, and the superseded `87196ef` Ad Hoc candidate installed and launched. The latest check at `2026-07-25T03:52:10Z` is transport-blocked: the phone remains paired/trusted, in Developer Mode, and visible to `xctrace`, but the CoreDevice process probe fails and USB/same-LAN, DDI/tunnel, and Xcode destination checks are unavailable.
+- The prior `87196ef` archive/install is superseded by the no-Sentry launch source. A new exact-revision App Store archive and one-device Ad Hoc export must be built, inspected, installed, and launched before physical validation.
+- No current `expo/release/no-screen-smoke.latest.json` exists. Physical speech input, audible confirmations/earcons, felt haptics, VoiceOver delivery, STOP barge-in, settings persistence, native camera capture, and explicit JS fallback remain pending tester confirmation.
 
 Commands:
 
@@ -29,7 +30,7 @@ xcrun devicectl list devices --timeout 30 --json-output '<private-temporary-file
 system_profiler SPUSBDataType -json
 ```
 
-Current blocker: restore the wired or same-LAN execution path, build and install exact source `87196ef`, then complete both native-core and explicit JS-fallback no-screen runs. A prior transport pass does not replace current connectivity or sensory validation, and this phase is not launch-passing until the sanitized no-screen evidence artifact validates.
+Current blocker: rebuild the exact no-Sentry candidate, restore the phone execution path, then complete both native-core and explicit JS-fallback no-screen runs and validate the sanitized evidence artifact. Prior transport and install/launch evidence does not replace current-binary or sensory validation.
 
 ## Current gate on 2026-07-20
 

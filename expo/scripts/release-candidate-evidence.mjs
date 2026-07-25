@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { validateEvidencePrivacy } from "./evidence-privacy.mjs";
 import { resolveReleaseSourceState } from "./release-source-state.mjs";
 
-export const RELEASE_CANDIDATE_ARTIFACT_VERSION = 1;
+export const RELEASE_CANDIDATE_ARTIFACT_VERSION = 2;
 export const RELEASE_CANDIDATE_ARTIFACT_TYPE = "guidepup-ios-release-candidate";
 export const DEFAULT_RELEASE_CANDIDATE_PATH = "release/candidate-build.latest.json";
 
@@ -143,19 +143,35 @@ function runGrep(commandRunner, pattern, appPath) {
 }
 
 function defaultInspectSentryMarkers(appPath, commandRunner) {
-  const runtimeModeDisabled = runGrep(
-    commandRunner,
-    "launchSentryMode[^[:alnum:]]{0,16}disabled",
-    appPath,
-  );
   const configuredDsnFound = runGrep(
     commandRunner,
     "https://[[:alnum:]]{16,}@[[:alnum:]._-]*sentry[^[:space:]\"']*/[[:digit:]]+",
     appPath,
   );
+  const crashDataManifestFound = runGrep(
+    commandRunner,
+    "NSPrivacyCollectedDataTypeCrashData",
+    appPath,
+  );
+  const pending = [appPath];
+  let sdkEmbedded = false;
+  while (pending.length > 0 && !sdkEmbedded) {
+    const directory = pending.pop();
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (/(?:^|[/\\])(?:RNSentry|Sentry)(?:\.framework|\.bundle)?(?:$|[/\\])/i.test(entryPath)) {
+        sdkEmbedded = true;
+        break;
+      }
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+      }
+    }
+  }
   return {
     configuredDsnFound,
-    runtimeModeDisabled,
+    crashDataManifestFound,
+    sdkEmbedded,
   };
 }
 
@@ -249,8 +265,9 @@ export function validateReleaseCandidateEvidence(artifact, expectedInput) {
   check(archive.signing?.codesignVerified === true, "archive signing must be verified");
   check(archive.signing?.certificateClass === "Apple Distribution", "archive signing class must be Apple Distribution");
   check(archive.signing?.teamIdentifier === expected.teamIdentifier, "archive signing team does not match expected");
-  check(archive.sentry?.runtimeModeDisabled === true, "archive Sentry runtime-disabled marker is missing");
   check(archive.sentry?.configuredDsnFound === false, "archive contains a configured Sentry DSN marker");
+  check(archive.sentry?.crashDataManifestFound === false, "archive contains a Crash Data privacy-manifest declaration");
+  check(archive.sentry?.sdkEmbedded === false, "archive contains an embedded Sentry SDK payload");
 
   if (artifact.ipa !== undefined) {
     check(SAFE_ARTIFACT_NAME_PATTERN.test(artifact.ipa?.name ?? "") && artifact.ipa.name.endsWith(".ipa"), "ipa.name must be an artifact name only");
@@ -450,8 +467,12 @@ export async function inspectReleaseCandidate(options) {
   }
 
   const sentry = inspectSentryMarkers(appPath, commandRunner);
-  if (sentry.runtimeModeDisabled !== true || sentry.configuredDsnFound !== false) {
-    throw new Error("Archived app does not prove disabled Sentry runtime markers.");
+  if (
+    sentry.configuredDsnFound !== false
+    || sentry.crashDataManifestFound !== false
+    || sentry.sdkEmbedded !== false
+  ) {
+    throw new Error("Archived app contains Sentry SDK, DSN, or Crash Data manifest markers.");
   }
 
   const artifact = {
@@ -471,7 +492,8 @@ export async function inspectReleaseCandidate(options) {
       name: path.basename(archivePath),
       sentry: {
         configuredDsnFound: false,
-        runtimeModeDisabled: true,
+        crashDataManifestFound: false,
+        sdkEmbedded: false,
       },
       signing: {
         certificateClass: "Apple Distribution",
