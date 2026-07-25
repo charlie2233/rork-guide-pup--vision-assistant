@@ -3054,9 +3054,12 @@ const styles = StyleSheet.create({
   bottomHint: {
     alignItems: "center",
     paddingBottom: 24,
+    paddingHorizontal: 24,
   },
   hintText: {
-    color: "#AAAAAA",
-    fontSize: 14,
+    color: "#555555",
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: "center",
   },
 });

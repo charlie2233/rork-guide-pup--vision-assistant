@@ -59,6 +59,75 @@ function getExpressionJsxAttribute(openingElement, attributeName) {
   return attribute.initializer.expression.getText();
 }
 
+function getStyleLiteral(source, fileName, styleName, propertyName) {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let styles = null;
+
+  function visit(node) {
+    if (
+      ts.isCallExpression(node)
+      && node.expression.getText(sourceFile) === "StyleSheet.create"
+      && node.arguments.length === 1
+      && ts.isObjectLiteralExpression(node.arguments[0])
+    ) {
+      assert.equal(styles, null, `Expected one StyleSheet.create call in ${fileName}.`);
+      styles = node.arguments[0];
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  assert.ok(styles, `Missing StyleSheet.create call in ${fileName}.`);
+
+  const style = styles.properties.find(
+    (property) =>
+      ts.isPropertyAssignment(property)
+      && property.name.getText(sourceFile).replaceAll("\"", "") === styleName,
+  );
+  assert.ok(style && ts.isObjectLiteralExpression(style.initializer), `Missing ${styleName} style in ${fileName}.`);
+
+  const value = style.initializer.properties.find(
+    (property) =>
+      ts.isPropertyAssignment(property)
+      && property.name.getText(sourceFile).replaceAll("\"", "") === propertyName,
+  );
+  assert.ok(value && ts.isPropertyAssignment(value), `Missing ${styleName}.${propertyName} in ${fileName}.`);
+
+  if (ts.isStringLiteral(value.initializer) || ts.isNumericLiteral(value.initializer)) {
+    return value.initializer.text;
+  }
+
+  assert.fail(`${styleName}.${propertyName} must be a string or numeric literal in ${fileName}.`);
+}
+
+function contrastRatio(foreground, background) {
+  const luminance = (hex) => {
+    assert.match(hex, /^#[0-9A-F]{6}$/i, `Expected a six-digit hex color, received ${hex}.`);
+    const channels = hex
+      .slice(1)
+      .match(/.{2}/g)
+      .map((channel) => Number.parseInt(channel, 16) / 255)
+      .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+
+  const foregroundLuminance = luminance(foreground);
+  const backgroundLuminance = luminance(background);
+  return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+    / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
+test("the visible navigation hint has normal-text contrast on its surface", () => {
+  const navigation = read("../src/screens/NavigationScreen.tsx");
+  const foreground = getStyleLiteral(navigation, "NavigationScreen.tsx", "hintText", "color");
+  const background = getStyleLiteral(navigation, "NavigationScreen.tsx", "container", "backgroundColor");
+  const fontSize = Number(getStyleLiteral(navigation, "NavigationScreen.tsx", "hintText", "fontSize"));
+  const ratio = contrastRatio(foreground, background);
+
+  assert.ok(fontSize >= 16, `Navigation hint text must remain at least 16 points; received ${fontSize}.`);
+  assert.ok(ratio >= 4.5, `Navigation hint contrast must be at least 4.5:1; received ${ratio.toFixed(2)}:1.`);
+});
+
 test("voice command ownership follows the focused route", () => {
   const home = read("../src/screens/HomeScreen.tsx");
   const navigation = read("../src/screens/NavigationScreen.tsx");
