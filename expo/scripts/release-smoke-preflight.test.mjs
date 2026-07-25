@@ -63,22 +63,22 @@ function buildPublicPageResponses() {
   const safetyUrl = `${websiteUrl}/safety`;
   return {
     [websiteUrl]: {
-      body: "Guide Pup helps blind and low-vision users. Optional hands-free voice commands use iOS speech recognition. Crash reporting is disabled.",
+      body: readFileSync(path.join(repoDir, "site/index.html"), "utf8"),
       finalUrl: websiteUrl,
       status: 200,
     },
     [privacyUrl]: {
-      body: `Guide Pup Privacy Policy. Voice and Apple Speech. Cloudflare observability. OpenAI. Contact ${launchInputs.supportEmail}.`,
+      body: readFileSync(path.join(repoDir, "site/privacy/index.html"), "utf8"),
       finalUrl: privacyUrl,
       status: 200,
     },
     [supportUrl]: {
-      body: `Support - Guide Pup. Check camera permission. Contact emergency services when needed. Email ${launchInputs.supportEmail}.`,
+      body: readFileSync(path.join(repoDir, "site/support/index.html"), "utf8"),
       finalUrl: supportUrl,
       status: 200,
     },
     [safetyUrl]: {
-      body: "Guide Pup is not guaranteed hazard detection or emergency response. When STOP appears. Emergency guidance.",
+      body: readFileSync(path.join(repoDir, "site/safety/index.html"), "utf8"),
       finalUrl: safetyUrl,
       status: 200,
     },

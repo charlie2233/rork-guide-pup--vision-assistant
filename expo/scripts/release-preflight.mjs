@@ -1082,7 +1082,7 @@ function getLivePublicPageSpecs() {
       requiredMarkers: [
         "blind and low-vision users",
         "optional hands-free voice commands",
-        "crash reporting is disabled",
+        "contains no crash-reporting sdk",
       ],
       url: publicUrls.websiteUrl,
     },
@@ -1158,7 +1158,7 @@ async function inspectLivePublicPage(spec, fetchImpl) {
       issues.push(`Live ${spec.label} response must be text no larger than ${publicPageResponseLimitBytes} bytes.`);
       return { issues, spec };
     }
-    const normalizedBody = body.toLowerCase();
+    const normalizedBody = body.toLowerCase().replace(/\s+/g, " ");
     for (const marker of spec.requiredMarkers) {
       if (!isNonEmptyString(marker) || !normalizedBody.includes(marker.toLowerCase())) {
         issues.push(`Live ${spec.label} is missing required current marker "${marker || "configured support email"}".`);
