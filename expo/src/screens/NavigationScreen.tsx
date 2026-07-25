@@ -53,12 +53,23 @@ import {
 import {
   applyDeterministicVisionSafetyGuard,
   assertFreshFrameForUpload,
+  createCameraOwnershipTransitionCoordinator,
   evaluateStopRuntimeObservation,
+  getNavigationPrimaryControlAccessibility,
   isAbortError,
   isStaleFrameError,
   resolveInitialNavigationCorePath,
+  resolveNavigationCameraStatus,
+  resolveStopRuntimeShutdownTruth,
+  settleCurrentAnnouncementDelivery,
+  settlePromiseWithin,
+  settleStopConfirmationDelivery,
   shouldOwnFallbackCamera,
   shouldForceJsFallbackValidation,
+  shouldLeaveNavigationAfterTouchStop,
+  shouldRearmVoiceAfterStopConfirmation,
+  shouldRetainRuntimeSafetyHoldAfterVoiceRecovery,
+  shouldRetryFailedStop,
 } from "@/src/lib/runtimeSafety";
 import { useGuidePupRouter } from "@/src/lib/router";
 import {
@@ -87,6 +98,16 @@ const ANALYSIS_INTERVAL_MS = 4500;
 const STOP_OBSERVATION_TIMEOUT_MS = 2_000;
 const STOP_OBSERVATION_POLL_MS = 100;
 const STOP_OBSERVATION_QUIET_WINDOW_MS = 400;
+const CAMERA_START_TIMEOUT_MS = 5_000;
+const CAMERA_STOP_MAX_ATTEMPTS = 2;
+const CAMERA_STOP_ATTEMPT_TIMEOUT_MS = 750;
+const CAMERA_STOP_TOTAL_TIMEOUT_MS =
+  (CAMERA_STOP_MAX_ATTEMPTS * CAMERA_STOP_ATTEMPT_TIMEOUT_MS) + 100;
+const FALLBACK_CAMERA_READY_TIMEOUT_MS = 4_000;
+const SHUTDOWN_OPERATION_TIMEOUT_MS = 750;
+const STOP_SAFETY_ANNOUNCEMENT_DELIVERY_TIMEOUT_MS = 2_000;
+const STOP_CONFIRMATION_DELIVERY_TIMEOUT_MS = 15_000;
+const STOP_STATE_READ_TIMEOUT_MS = 250;
 
 type VoiceOverState = "disabled" | "enabled" | "unknown";
 
@@ -129,6 +150,7 @@ export default function NavigationScreen() {
   const navigation = useNavigation();
   const { cameraPath } = useLocalSearchParams<{ cameraPath?: string | string[] }>();
   const forceJsFallbackValidation = shouldForceJsFallbackValidation(cameraPath);
+  const cameraPathTransitionKey = JSON.stringify(cameraPath ?? null);
   const { speak, stop: stopVoice, isSpeaking } = useVoice();
   const {
     settings,
@@ -148,6 +170,10 @@ export default function NavigationScreen() {
       requestedCameraPath: cameraPath,
     }),
   );
+  const [fallbackCameraOwnership, setFallbackCameraOwnership] = useState<{
+    generation: number;
+    pathRequestKey: string;
+  } | null>(null);
   const [fallbackCameraError, setFallbackCameraError] = useState<string | null>(null);
   const [fallbackCameraReady, setFallbackCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -155,6 +181,9 @@ export default function NavigationScreen() {
   const activeAnalysisControllerRef = useRef<AbortController | null>(null);
   const analysisGenerationRef = useRef(0);
   const analyzingRef = useRef(false);
+  const cameraOwnershipCoordinatorRef = useRef(createCameraOwnershipTransitionCoordinator());
+  const cameraTransitionReadyRef = useRef(false);
+  const fallbackCameraOwnershipGenerationRef = useRef<number | null>(null);
   const guidingRef = useRef(true);
   const hasAnnouncedCameraPermissionRef = useRef(false);
   const isSpeakingRef = useRef(false);
@@ -170,10 +199,13 @@ export default function NavigationScreen() {
   const stopOperationGenerationRef = useRef(0);
   const voiceRouteFocusGenerationRef = useRef(0);
   const fallbackCameraActiveRef = useRef(false);
+  const navigationCorePathRef = useRef(navigationCorePath);
   const runtimeSafetyHoldRef = useRef(false);
   const recoveryFreshFrameAfterMsRef = useRef(0);
   const cameraRecoveryGateActiveRef = useRef(false);
   const voiceRecoveryGateActiveRef = useRef(false);
+  const stopSafetyFailureHoldRef = useRef(false);
+  const touchStopFailureHoldRef = useRef(false);
   const lastVoiceRecoveryStateRef = useRef("idle");
   const lastCameraRecoveryStateRef = useRef("idle");
   const voiceRecoveryExhaustedHandledRef = useRef(false);
@@ -182,6 +214,7 @@ export default function NavigationScreen() {
   const voiceSessionOwnerTokenRef = useRef<string | null>(null);
   const voiceRecognitionHandlerRef = useRef<(event: GuidePupVoiceRecognitionEvent) => void>(() => undefined);
   const voiceStateHandlerRef = useRef<(event: GuidePupVoiceControlState) => void>(() => undefined);
+  const touchStopRetryRef = useRef<() => Promise<void>>(async () => undefined);
   const voiceOverAnnouncementActiveRef = useRef(false);
   const voiceOverSpeechGenerationRef = useRef(0);
   const voiceOverResolutionRef = useRef<Promise<VoiceOverState> | null>(null);
@@ -218,6 +251,34 @@ export default function NavigationScreen() {
     }
   }, []);
 
+  const resetCameraTransitionState = useCallback(() => {
+    cameraTransitionReadyRef.current = false;
+    fallbackCameraActiveRef.current = false;
+    fallbackCameraOwnershipGenerationRef.current = null;
+    invalidateAndAbortAnalysis();
+    setFallbackCameraOwnership(null);
+    setFallbackCameraReady(false);
+    setFallbackCameraError(null);
+  }, [invalidateAndAbortAnalysis]);
+
+  const beginCameraTransition = useCallback(() => {
+    const generation = cameraOwnershipCoordinatorRef.current.beginTransition();
+    resetCameraTransitionState();
+    return generation;
+  }, [resetCameraTransitionState]);
+
+  const requestNativeCameraStop = useCallback(() => {
+    const request = cameraOwnershipCoordinatorRef.current.requestNativeStop(
+      () => GuidePupNavigationCore.stopSession(),
+      CAMERA_STOP_MAX_ATTEMPTS,
+      CAMERA_STOP_ATTEMPT_TIMEOUT_MS,
+    );
+    if (request.created) {
+      resetCameraTransitionState();
+    }
+    return request;
+  }, [resetCameraTransitionState]);
+
   useEffect(() => {
     let isActive = true;
     void resolveVoiceOverRunning().then((state) => {
@@ -253,16 +314,29 @@ export default function NavigationScreen() {
       lastTotalGuidanceLoopLatencyMs?: number;
       recoveryState?: "idle" | "recovering" | "interrupted" | "background" | "exhausted";
       sessionActive?: boolean;
-    }) => {
+    }, transitionGeneration = cameraOwnershipCoordinatorRef.current.currentGeneration()) => {
       const [runtimeAvailable, state] = await Promise.all([
-        GuidePupNavigationCore.isAvailable().catch(() => false),
-        GuidePupNavigationCore.getState().catch(() => null),
+        settlePromiseWithin(
+          () => GuidePupNavigationCore.isAvailable(),
+          SHUTDOWN_OPERATION_TIMEOUT_MS,
+          "navigation runtime availability read",
+        ).catch(() => false),
+        settlePromiseWithin(
+          () => GuidePupNavigationCore.getState(),
+          SHUTDOWN_OPERATION_TIMEOUT_MS,
+          "navigation runtime state read",
+        ).catch(() => null),
       ]);
+      if (!cameraOwnershipCoordinatorRef.current.isCurrent(transitionGeneration)) {
+        return false;
+      }
+
       const moduleAvailable = GuidePupNavigationCore.isNativeAvailable();
       const executionPath: GuidePupNavigationCoreExecutionPath =
-        forceJsFallbackValidation
-          ? "js-fallback"
-          : partial?.executionPath ?? (moduleAvailable && runtimeAvailable ? "native-core" : "js-fallback");
+        partial?.executionPath
+        ?? navigationCorePathRef.current
+        ?? (moduleAvailable && runtimeAvailable ? "native-core" : "js-fallback");
+      navigationCorePathRef.current = executionPath;
       setNavigationCorePath(executionPath);
       recordNavigationLoopSnapshot({
         available: moduleAvailable,
@@ -274,9 +348,40 @@ export default function NavigationScreen() {
         sessionActive: partial?.sessionActive ?? state?.sessionActive ?? false,
         voiceOverRunning: state?.voiceOverRunning,
       });
+      return true;
     },
-    [forceJsFallbackValidation],
+    [],
   );
+
+  const grantFallbackCameraAfterNativeRelease = useCallback(async (input: {
+    generation: number;
+    lastError: string | null;
+    pathRequestKey: string;
+  }) => {
+    const released = await cameraOwnershipCoordinatorRef.current.releaseNativeForFallback(
+      input.generation,
+      () => GuidePupNavigationCore.stopSession(),
+      CAMERA_STOP_ATTEMPT_TIMEOUT_MS,
+    );
+    if (!released || !cameraOwnershipCoordinatorRef.current.isCurrent(input.generation)) {
+      return false;
+    }
+
+    navigationCorePathRef.current = "js-fallback";
+    fallbackCameraOwnershipGenerationRef.current = input.generation;
+    cameraTransitionReadyRef.current = false;
+    setNavigationCorePath("js-fallback");
+    setFallbackCameraOwnership({
+      generation: input.generation,
+      pathRequestKey: input.pathRequestKey,
+    });
+    await refreshNavigationCoreState({
+      executionPath: "js-fallback",
+      lastError: input.lastError,
+      sessionActive: false,
+    }, input.generation);
+    return cameraOwnershipCoordinatorRef.current.isCurrent(input.generation);
+  }, [refreshNavigationCoreState]);
 
   const syncVoiceState = useCallback(async () => {
     const state = await GuidePupVoiceControl.getState().catch(() => null);
@@ -355,7 +460,14 @@ export default function NavigationScreen() {
         if (voiceOverState === "enabled") {
           stopVoice();
           await GuidePupVoiceControl.stopSpeaking().catch(() => undefined);
-          await GuidePupNavigationCore.announce(permissionMessage, announcementOwnerToken).catch(() => undefined);
+          await settleCurrentAnnouncementDelivery({
+            deliver: () => GuidePupNavigationCore.announce(
+              permissionMessage,
+              announcementOwnerToken,
+            ),
+            interrupt: () => GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken),
+            isCurrent: attemptIsCurrent,
+          });
         } else {
           await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
           await GuidePupVoiceControl.speak(permissionMessage, {
@@ -415,7 +527,7 @@ export default function NavigationScreen() {
     const announcementOwnerToken = createGuidePupAnnouncementOwnerToken("navigation-announcement");
     announcementOwnerTokenRef.current = announcementOwnerToken;
     void GuidePupNavigationCore.claimAnnouncementOwner(announcementOwnerToken);
-    invalidateAndAbortAnalysis();
+    beginCameraTransition();
     transitionVoiceStopOperationFocus({
       focusGenerationRef: voiceRouteFocusGenerationRef,
       operationGenerationRef: stopOperationGenerationRef,
@@ -428,11 +540,10 @@ export default function NavigationScreen() {
     void syncVoiceState();
 
     return () => {
-      invalidateAndAbortAnalysis();
+      const cameraStopRequest = requestNativeCameraStop();
       invalidateOwnedVoiceSessionAttempts(voiceSessionAttemptGenerationRef);
       voiceOverSpeechGenerationRef.current += 1;
       voiceOverAnnouncementActiveRef.current = false;
-      fallbackCameraActiveRef.current = false;
       isScreenFocusedRef.current = false;
       transitionVoiceStopOperationFocus({
         focusGenerationRef: voiceRouteFocusGenerationRef,
@@ -445,14 +556,18 @@ export default function NavigationScreen() {
       void releaseOwnedAnnouncementOwner({
         ownerRef: announcementOwnerTokenRef,
         release: (ownerToken) => GuidePupNavigationCore.releaseAnnouncementOwner(ownerToken),
+      }).catch(() => {
+        recordVoiceSnapshot({
+          lastError: "VoiceOver announcement owner release could not be confirmed.",
+        });
       });
-      void GuidePupNavigationCore.stopSession();
+      void cameraStopRequest.promise.catch(() => undefined);
       void stopOwnedVoiceSession({
         ownerRef: voiceSessionOwnerTokenRef,
         stop: (ownerToken) => GuidePupVoiceControl.stopCommandSession({ ownerToken }),
       });
     };
-  }, [invalidateAndAbortAnalysis, startVoiceSession, stopVoice, syncVoiceState]));
+  }, [beginCameraTransition, requestNativeCameraStop, startVoiceSession, stopVoice, syncVoiceState]));
 
   const speakCommandResponse = useCallback((
     message: string,
@@ -503,7 +618,14 @@ export default function NavigationScreen() {
           speaking: true,
           speechListeningOverlapReason: keepListeningDuringSpeech ? "stop-barge-in" : undefined,
         });
-        await GuidePupNavigationCore.announce(message, announcementOwnerToken).catch(() => undefined);
+        const announcementOutcome = await settleCurrentAnnouncementDelivery({
+          deliver: () => GuidePupNavigationCore.announce(message, announcementOwnerToken),
+          interrupt: () => GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken),
+          isCurrent: () =>
+            isScreenFocusedRef.current
+            && announcementOwnerTokenRef.current === announcementOwnerToken
+            && voiceOverSpeechGenerationRef.current === speechGeneration,
+        });
 
         if (
           announcementOwnerTokenRef.current !== announcementOwnerToken
@@ -511,9 +633,22 @@ export default function NavigationScreen() {
         ) {
           return;
         }
+        if (announcementOutcome === "unsafe") {
+          recordVoiceSnapshot({
+            lastError: "VoiceOver announcement delivery could not be confirmed or interrupted.",
+            speaking: true,
+          });
+          return;
+        }
         voiceOverAnnouncementActiveRef.current = false;
         isSpeakingRef.current = false;
-        recordVoiceSnapshot({ speaking: false });
+        recordVoiceSnapshot({
+          lastError:
+            announcementOutcome === "interrupted"
+              ? "VoiceOver announcement delivery failed and was interrupted."
+              : undefined,
+          speaking: false,
+        });
         return;
       }
 
@@ -539,8 +674,6 @@ export default function NavigationScreen() {
   }, [resolveVoiceOverRunning, settings.speechRate, speak, stopVoice]);
 
   const pauseGuidanceForVoice = useCallback(() => {
-    invalidateAndAbortAnalysis();
-    fallbackCameraActiveRef.current = false;
     lastHandledTranscriptRef.current = null;
     guidingRef.current = false;
     hasAnnouncedStartRef.current = false;
@@ -560,8 +693,7 @@ export default function NavigationScreen() {
       tone: "warning",
       title: "Guidance paused",
     });
-    void GuidePupNavigationCore.stopSession();
-  }, [invalidateAndAbortAnalysis]);
+  }, []);
 
   const enterVoiceRecoveryHold = useCallback((recoveryState: "background" | "exhausted" | "interrupted" | "recovering") => {
     const message = recoveryState === "exhausted"
@@ -575,19 +707,14 @@ export default function NavigationScreen() {
     voiceRecoveryGateActiveRef.current = true;
     runtimeSafetyHoldRef.current = true;
     setRuntimeSafetyHold(true);
-    fallbackCameraActiveRef.current = false;
-    invalidateAndAbortAnalysis();
+    const cameraStopRequest = requestNativeCameraStop();
     const speechGeneration = voiceOverSpeechGenerationRef.current + 1;
     voiceOverSpeechGenerationRef.current = speechGeneration;
-    voiceOverAnnouncementActiveRef.current = false;
-    isSpeakingRef.current = false;
+    voiceOverAnnouncementActiveRef.current = true;
+    isSpeakingRef.current = true;
     stopVoice();
-    void GuidePupVoiceControl.stopSpeaking();
     const announcementOwnerToken = announcementOwnerTokenRef.current;
-    if (announcementOwnerToken) {
-      void GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken);
-    }
-    void GuidePupNavigationCore.stopSession();
+    void cameraStopRequest.promise.catch(() => undefined);
     setDirection({
       confidence: 0,
       direction: "stop",
@@ -609,28 +736,61 @@ export default function NavigationScreen() {
       void GuidePupNavigationCore.playHaptic("stop");
     }
     void GuidePupNavigationCore.playAudioCue("stop");
-    void resolveVoiceOverRunning().then(async (voiceOverState) => {
+    void (async () => {
+      const previousSpeechStopped = await settlePromiseWithin(
+        () => GuidePupVoiceControl.stopSpeaking(),
+        SHUTDOWN_OPERATION_TIMEOUT_MS,
+        "voice recovery speech stop",
+      ).then(
+        () => true,
+        () => false,
+      );
+      const voiceOverState = await resolveVoiceOverRunning();
       if (
-        voiceOverState !== "enabled"
-        || !announcementOwnerToken
+        !announcementOwnerToken
         || announcementOwnerTokenRef.current !== announcementOwnerToken
         || voiceOverSpeechGenerationRef.current !== speechGeneration
         || !voiceRecoveryGateActiveRef.current
       ) {
         return;
       }
-      voiceOverAnnouncementActiveRef.current = true;
-      isSpeakingRef.current = true;
-      await GuidePupNavigationCore.supersedeAnnouncement(message, announcementOwnerToken).catch(() => undefined);
-      if (
-        announcementOwnerTokenRef.current === announcementOwnerToken
-        && voiceOverSpeechGenerationRef.current === speechGeneration
-      ) {
-        voiceOverAnnouncementActiveRef.current = false;
-        isSpeakingRef.current = false;
+
+      const recoveryAnnouncementIsCurrent = () =>
+        isScreenFocusedRef.current
+        && announcementOwnerTokenRef.current === announcementOwnerToken
+        && voiceOverSpeechGenerationRef.current === speechGeneration;
+      const announcementOutcome = await settleCurrentAnnouncementDelivery({
+        deliver: () =>
+          voiceOverState === "enabled"
+            ? GuidePupNavigationCore.supersedeAnnouncement(message, announcementOwnerToken)
+            : GuidePupVoiceControl.speak(message, { interrupt: true }),
+        interrupt: () =>
+          voiceOverState === "enabled"
+            ? GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken)
+            : GuidePupVoiceControl.stopSpeaking(),
+        isCurrent: recoveryAnnouncementIsCurrent,
+      });
+      if (!recoveryAnnouncementIsCurrent()) {
+        return;
       }
-    });
-  }, [invalidateAndAbortAnalysis, resolveVoiceOverRunning, settings.hapticsEnabled, stopVoice]);
+      if (!previousSpeechStopped || announcementOutcome === "unsafe") {
+        recordVoiceSnapshot({
+          lastError: "Voice recovery speech could not be confirmed or interrupted.",
+          speaking: true,
+        });
+        return;
+      }
+      voiceOverAnnouncementActiveRef.current = false;
+      isSpeakingRef.current = false;
+      recordVoiceSnapshot({
+        lastError:
+          announcementOutcome === "interrupted"
+            ? "Voice recovery speech failed and was interrupted."
+            : undefined,
+        speaking: false,
+      });
+    })();
+  }, [requestNativeCameraStop, resolveVoiceOverRunning, settings.hapticsEnabled, stopVoice]);
 
   const clearVoiceRecoveryHold = useCallback(() => {
     if (!voiceRecoveryGateActiveRef.current) {
@@ -638,18 +798,93 @@ export default function NavigationScreen() {
     }
 
     voiceRecoveryGateActiveRef.current = false;
-    runtimeSafetyHoldRef.current = false;
+    const retainRuntimeSafetyHold = shouldRetainRuntimeSafetyHoldAfterVoiceRecovery({
+      stopSafetyFailureHold: stopSafetyFailureHoldRef.current,
+      touchStopFailureHold: touchStopFailureHoldRef.current,
+    });
+    runtimeSafetyHoldRef.current = retainRuntimeSafetyHold;
     recoveryFreshFrameAfterMsRef.current = Math.max(
       recoveryFreshFrameAfterMsRef.current,
       Date.now(),
     );
-    setRuntimeSafetyHold(false);
+    setRuntimeSafetyHold(retainRuntimeSafetyHold);
+    if (retainRuntimeSafetyHold) {
+      const holdMessage = "Voice control recovered, but STOP safety is still unconfirmed. Say stop guidance again or double tap Return Home to retry.";
+      setGuidanceStatus({
+        detail: holdMessage,
+        tone: "critical",
+        title: "STOP not confirmed",
+      });
+      lastGuidanceMessageRef.current = holdMessage;
+      lastSpokenMessageRef.current = holdMessage;
+      return;
+    }
     setGuidanceStatus({
       detail: "Voice control recovered. Stay stopped while Guide Pup checks a fresh frame.",
       tone: "warning",
       title: "Checking a fresh frame",
     });
   }, []);
+
+  const reportUnconfirmedShutdown = useCallback((stage: string) => {
+    const message = "Stop. Guidance remains paused. Shutdown could not be confirmed. Close Guide Pup before moving.";
+    stopSafetyFailureHoldRef.current = true;
+    runtimeSafetyHoldRef.current = true;
+    setRuntimeSafetyHold(true);
+    guidingRef.current = false;
+    setIsGuiding(false);
+    setDirection({
+      confidence: 0,
+      direction: "stop",
+      fallbackReason: "ios-shutdown-unconfirmed",
+      hazardLevel: "high",
+      lighting: "unknown",
+      message,
+      obstacle: true,
+      walkability: "uncertain",
+    });
+    setGuidanceStatus({
+      detail: message,
+      tone: "critical",
+      title: "Shutdown not confirmed",
+    });
+    lastGuidanceMessageRef.current = message;
+    lastSpokenMessageRef.current = message;
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("error");
+    }
+    void GuidePupNavigationCore.playAudioCue("error");
+    void refreshNavigationCoreState({
+      executionPath: navigationCorePathRef.current,
+      sessionActive: true,
+      lastError: "Shutdown could not be confirmed.",
+    });
+    void captureAppError(new Error("Guide Pup runtime shutdown could not be confirmed."), {
+      screen: "NavigationScreen",
+      stage,
+    });
+  }, [refreshNavigationCoreState, settings.hapticsEnabled]);
+
+  const reportStopConfirmationFailure = useCallback((stage: string) => {
+    stopSafetyFailureHoldRef.current = true;
+    runtimeSafetyHoldRef.current = true;
+    setRuntimeSafetyHold(true);
+    guidingRef.current = false;
+    setIsGuiding(false);
+    setGuidanceStatus({
+      detail: "Guidance remains paused. Spoken confirmation could not be completed.",
+      tone: "warning",
+      title: "Spoken confirmation unavailable",
+    });
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("error");
+    }
+    void GuidePupNavigationCore.playAudioCue("error");
+    void captureAppError(new Error("Guide Pup STOP confirmation could not be completed."), {
+      screen: "NavigationScreen",
+      stage,
+    });
+  }, [settings.hapticsEnabled]);
 
   const observeStoppedRuntime = useCallback(async () => {
     const deadlineMs = Date.now() + STOP_OBSERVATION_TIMEOUT_MS;
@@ -665,8 +900,16 @@ export default function NavigationScreen() {
 
     while (Date.now() <= deadlineMs) {
       const [cameraState, voiceState] = await Promise.all([
-        GuidePupNavigationCore.getState().catch(() => null),
-        GuidePupVoiceControl.getState().catch(() => null),
+        settlePromiseWithin(
+          () => GuidePupNavigationCore.getState(),
+          STOP_STATE_READ_TIMEOUT_MS,
+          "stopped camera state read",
+        ).catch(() => null),
+        settlePromiseWithin(
+          () => GuidePupVoiceControl.getState(),
+          STOP_STATE_READ_TIMEOUT_MS,
+          "stopped voice state read",
+        ).catch(() => null),
       ]);
       const nativeCameraStateUnknown = GuidePupNavigationCore.isNativeAvailable() && !cameraState;
       const nativeVoiceStateUnknown = GuidePupVoiceControl.isNativeModuleAvailable() && !voiceState;
@@ -714,8 +957,7 @@ export default function NavigationScreen() {
   }, []);
 
   const stopRuntimeAndObserve = useCallback(async () => {
-    invalidateAndAbortAnalysis();
-    fallbackCameraActiveRef.current = false;
+    const cameraStopRequest = requestNativeCameraStop();
     invalidateOwnedVoiceSessionAttempts(voiceSessionAttemptGenerationRef);
     voiceOverSpeechGenerationRef.current += 1;
     voiceOverAnnouncementActiveRef.current = false;
@@ -725,49 +967,64 @@ export default function NavigationScreen() {
     const announcementOwnerToken = announcementOwnerTokenRef.current;
     const voiceOverState = voiceOverStateRef.current;
 
-    await Promise.allSettled([
-      GuidePupVoiceControl.stopSpeaking(),
-      GuidePupVoiceControl.stopCommandSession(),
-      GuidePupNavigationCore.interruptAllAnnouncements(),
-      GuidePupNavigationCore.stopSession(),
+    const shutdownOutcomes = await Promise.allSettled([
+      settlePromiseWithin(
+        () => GuidePupVoiceControl.stopSpeaking(),
+        SHUTDOWN_OPERATION_TIMEOUT_MS,
+        "speech stop",
+      ),
+      settlePromiseWithin(
+        () => GuidePupVoiceControl.stopCommandSession(),
+        SHUTDOWN_OPERATION_TIMEOUT_MS,
+        "voice listening stop",
+      ),
+      settlePromiseWithin(
+        () => GuidePupNavigationCore.interruptAllAnnouncements(),
+        SHUTDOWN_OPERATION_TIMEOUT_MS,
+        "announcement stop",
+      ),
+      settlePromiseWithin(
+        () => cameraStopRequest.promise,
+        CAMERA_STOP_TOTAL_TIMEOUT_MS,
+        "camera shutdown",
+      ),
     ]);
-    if (
-      voiceOverState === "enabled"
-      && announcementOwnerToken
-      && announcementOwnerTokenRef.current === announcementOwnerToken
-    ) {
+    const shutdownOperationsConfirmed = shutdownOutcomes.every(
+      (outcome) => outcome.status === "fulfilled",
+    );
+
+    const observation = await observeStoppedRuntime();
+    const shutdownConfirmed = resolveStopRuntimeShutdownTruth({
+      controlOperationsConfirmed: shutdownOperationsConfirmed,
+      runtimeQuiescent: observation.quiescent,
+    });
+
+    const stopAnnouncementDelivered = await (async () => {
+      if (
+        voiceOverState !== "enabled"
+        || !announcementOwnerToken
+        || announcementOwnerTokenRef.current !== announcementOwnerToken
+      ) {
+        return null;
+      }
+      const speechGeneration = voiceOverSpeechGenerationRef.current;
+      const stopAnnouncementIsCurrent = () =>
+        isScreenFocusedRef.current
+        && announcementOwnerTokenRef.current === announcementOwnerToken
+        && voiceOverSpeechGenerationRef.current === speechGeneration;
       voiceOverAnnouncementActiveRef.current = true;
       isSpeakingRef.current = true;
-      await GuidePupNavigationCore.supersedeAnnouncement("Stop.", announcementOwnerToken).catch(() => undefined);
-    }
-    voiceOverAnnouncementActiveRef.current = false;
-    isSpeakingRef.current = false;
-
-    return observeStoppedRuntime();
-  }, [invalidateAndAbortAnalysis, observeStoppedRuntime, stopVoice]);
-
-  const speakStopConfirmation = useCallback(async (message: string) => {
-    const speechGeneration = voiceOverSpeechGenerationRef.current + 1;
-    voiceOverSpeechGenerationRef.current = speechGeneration;
-    const announcementOwnerToken = announcementOwnerTokenRef.current;
-    if (!announcementOwnerToken) {
-      return;
-    }
-    const voiceOverState = await resolveVoiceOverRunning();
-    if (
-      !isScreenFocusedRef.current
-      || announcementOwnerTokenRef.current !== announcementOwnerToken
-      || voiceOverSpeechGenerationRef.current !== speechGeneration
-    ) {
-      return;
-    }
-
-    stopVoice();
-    await GuidePupVoiceControl.stopSpeaking().catch(() => undefined);
-    if (voiceOverState === "enabled") {
-      voiceOverAnnouncementActiveRef.current = true;
-      isSpeakingRef.current = true;
-      await GuidePupNavigationCore.supersedeAnnouncement(message, announcementOwnerToken).catch(() => undefined);
+      const fallbackDeliveryAbortController = new AbortController();
+      const delivered = await settleStopConfirmationDelivery({
+        deliver: () =>
+          GuidePupNavigationCore.supersedeAnnouncement("Stop.", announcementOwnerToken, {
+            signal: fallbackDeliveryAbortController.signal,
+          }),
+        isCurrent: stopAnnouncementIsCurrent,
+        onFailure: () => fallbackDeliveryAbortController.abort(),
+        operationName: "STOP safety announcement",
+        timeoutMs: STOP_SAFETY_ANNOUNCEMENT_DELIVERY_TIMEOUT_MS,
+      });
       if (
         announcementOwnerTokenRef.current === announcementOwnerToken
         && voiceOverSpeechGenerationRef.current === speechGeneration
@@ -775,31 +1032,136 @@ export default function NavigationScreen() {
         voiceOverAnnouncementActiveRef.current = false;
         isSpeakingRef.current = false;
       }
-      return;
+      if (!delivered && stopAnnouncementIsCurrent()) {
+        void captureAppError(
+          new Error("Guide Pup VoiceOver STOP safety announcement could not be completed."),
+          {
+            screen: "NavigationScreen",
+            stage: "stopRuntimeAndObserve.stopAnnouncement",
+          },
+        );
+      }
+      return delivered;
+    })();
+
+    return {
+      ...observation,
+      shutdownConfirmed,
+      shutdownGeneration: cameraStopRequest.generation,
+      stopAnnouncementDelivered,
+    };
+  }, [observeStoppedRuntime, requestNativeCameraStop, stopVoice]);
+
+  const speakStopConfirmation = useCallback(async (message: string) => {
+    const speechGeneration = voiceOverSpeechGenerationRef.current + 1;
+    voiceOverSpeechGenerationRef.current = speechGeneration;
+    const announcementOwnerToken = announcementOwnerTokenRef.current;
+    if (!announcementOwnerToken) {
+      return false;
+    }
+    const confirmationIsCurrent = () =>
+      isScreenFocusedRef.current
+      && announcementOwnerTokenRef.current === announcementOwnerToken
+      && voiceOverSpeechGenerationRef.current === speechGeneration;
+    let confirmationFailureReported = false;
+    const reportConfirmationFailure = (stage: string) => {
+      if (confirmationFailureReported || !confirmationIsCurrent()) {
+        return;
+      }
+      confirmationFailureReported = true;
+      reportStopConfirmationFailure(stage);
+    };
+    const voiceOverState = await settlePromiseWithin(
+      resolveVoiceOverRunning,
+      SHUTDOWN_OPERATION_TIMEOUT_MS,
+      "VoiceOver state read",
+    ).catch(() => {
+      reportConfirmationFailure("speakStopConfirmation.voiceOverState");
+      return "enabled" as const;
+    });
+    if (!confirmationIsCurrent()) {
+      return false;
     }
 
-    await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
-    if (
-      !isScreenFocusedRef.current
-      || announcementOwnerTokenRef.current !== announcementOwnerToken
-      || voiceOverSpeechGenerationRef.current !== speechGeneration
-    ) {
-      return;
+    stopVoice();
+    const previousSpeechStopped = await settlePromiseWithin(
+      () => GuidePupVoiceControl.stopSpeaking(),
+      SHUTDOWN_OPERATION_TIMEOUT_MS,
+      "confirmation speech stop",
+    ).then(
+      () => true,
+      () => false,
+    );
+    if (!previousSpeechStopped) {
+      reportConfirmationFailure("speakStopConfirmation.stopSpeaking");
+    }
+    if (voiceOverState === "enabled") {
+      voiceOverAnnouncementActiveRef.current = true;
+      isSpeakingRef.current = true;
+      const fallbackDeliveryAbortController = new AbortController();
+      const announced = await settleStopConfirmationDelivery({
+        deliver: () =>
+          GuidePupNavigationCore.supersedeAnnouncement(message, announcementOwnerToken, {
+            signal: fallbackDeliveryAbortController.signal,
+          }),
+        isCurrent: confirmationIsCurrent,
+        onFailure: () => fallbackDeliveryAbortController.abort(),
+        operationName: "stop confirmation announcement",
+        timeoutMs: STOP_CONFIRMATION_DELIVERY_TIMEOUT_MS,
+      });
+      if (
+        announcementOwnerTokenRef.current === announcementOwnerToken
+        && voiceOverSpeechGenerationRef.current === speechGeneration
+      ) {
+        voiceOverAnnouncementActiveRef.current = false;
+        isSpeakingRef.current = false;
+      }
+      if (!announced) {
+        reportConfirmationFailure("speakStopConfirmation.announcement");
+      }
+      return !confirmationFailureReported && previousSpeechStopped && announced;
+    }
+
+    const announcementCancelled = await settlePromiseWithin(
+      () => GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken),
+      SHUTDOWN_OPERATION_TIMEOUT_MS,
+      "stop confirmation announcement cancellation",
+    ).then(
+      () => true,
+      () => false,
+    );
+    if (!confirmationIsCurrent()) {
+      return false;
     }
     isSpeakingRef.current = true;
-    await GuidePupVoiceControl.speak(message, {
-      interrupt: true,
-      rate:
-        settings.speechRate === "slow"
-          ? 0.7
-          : settings.speechRate === "fast"
-            ? 1.2
-            : 0.9,
-    }).catch(() => undefined);
-    if (voiceOverSpeechGenerationRef.current === speechGeneration) {
+    const spoken = await settleStopConfirmationDelivery({
+      deliver: () => GuidePupVoiceControl.speak(message, {
+        interrupt: true,
+        rate:
+          settings.speechRate === "slow"
+            ? 0.7
+            : settings.speechRate === "fast"
+              ? 1.2
+              : 0.9,
+      }),
+      isCurrent: confirmationIsCurrent,
+      operationName: "stop confirmation speech",
+      timeoutMs: STOP_CONFIRMATION_DELIVERY_TIMEOUT_MS,
+    });
+    if (
+      announcementOwnerTokenRef.current === announcementOwnerToken
+      && voiceOverSpeechGenerationRef.current === speechGeneration
+    ) {
       isSpeakingRef.current = false;
     }
-  }, [resolveVoiceOverRunning, settings.speechRate, stopVoice]);
+    if (!announcementCancelled || !spoken) {
+      reportConfirmationFailure("speakStopConfirmation.nativeSpeech");
+    }
+    return !confirmationFailureReported
+      && previousSpeechStopped
+      && announcementCancelled
+      && spoken;
+  }, [reportStopConfirmationFailure, resolveVoiceOverRunning, settings.speechRate, stopVoice]);
 
   const handleVoiceStopCommand = useCallback(async (input: {
     hapticAttempted: boolean;
@@ -854,27 +1216,39 @@ export default function NavigationScreen() {
       if (!stopOperationIsCurrent()) {
         return;
       }
+      if (!observation.shutdownConfirmed) {
+        reportUnconfirmedShutdown("handleVoiceStopCommand");
+      }
       recordStopBargeInSnapshot({
-        analysisInactiveAfterStop: observation.analysisInactive,
-        cameraInactiveAfterStop: observation.cameraInactive,
+        analysisInactiveAfterStop:
+          observation.shutdownConfirmed && observation.analysisInactive,
+        cameraInactiveAfterStop:
+          observation.shutdownConfirmed && observation.cameraInactive,
         cutThrough:
           input.recognizedDuringSpeech
+          && observation.shutdownConfirmed
           && observation.quiescent
           && !observation.staleSpeechAfterStop,
-        listeningStoppedAfterStop: observation.listeningStopped,
+        listeningStoppedAfterStop:
+          observation.shutdownConfirmed && observation.listeningStopped,
         postStopObservedAt: observation.observedAt,
         staleSpeechAfterStop: observation.staleSpeechAfterStop,
       });
 
-      await speakStopConfirmation("Guidance paused. Say start guidance to resume.");
-      if (!stopOperationIsCurrent()) {
-        return;
-      }
-      if (
-        !guidingRef.current
-        && !voiceRecoveryGateActiveRef.current
-      ) {
-        await startVoiceSession();
+      const stopConfirmationDelivered = await speakStopConfirmation(
+        observation.shutdownConfirmed
+          ? "Guidance paused. Say start guidance to resume."
+          : "Guidance remains paused. Shutdown could not be confirmed.",
+      );
+      const stopStillCurrent = stopOperationIsCurrent();
+      if (shouldRearmVoiceAfterStopConfirmation({
+        confirmationDelivered: stopConfirmationDelivered,
+        guidancePaused: !guidingRef.current,
+        recoveryGateActive: voiceRecoveryGateActiveRef.current,
+        shutdownConfirmed: observation.shutdownConfirmed,
+        stopCurrent: stopStillCurrent,
+      })) {
+        void startVoiceSession();
       }
     } finally {
       finishVoiceStopOperation({
@@ -882,7 +1256,13 @@ export default function NavigationScreen() {
         token: stopOperation,
       });
     }
-  }, [pauseGuidanceForVoice, speakStopConfirmation, startVoiceSession, stopRuntimeAndObserve]);
+  }, [
+    pauseGuidanceForVoice,
+    reportUnconfirmedShutdown,
+    speakStopConfirmation,
+    startVoiceSession,
+    stopRuntimeAndObserve,
+  ]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextState) => {
@@ -896,10 +1276,92 @@ export default function NavigationScreen() {
     return () => subscription.remove();
   }, [enterVoiceRecoveryHold]);
 
+  const failFallbackCameraReadiness = useCallback(async (
+    ownershipGeneration: number,
+    failureReason: "mount-error" | "native-release" | "timeout",
+    errorMessage: string,
+  ) => {
+    const coordinator = cameraOwnershipCoordinatorRef.current;
+    if (failureReason === "native-release") {
+      if (!coordinator.isCurrent(ownershipGeneration)) {
+        return false;
+      }
+    } else if (!coordinator.markFallbackUnavailable(ownershipGeneration)) {
+      return false;
+    }
+
+    const recoveryMessage = failureReason === "timeout"
+      ? "Stop. Backup camera did not become ready. Guidance is paused. Try the camera check again."
+      : failureReason === "mount-error"
+        ? "Stop. Backup camera is unavailable. Guidance is paused. Check camera access and try again."
+        : "Stop. Camera ownership could not transfer safely. Guidance is paused.";
+    invalidateAndAbortAnalysis();
+    cameraTransitionReadyRef.current = false;
+    fallbackCameraActiveRef.current = false;
+    fallbackCameraOwnershipGenerationRef.current = null;
+    guidingRef.current = false;
+    hasAnnouncedStartRef.current = false;
+    setFallbackCameraOwnership(null);
+    setFallbackCameraReady(false);
+    setIsGuiding(false);
+    setDirection({
+      confidence: 0,
+      direction: "stop",
+      fallbackReason: `ios-fallback-camera-${failureReason}`,
+      hazardLevel: "high",
+      lighting: "unknown",
+      message: recoveryMessage,
+      obstacle: true,
+      walkability: "uncertain",
+    });
+    setGuidanceStatus({
+      detail: recoveryMessage,
+      tone: "critical",
+      title: "Backup camera unavailable",
+    });
+    lastGuidanceMessageRef.current = recoveryMessage;
+    lastSpokenMessageRef.current = recoveryMessage;
+    if (settings.hapticsEnabled) {
+      void GuidePupNavigationCore.playHaptic("error");
+    }
+    void GuidePupNavigationCore.playAudioCue("error");
+    void captureAppError(new Error(errorMessage), {
+      screen: "NavigationScreen",
+      stage: `fallbackCameraReadiness.${failureReason}`,
+    });
+
+    const observation = await stopRuntimeAndObserve();
+    if (
+      !coordinator.isCurrent(ownershipGeneration)
+      || !coordinator.isCurrent(observation.shutdownGeneration)
+    ) {
+      return false;
+    }
+    if (!observation.shutdownConfirmed) {
+      reportUnconfirmedShutdown(`fallbackCameraReadiness.${failureReason}.stop`);
+    }
+    setFallbackCameraError(errorMessage);
+    await refreshNavigationCoreState({
+      executionPath: "js-fallback",
+      lastError: errorMessage,
+      sessionActive: observation.shutdownConfirmed ? false : true,
+    }, observation.shutdownGeneration);
+    await speakStopConfirmation(recoveryMessage);
+    return true;
+  }, [
+    invalidateAndAbortAnalysis,
+    refreshNavigationCoreState,
+    reportUnconfirmedShutdown,
+    settings.hapticsEnabled,
+    speakStopConfirmation,
+    stopRuntimeAndObserve,
+  ]);
+
   const handleCameraFrameUnavailable = useCallback(async (
     error: unknown,
     errorMessage: string,
     mode: "guidance" | "scene-query",
+    transitionGeneration: number,
   ) => {
     const fallbackMessage = mode === "guidance"
       ? "Guide Pup could not capture a camera frame and switched to a safe stop. Check camera access and retry."
@@ -931,42 +1393,67 @@ export default function NavigationScreen() {
       executionPath: "js-fallback",
       lastError: errorMessage,
       sessionActive: fallbackCameraActiveRef.current,
-    });
+    }, transitionGeneration);
 
     void captureAppError(error, {
       screen: "NavigationScreen",
       stage: "captureFrame.jsFallback",
     });
-  }, [fallbackCameraError, fallbackCameraReady, refreshNavigationCoreState, settings.hapticsEnabled, speakCommandResponse, stopVoice]);
+  }, [refreshNavigationCoreState, settings.hapticsEnabled, speakCommandResponse, stopVoice]);
 
-  const handleFallbackCameraReady = useCallback(() => {
+  const handleFallbackCameraReady = useCallback((ownershipGeneration: number) => {
+    if (
+      ownershipGeneration === null
+      || !cameraOwnershipCoordinatorRef.current.hasFallbackOwnership(ownershipGeneration)
+    ) {
+      return;
+    }
+
+    if (!cameraOwnershipCoordinatorRef.current.markFallbackReady(ownershipGeneration)) {
+      return;
+    }
+
+    cameraTransitionReadyRef.current = true;
     setFallbackCameraReady(true);
     setFallbackCameraError(null);
-    const sessionActive =
-      isScreenFocusedRef.current
-      && guidingRef.current
-      && !runtimeSafetyHoldRef.current;
-    fallbackCameraActiveRef.current = sessionActive;
+    if (guidingRef.current && isScreenFocusedRef.current) {
+      const readyMessage = "Backup camera ready. Guidance active.";
+      setGuidanceStatus({
+        detail: "Analyzing your surroundings.",
+        tone: "neutral",
+        title: "Guidance active",
+      });
+      lastGuidanceMessageRef.current = readyMessage;
+      lastSpokenMessageRef.current = readyMessage;
+      speakCommandResponse(readyMessage, undefined, {
+        keepListeningDuringSpeech: true,
+      });
+      void GuidePupNavigationCore.playAudioCue("success");
+    }
     void refreshNavigationCoreState({
       executionPath: "js-fallback",
       lastError: null,
-      sessionActive,
-    });
-  }, [refreshNavigationCoreState]);
+      sessionActive: fallbackCameraActiveRef.current,
+    }, ownershipGeneration);
+  }, [refreshNavigationCoreState, speakCommandResponse]);
 
-  const handleFallbackCameraMountError = useCallback((event: { message?: string }) => {
-    const errorMessage = event.message?.trim() || "Fallback camera preview could not start.";
-    setFallbackCameraReady(false);
-    setFallbackCameraError(errorMessage);
-    fallbackCameraActiveRef.current = false;
-    void refreshNavigationCoreState({
-      executionPath: "js-fallback",
-      lastError: errorMessage,
-      sessionActive: false,
-    });
-  }, [refreshNavigationCoreState]);
+  const handleFallbackCameraMountError = useCallback((
+    ownershipGeneration: number,
+    _event: { message?: string },
+  ) => {
+    const errorMessage = "Fallback camera preview could not start.";
+    void failFallbackCameraReadiness(
+      ownershipGeneration,
+      "mount-error",
+      errorMessage,
+    ).catch(() => undefined);
+  }, [failFallbackCameraReadiness]);
 
-  const fallbackCameraActive = shouldOwnFallbackCamera({
+  const fallbackCameraOwnershipGranted =
+    fallbackCameraOwnership !== null
+    && fallbackCameraOwnership.pathRequestKey === cameraPathTransitionKey
+    && cameraOwnershipCoordinatorRef.current.hasFallbackOwnership(fallbackCameraOwnership.generation);
+  const fallbackCameraActive = fallbackCameraOwnershipGranted && !fallbackCameraError && shouldOwnFallbackCamera({
     focused: isScreenFocused,
     guiding: isGuiding,
     permissionGranted: permission?.granted === true,
@@ -976,7 +1463,63 @@ export default function NavigationScreen() {
 
   useEffect(() => {
     fallbackCameraActiveRef.current = fallbackCameraActive;
-  }, [fallbackCameraActive]);
+    const ownershipGeneration = fallbackCameraOwnershipGenerationRef.current;
+    if (
+      ownershipGeneration === null
+      || !cameraOwnershipCoordinatorRef.current.hasFallbackOwnership(ownershipGeneration)
+    ) {
+      return;
+    }
+
+    const fallbackSessionActive =
+      fallbackCameraActive
+      && fallbackCameraReady
+      && !fallbackCameraError
+      && cameraOwnershipCoordinatorRef.current.isFallbackReady(ownershipGeneration);
+    cameraTransitionReadyRef.current = fallbackSessionActive;
+    void refreshNavigationCoreState({
+      executionPath: "js-fallback",
+      lastError: fallbackCameraError,
+      sessionActive: fallbackSessionActive,
+    }, ownershipGeneration);
+  }, [
+    fallbackCameraActive,
+    fallbackCameraError,
+    fallbackCameraReady,
+    refreshNavigationCoreState,
+  ]);
+
+  useEffect(() => {
+    if (
+      !fallbackCameraOwnershipGranted
+      || !fallbackCameraOwnership
+      || !fallbackCameraActive
+      || fallbackCameraReady
+      || fallbackCameraError
+    ) {
+      return;
+    }
+
+    const ownershipGeneration = fallbackCameraOwnership.generation;
+    return cameraOwnershipCoordinatorRef.current.scheduleFallbackReadinessDeadline(
+      ownershipGeneration,
+      FALLBACK_CAMERA_READY_TIMEOUT_MS,
+      () => {
+        void failFallbackCameraReadiness(
+          ownershipGeneration,
+          "timeout",
+          "Fallback camera preview did not become ready.",
+        ).catch(() => undefined);
+      },
+    );
+  }, [
+    failFallbackCameraReadiness,
+    fallbackCameraActive,
+    fallbackCameraError,
+    fallbackCameraOwnership,
+    fallbackCameraOwnershipGranted,
+    fallbackCameraReady,
+  ]);
 
   useEffect(() => {
     guidingRef.current = isGuiding;
@@ -985,11 +1528,6 @@ export default function NavigationScreen() {
   useEffect(() => {
     isSpeakingRef.current = isSpeaking || voiceOverAnnouncementActiveRef.current;
   }, [isSpeaking]);
-
-  useEffect(() => {
-    setFallbackCameraReady(false);
-    setFallbackCameraError(null);
-  }, [navigationCorePath, permission?.granted]);
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -1030,11 +1568,6 @@ export default function NavigationScreen() {
         tone: "critical",
         title: "Camera access needed",
       });
-      void GuidePupNavigationCore.stopSession();
-      void refreshNavigationCoreState({
-        lastError: "Camera permission not granted.",
-        sessionActive: false,
-      });
       if (!hasAnnouncedCameraPermissionRef.current) {
         hasAnnouncedCameraPermissionRef.current = true;
         const cameraMessage = "Camera access is required before Guide Pup can analyze the scene.";
@@ -1048,25 +1581,24 @@ export default function NavigationScreen() {
 
     if (isGuiding) {
       setGuidanceStatus({
-        detail: "Analyzing your surroundings.",
+        detail: "Waiting for the camera to become ready.",
         tone: "neutral",
-        title: "Guidance active",
+        title: "Starting camera",
       });
 
       if (!hasAnnouncedStartRef.current) {
         hasAnnouncedStartRef.current = true;
         const startMessage = forceJsFallbackValidation
-          ? "JavaScript camera fallback validation started. Safety controls are unchanged. Analyzing your surroundings."
-          : "Guidance started. Analyzing your surroundings.";
+          ? "Backup camera check requested. Safety controls are unchanged. Starting camera."
+          : "Guidance requested. Starting camera.";
         lastGuidanceMessageRef.current = startMessage;
         lastSpokenMessageRef.current = startMessage;
         speakCommandResponse(startMessage, undefined, {
           keepListeningDuringSpeech: true,
         });
-        void GuidePupNavigationCore.playAudioCue("success");
       }
     }
-  }, [forceJsFallbackValidation, isGuiding, permission, refreshNavigationCoreState, speakCommandResponse]);
+  }, [forceJsFallbackValidation, isGuiding, permission, speakCommandResponse]);
 
   useEffect(() => {
     if (permission?.status === "undetermined") {
@@ -1075,80 +1607,146 @@ export default function NavigationScreen() {
   }, [permission?.status, requestPermission]);
 
   useEffect(() => {
-    let isCancelled = false;
+    let effectTransitionGeneration: number | null = null;
 
     const syncNavigationSession = async () => {
       if (!isScreenFocused || !permission?.granted || !isGuiding || runtimeSafetyHold) {
-        fallbackCameraActiveRef.current = false;
-        await GuidePupNavigationCore.stopSession();
-        if (!isCancelled) {
+        const cameraStopRequest = requestNativeCameraStop();
+        let cameraStopError: unknown = null;
+        const stopped = await cameraStopRequest.promise.catch((error) => {
+          cameraStopError = error;
+          return false;
+        });
+        if (
+          stopped
+          && cameraOwnershipCoordinatorRef.current.isCurrent(cameraStopRequest.generation)
+        ) {
           await refreshNavigationCoreState({
-            executionPath: navigationCorePath,
-            lastError: null,
+            executionPath: navigationCorePathRef.current,
+            lastError: permission && !permission.granted ? "Camera permission not granted." : null,
             sessionActive: false,
-          });
+          }, cameraStopRequest.generation);
+        } else if (
+          cameraStopError
+          && cameraOwnershipCoordinatorRef.current.isCurrent(cameraStopRequest.generation)
+        ) {
+          reportUnconfirmedShutdown("syncNavigationSession.stop");
         }
         return;
       }
 
-      if (navigationCorePath === "js-fallback") {
-        await GuidePupNavigationCore.stopSession();
-        if (!isCancelled) {
-          await refreshNavigationCoreState({
-            executionPath: "js-fallback",
-            lastError: fallbackCameraError,
-            sessionActive: fallbackCameraActive && fallbackCameraReady && !fallbackCameraError,
+      const transitionGeneration = beginCameraTransition();
+      effectTransitionGeneration = transitionGeneration;
+      const transitionIsCurrent = () =>
+        cameraOwnershipCoordinatorRef.current.isCurrent(transitionGeneration);
+      const grantFallbackOrFailClosed = async (lastError: string | null) => {
+        try {
+          return await grantFallbackCameraAfterNativeRelease({
+            generation: transitionGeneration,
+            lastError,
+            pathRequestKey: cameraPathTransitionKey,
           });
+        } catch {
+          if (transitionIsCurrent()) {
+            await failFallbackCameraReadiness(
+              transitionGeneration,
+              "native-release",
+              "Camera ownership could not transfer safely.",
+            );
+          }
+          return false;
         }
+      };
+
+      if (forceJsFallbackValidation) {
+        await grantFallbackOrFailClosed(null);
+        return;
+      }
+
+      const nativeRuntimeAvailable = await settlePromiseWithin(
+        () => GuidePupNavigationCore.isAvailable(),
+        SHUTDOWN_OPERATION_TIMEOUT_MS,
+        "native camera availability read",
+      ).catch(() => false);
+      if (!transitionIsCurrent()) {
+        return;
+      }
+      if (!GuidePupNavigationCore.isNativeAvailable() || !nativeRuntimeAvailable) {
+        await grantFallbackOrFailClosed(null);
         return;
       }
 
       try {
-        await GuidePupNavigationCore.startSession({
-          preferredCamera: "back",
-        });
+        const started = await cameraOwnershipCoordinatorRef.current.startNativeSession(
+          transitionGeneration,
+          () => GuidePupNavigationCore.startSession({ preferredCamera: "back" }),
+          () => GuidePupNavigationCore.stopSession(),
+          CAMERA_START_TIMEOUT_MS,
+          CAMERA_STOP_ATTEMPT_TIMEOUT_MS,
+        );
 
-        if (!isCancelled) {
+        if (started && transitionIsCurrent()) {
+          navigationCorePathRef.current = "native-core";
+          cameraTransitionReadyRef.current = true;
+          setNavigationCorePath("native-core");
+          const readyMessage = "Native camera ready. Guidance active.";
+          setGuidanceStatus({
+            detail: "Analyzing your surroundings.",
+            tone: "neutral",
+            title: "Guidance active",
+          });
+          lastGuidanceMessageRef.current = readyMessage;
+          lastSpokenMessageRef.current = readyMessage;
+          speakCommandResponse(readyMessage, undefined, {
+            keepListeningDuringSpeech: true,
+          });
+          void GuidePupNavigationCore.playAudioCue("success");
           await refreshNavigationCoreState({
             executionPath: "native-core",
             lastError: null,
             sessionActive: true,
-          });
+          }, transitionGeneration);
         }
       } catch (error) {
+        if (!transitionIsCurrent()) {
+          return;
+        }
         const errorMessage = error instanceof Error ? error.message : "Unable to start navigation core.";
-        await GuidePupNavigationCore.stopSession().catch(() => undefined);
-        if (!isCancelled) {
-          setNavigationCorePath("js-fallback");
-          await refreshNavigationCoreState({
-            executionPath: "js-fallback",
-            lastError: errorMessage,
-            sessionActive: false,
+        const fallbackGranted = await grantFallbackOrFailClosed(errorMessage);
+        if (fallbackGranted && transitionIsCurrent()) {
+          void captureAppError(error, {
+            screen: "NavigationScreen",
+            stage: "startNavigationSession",
           });
         }
-        void captureAppError(error, {
-          screen: "NavigationScreen",
-          stage: "startNavigationSession",
-        });
       }
     };
 
     void syncNavigationSession();
 
     return () => {
-      isCancelled = true;
-      void GuidePupNavigationCore.stopSession();
+      if (effectTransitionGeneration !== null) {
+        cameraOwnershipCoordinatorRef.current.cancelTransition(effectTransitionGeneration);
+        cameraTransitionReadyRef.current = false;
+        fallbackCameraActiveRef.current = false;
+        fallbackCameraOwnershipGenerationRef.current = null;
+        invalidateAndAbortAnalysis();
+      }
     };
   }, [
-    fallbackCameraError,
-    fallbackCameraActive,
-    fallbackCameraReady,
+    beginCameraTransition,
+    cameraPathTransitionKey,
+    forceJsFallbackValidation,
+    failFallbackCameraReadiness,
+    grantFallbackCameraAfterNativeRelease,
+    invalidateAndAbortAnalysis,
     isGuiding,
     isScreenFocused,
-    navigationCorePath,
     permission?.granted,
     refreshNavigationCoreState,
+    reportUnconfirmedShutdown,
     runtimeSafetyHold,
+    requestNativeCameraStop,
   ]);
 
   const resumeGuidanceForVoice = useCallback(() => {
@@ -1177,9 +1775,9 @@ export default function NavigationScreen() {
     guidingRef.current = true;
     setIsGuiding(true);
     setGuidanceStatus({
-      detail: "Analyzing your surroundings.",
+      detail: "Waiting for the camera to become ready.",
       tone: "neutral",
-      title: "Guidance active",
+      title: "Starting camera",
     });
     return true;
   }, [invalidateAndAbortAnalysis, speakCommandResponse]);
@@ -1195,6 +1793,7 @@ export default function NavigationScreen() {
       || !isScreenFocusedRef.current
       || runtimeSafetyHoldRef.current
       || cameraRecoveryGateActiveRef.current
+      || !cameraTransitionReadyRef.current
     ) {
       return;
     }
@@ -1202,13 +1801,16 @@ export default function NavigationScreen() {
     const analysisController = new AbortController();
     activeAnalysisControllerRef.current = analysisController;
     const analysisGeneration = analysisGenerationRef.current;
+    const cameraTransitionGeneration = cameraOwnershipCoordinatorRef.current.currentGeneration();
     const analysisIsCurrent = () =>
       analysisGenerationRef.current === analysisGeneration
+      && cameraOwnershipCoordinatorRef.current.isCurrent(cameraTransitionGeneration)
       && !analysisController.signal.aborted
       && guidingRef.current
       && isScreenFocusedRef.current
       && !runtimeSafetyHoldRef.current
-      && !cameraRecoveryGateActiveRef.current;
+      && !cameraRecoveryGateActiveRef.current
+      && cameraTransitionReadyRef.current;
     const loopStartedAt = Date.now();
     try {
       analyzingRef.current = true;
@@ -1216,14 +1818,15 @@ export default function NavigationScreen() {
       let frame: Awaited<ReturnType<typeof GuidePupNavigationCore.captureFrame>>;
 
       try {
-        if (navigationCorePath !== "native-core" && (!cameraRef.current || !fallbackCameraReady || fallbackCameraError)) {
+        const executionPath = navigationCorePathRef.current;
+        if (executionPath !== "native-core" && (!cameraRef.current || !fallbackCameraReady || fallbackCameraError)) {
           throw new Error(fallbackCameraError || "Fallback camera preview is not ready.");
         }
 
         frame = await GuidePupNavigationCore.captureFrame({
           cameraRef: cameraRef.current,
           compressionQuality: 0.4,
-          forceFallback: navigationCorePath !== "native-core",
+          forceFallback: executionPath !== "native-core",
           maxDimension: 768,
         });
       } catch (captureError) {
@@ -1233,20 +1836,32 @@ export default function NavigationScreen() {
         const captureErrorMessage =
           captureError instanceof Error ? captureError.message : "Guide Pup could not capture a frame.";
 
-        if (navigationCorePath === "native-core") {
-          await GuidePupNavigationCore.stopSession().catch(() => undefined);
-          setNavigationCorePath("js-fallback");
-          await refreshNavigationCoreState({
-            executionPath: "js-fallback",
+        if (navigationCorePathRef.current === "native-core") {
+          const fallbackTransitionGeneration = beginCameraTransition();
+          const fallbackGranted = await grantFallbackCameraAfterNativeRelease({
+            generation: fallbackTransitionGeneration,
             lastError: captureErrorMessage,
-            sessionActive: false,
-          });
+            pathRequestKey: cameraPathTransitionKey,
+          }).catch(() => false);
+          if (!fallbackGranted) {
+            return;
+          }
 
-          await handleCameraFrameUnavailable(captureError, captureErrorMessage, mode);
+          await handleCameraFrameUnavailable(
+            captureError,
+            captureErrorMessage,
+            mode,
+            fallbackTransitionGeneration,
+          );
           return;
         }
 
-        await handleCameraFrameUnavailable(captureError, captureErrorMessage, mode);
+        await handleCameraFrameUnavailable(
+          captureError,
+          captureErrorMessage,
+          mode,
+          cameraTransitionGeneration,
+        );
         return;
       }
 
@@ -1266,7 +1881,7 @@ export default function NavigationScreen() {
           lastCaptureLatencyMs: frame.captureLatencyMs,
           lastError: null,
           sessionActive: true,
-        });
+        }, cameraTransitionGeneration);
       }
 
       if (!analysisIsCurrent()) {
@@ -1357,7 +1972,7 @@ export default function NavigationScreen() {
           lastError: null,
           lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
           sessionActive: true,
-        });
+        }, cameraTransitionGeneration);
       }
     } catch (error) {
       if (isAbortError(error)) {
@@ -1375,7 +1990,7 @@ export default function NavigationScreen() {
           lastError: errorMessage,
           lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
           sessionActive: false,
-        });
+        }, cameraTransitionGeneration);
         void captureAppError(error, {
           screen: "NavigationScreen",
           stage: mode === "scene-query" ? "analyzeCurrentFrame.sceneQuery.stopped" : "analyzeCurrentFrame.stopped",
@@ -1434,7 +2049,7 @@ export default function NavigationScreen() {
         lastError: errorMessage,
         lastTotalGuidanceLoopLatencyMs: Date.now() - loopStartedAt,
         sessionActive: guidingRef.current,
-      });
+      }, cameraTransitionGeneration);
 
       if (!staleFrameFailure) {
         void captureAppError(error, {
@@ -1449,10 +2064,12 @@ export default function NavigationScreen() {
       analyzingRef.current = false;
     }
   }, [
+    beginCameraTransition,
+    cameraPathTransitionKey,
     fallbackCameraError,
     fallbackCameraReady,
+    grantFallbackCameraAfterNativeRelease,
     handleCameraFrameUnavailable,
-    navigationCorePath,
     refreshNavigationCoreState,
     settings.descriptionMode,
     settings.hapticsEnabled,
@@ -1465,6 +2082,14 @@ export default function NavigationScreen() {
       const recoveryState = state.recoveryState ?? "idle";
       const previousRecoveryState = lastCameraRecoveryStateRef.current;
       lastCameraRecoveryStateRef.current = recoveryState;
+      const cameraTransitionGeneration = cameraOwnershipCoordinatorRef.current.currentGeneration();
+      if (
+        navigationCorePathRef.current !== "native-core"
+        || !cameraTransitionReadyRef.current
+      ) {
+        return;
+      }
+
       recordNavigationLoopSnapshot({
         available: GuidePupNavigationCore.isNativeAvailable(),
         executionPath: "native-core",
@@ -1495,7 +2120,12 @@ export default function NavigationScreen() {
             keepListeningDuringSpeech: true,
           });
           setTimeout(() => {
-            if (isScreenFocusedRef.current && guidingRef.current) {
+            if (
+              isScreenFocusedRef.current
+              && guidingRef.current
+              && cameraOwnershipCoordinatorRef.current.isCurrent(cameraTransitionGeneration)
+              && navigationCorePathRef.current === "native-core"
+            ) {
               void analyzeCurrentFrame();
             }
           }, 350);
@@ -1520,10 +2150,11 @@ export default function NavigationScreen() {
             : "Stop. Camera is recovering. Hold still.";
 
       if (exhausted) {
+        const cameraStopRequest = requestNativeCameraStop();
         guidingRef.current = false;
         setIsGuiding(false);
         hasAnnouncedStartRef.current = false;
-        void GuidePupNavigationCore.stopSession();
+        void cameraStopRequest.promise.catch(() => undefined);
       }
       setDirection({
         confidence: 0,
@@ -1559,7 +2190,42 @@ export default function NavigationScreen() {
       lastCameraRecoveryStateRef.current = "idle";
       cameraRecoveryGateActiveRef.current = false;
     };
-  }, [analyzeCurrentFrame, invalidateAndAbortAnalysis, settings.hapticsEnabled, speakCommandResponse, stopVoice]));
+  }, [analyzeCurrentFrame, invalidateAndAbortAnalysis, requestNativeCameraStop, settings.hapticsEnabled, speakCommandResponse, stopVoice]));
+
+  const speakSpeechRateConfirmation = useCallback(async (input: {
+    nextRate: "fast" | "normal" | "slow";
+    result: "already" | "failed" | "saved";
+    undoCommand: "faster speech" | "slower speech";
+  }) => {
+    if (input.result === "failed") {
+      speakCommandResponse("I could not save the speech rate. The setting was not changed.");
+      return;
+    }
+
+    const voiceOverState = await settlePromiseWithin(
+      resolveVoiceOverRunning,
+      SHUTDOWN_OPERATION_TIMEOUT_MS,
+      "VoiceOver state read for speech rate",
+    ).catch(() => "enabled" as const);
+    const rateDescription = describeSpeechRate(input.nextRate);
+    if (voiceOverState === "enabled") {
+      speakCommandResponse(
+        input.result === "already"
+          ? `App speech rate is already ${rateDescription}. VoiceOver controls its own speech rate.`
+          : `App speech rate saved as ${rateDescription} for use when VoiceOver is off. VoiceOver controls its own speech rate.`,
+      );
+      return;
+    }
+
+    speakCommandResponse(
+      input.result === "already"
+        ? `Speech rate is already ${rateDescription}.`
+        : `Speech rate set to ${rateDescription}. Say ${input.undoCommand} to undo.`,
+      input.result === "saved"
+        ? (input.nextRate === "slow" ? 0.7 : input.nextRate === "fast" ? 1.2 : 0.9)
+        : undefined,
+    );
+  }, [resolveVoiceOverRunning, speakCommandResponse]);
 
   const handleVoiceRecognitionEvent = useCallback(({ isFinal, transcript }: GuidePupVoiceRecognitionEvent) => {
       if (!isScreenFocusedRef.current) {
@@ -1609,6 +2275,18 @@ export default function NavigationScreen() {
         return;
       }
 
+      if (
+        (
+          runtimeSafetyHoldRef.current
+          || voiceRecoveryGateActiveRef.current
+          || stopSafetyFailureHoldRef.current
+          || touchStopFailureHoldRef.current
+        )
+        && intent !== "stop-guidance"
+      ) {
+        return;
+      }
+
       if (isSpeakingRef.current && intent !== "stop-guidance") {
         return;
       }
@@ -1638,6 +2316,10 @@ export default function NavigationScreen() {
           speakCommandResponse("Camera access is required before I can describe the scene.");
           return;
         }
+        if (!cameraTransitionReadyRef.current) {
+          speakCommandResponse("Camera is still starting. Try again when it is ready.");
+          return;
+        }
         if (!canAnswerWhatDoYouSee()) {
           speakCommandResponse("The experimental conversation lane is not enabled right now.");
           return;
@@ -1652,6 +2334,7 @@ export default function NavigationScreen() {
       }
 
       if (!intent) {
+        void GuidePupNavigationCore.playAudioCue("error");
         speakCommandResponse("That command is not supported. Say help for the supported commands.");
         return;
       }
@@ -1664,6 +2347,14 @@ export default function NavigationScreen() {
           return;
         case "stop-guidance": {
           if (!guidingRef.current) {
+            if (shouldRetryFailedStop({
+              guiding: guidingRef.current,
+              stopSafetyFailureHold: stopSafetyFailureHoldRef.current,
+              touchStopFailureHold: touchStopFailureHoldRef.current,
+            })) {
+              void touchStopRetryRef.current();
+              return;
+            }
             speakCommandResponse("Guidance is already paused.");
             return;
           }
@@ -1685,39 +2376,49 @@ export default function NavigationScreen() {
         case "help":
           speakCommandResponse(
             buildVoiceHelpPrompt(guidingRef.current, {
-              conversationLaneEnabled: guidingRef.current && permission?.granted === true && canAnswerWhatDoYouSee(),
+              conversationLaneEnabled:
+                guidingRef.current
+                && permission?.granted === true
+                && cameraTransitionReadyRef.current
+                && canAnswerWhatDoYouSee(),
             }),
           );
           return;
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
           if (nextRate === settings.speechRate) {
-            speakCommandResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`);
+            void speakSpeechRateConfirmation({
+              nextRate,
+              result: "already",
+              undoCommand: "faster speech",
+            });
             return;
           }
           void updateSpeechRate(nextRate).then((saved) => {
-            speakCommandResponse(
-              saved
-                ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`
-                : "I could not save the speech rate. The setting was not changed.",
-              saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
-            );
+            void speakSpeechRateConfirmation({
+              nextRate,
+              result: saved ? "saved" : "failed",
+              undoCommand: "faster speech",
+            });
           });
           return;
         }
         case "faster-speech": {
           const nextRate = fasterSpeechRate(settings.speechRate);
           if (nextRate === settings.speechRate) {
-            speakCommandResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`);
+            void speakSpeechRateConfirmation({
+              nextRate,
+              result: "already",
+              undoCommand: "slower speech",
+            });
             return;
           }
           void updateSpeechRate(nextRate).then((saved) => {
-            speakCommandResponse(
-              saved
-                ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`
-                : "I could not save the speech rate. The setting was not changed.",
-              saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
-            );
+            void speakSpeechRateConfirmation({
+              nextRate,
+              result: saved ? "saved" : "failed",
+              undoCommand: "slower speech",
+            });
           });
           return;
         }
@@ -1780,17 +2481,56 @@ export default function NavigationScreen() {
             );
           });
           return;
-        case "status":
-          speakCommandResponse(
-            buildVoiceStatusSummary({
-              cameraReady: permission?.granted === true,
-              conversationLaneEnabled: guidingRef.current && permission?.granted === true && canAnswerWhatDoYouSee(),
-              isGuiding: guidingRef.current,
-              settings,
-              voiceControlAvailable: GuidePupVoiceControl.isNativeModuleAvailable(),
-            }),
-          );
+        case "status": {
+          const activeCameraPath = navigationCorePathRef.current;
+          const statusTransitionGeneration =
+            cameraOwnershipCoordinatorRef.current.currentGeneration();
+          void (async () => {
+            const nativeState = activeCameraPath === "native-core"
+              ? await settlePromiseWithin(
+                  () => GuidePupNavigationCore.getState(),
+                  SHUTDOWN_OPERATION_TIMEOUT_MS,
+                  "spoken status native camera state read",
+                ).catch(() => null)
+              : null;
+            if (
+              !isScreenFocusedRef.current
+              || !cameraOwnershipCoordinatorRef.current.isCurrent(statusTransitionGeneration)
+              || navigationCorePathRef.current !== activeCameraPath
+            ) {
+              return;
+            }
+
+            const fallbackOwnershipGeneration =
+              fallbackCameraOwnershipGenerationRef.current;
+            const fallbackCameraOwned =
+              fallbackOwnershipGeneration !== null
+              && cameraOwnershipCoordinatorRef.current.hasFallbackOwnership(
+                fallbackOwnershipGeneration,
+              );
+            const { cameraReady, cameraStatus } = resolveNavigationCameraStatus({
+              activeCameraPath,
+              cameraRecoveryGateActive: cameraRecoveryGateActiveRef.current,
+              fallbackCameraOwned,
+              nativeRecoveryReady: nativeState?.recoveryState === "idle",
+              nativeSessionActive: nativeState?.sessionActive === true,
+              permissionGranted: permission?.granted === true,
+              transitionReady: cameraTransitionReadyRef.current,
+            });
+            speakCommandResponse(
+              `${buildVoiceStatusSummary({
+                conversationLaneEnabled:
+                  guidingRef.current
+                  && cameraReady
+                  && canAnswerWhatDoYouSee(),
+                isGuiding: guidingRef.current,
+                settings,
+                voiceControlAvailable: GuidePupVoiceControl.isNativeModuleAvailable(),
+              })} ${cameraStatus}`,
+            );
+          })();
           return;
+        }
       }
   }, [
     analyzeCurrentFrame,
@@ -1799,6 +2539,7 @@ export default function NavigationScreen() {
     resumeGuidanceForVoice,
     settings,
     speakCommandResponse,
+    speakSpeechRateConfirmation,
     updateDescriptionMode,
     updateHapticsEnabled,
     updateSpeechRate,
@@ -1906,34 +2647,85 @@ export default function NavigationScreen() {
     guidingRef.current = false;
     hasAnnouncedStartRef.current = false;
     setDirection({
-      confidence: 1,
+      confidence: 0,
       direction: "stop",
-      fallbackReason: "touch-stop",
-      hazardLevel: "none",
+      fallbackReason: "touch-stop-pending",
+      hazardLevel: "high",
       lighting: "unknown",
-      message: "Guidance stopped.",
-      obstacle: false,
+      message: "Stopping guidance. Stay stopped while Guide Pup confirms camera and audio are quiet.",
+      obstacle: true,
       walkability: "uncertain",
     });
     setGuidanceStatus({
-      detail: "Guide Pup is paused. Return when you are ready to continue.",
-      tone: "neutral",
-      title: "Guidance stopped",
+      detail: "Stay stopped while Guide Pup confirms camera and audio are quiet.",
+      tone: "warning",
+      title: "Stopping guidance",
     });
-    lastSpokenMessageRef.current = "Guidance stopped.";
+    lastSpokenMessageRef.current = "Stopping guidance.";
     if (settings.hapticsEnabled) {
       void GuidePupNavigationCore.playHaptic("stop");
     }
     void GuidePupNavigationCore.playAudioCue("stop");
     try {
-      await stopRuntimeAndObserve();
+      const observation = await stopRuntimeAndObserve();
       if (!stopOperationIsCurrent()) {
         return;
       }
-      await speakStopConfirmation("Guidance stopped.");
-      if (!stopOperationIsCurrent()) {
+      if (!observation.shutdownConfirmed) {
+        reportUnconfirmedShutdown("handleStop");
+      }
+      const confirmationDelivered = await speakStopConfirmation(
+        observation.shutdownConfirmed
+          ? "Guidance stopped."
+          : "Guidance remains paused. Shutdown could not be confirmed.",
+      );
+      const stopStillCurrent = stopOperationIsCurrent();
+      if (!shouldLeaveNavigationAfterTouchStop({
+        confirmationDelivered,
+        shutdownConfirmed: observation.shutdownConfirmed,
+        stopCurrent: stopStillCurrent,
+      })) {
+        if (!stopStillCurrent) {
+          return;
+        }
+        touchStopFailureHoldRef.current = true;
+        runtimeSafetyHoldRef.current = true;
+        setRuntimeSafetyHold(true);
+        voiceOverAnnouncementActiveRef.current = true;
+        isSpeakingRef.current = true;
+        const failureMessage = !observation.shutdownConfirmed && !confirmationDelivered
+          ? "Stay stopped. Guide Pup could not confirm shutdown or spoken STOP feedback. Double tap Return Home to retry."
+          : !observation.shutdownConfirmed
+            ? "Stay stopped. Guide Pup could not confirm that camera and audio are quiet. Double tap Return Home to retry."
+            : "Stay stopped. Guide Pup could not confirm spoken STOP feedback. Double tap Return Home to retry.";
+        setDirection({
+          confidence: 0,
+          direction: "stop",
+          fallbackReason: "touch-stop-unconfirmed",
+          hazardLevel: "high",
+          lighting: "unknown",
+          message: failureMessage,
+          obstacle: true,
+          walkability: "uncertain",
+        });
+        setGuidanceStatus({
+          detail: failureMessage,
+          tone: "critical",
+          title: "STOP not confirmed",
+        });
+        lastGuidanceMessageRef.current = failureMessage;
+        lastSpokenMessageRef.current = failureMessage;
         return;
       }
+
+      touchStopFailureHoldRef.current = false;
+      stopSafetyFailureHoldRef.current = false;
+      if (!voiceRecoveryGateActiveRef.current) {
+        runtimeSafetyHoldRef.current = false;
+        setRuntimeSafetyHold(false);
+      }
+      voiceOverAnnouncementActiveRef.current = false;
+      isSpeakingRef.current = false;
 
       if (navigation.canGoBack()) {
         navigation.goBack();
@@ -1946,19 +2738,21 @@ export default function NavigationScreen() {
         token: stopOperation,
       });
     }
-  }, [navigation, router, settings.hapticsEnabled, speakStopConfirmation, stopRuntimeAndObserve]);
+  }, [
+    navigation,
+    reportUnconfirmedShutdown,
+    router,
+    settings.hapticsEnabled,
+    speakStopConfirmation,
+    stopRuntimeAndObserve,
+  ]);
 
-  const handleSOS = useCallback(() => {
-    const sosMessage = "SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.";
-    lastSpokenMessageRef.current = sosMessage;
-    speakCommandResponse(sosMessage);
-    if (settings.hapticsEnabled) {
-      void GuidePupNavigationCore.playHaptic("error");
-    }
-    void GuidePupNavigationCore.playAudioCue("error");
-  }, [settings.hapticsEnabled, speakCommandResponse]);
+  useLayoutEffect(() => {
+    touchStopRetryRef.current = handleStop;
+  }, [handleStop]);
 
   const canOpenCameraSettings = typeof Linking.openSettings === "function" && Platform.OS !== "web";
+  const primaryControlAccessibility = getNavigationPrimaryControlAccessibility(isGuiding);
 
   const openCameraSettings = useCallback(() => {
     if (typeof Linking.openSettings === "function") {
@@ -1968,15 +2762,18 @@ export default function NavigationScreen() {
 
   return (
     <View style={styles.container}>
-      {fallbackCameraActive ? (
+      {fallbackCameraOwnershipGranted && fallbackCameraActive ? (
         <CameraView
+          key={`fallback-camera-${fallbackCameraOwnership.generation}-${fallbackCameraOwnership.pathRequestKey}`}
           ref={cameraRef}
           style={styles.hiddenCamera}
-          active={fallbackCameraActive}
+          active={fallbackCameraOwnershipGranted && fallbackCameraActive}
           facing="back"
           enableTorch={false}
-          onCameraReady={handleFallbackCameraReady}
-          onMountError={handleFallbackCameraMountError}
+          onCameraReady={() => handleFallbackCameraReady(fallbackCameraOwnership.generation)}
+          onMountError={(event) =>
+            handleFallbackCameraMountError(fallbackCameraOwnership.generation, event)
+          }
           pointerEvents="none"
           accessible={false}
           accessibilityElementsHidden
@@ -1987,25 +2784,13 @@ export default function NavigationScreen() {
       <SafeAreaView style={styles.safeArea}>
         {permission?.granted ? (
           <Pressable
-            onLongPress={handleSOS}
             onPress={() => {
               void handleStop();
             }}
-            onAccessibilityAction={(event) => {
-              if (event.nativeEvent.actionName === "activate") {
-                void handleStop();
-              } else if (event.nativeEvent.actionName === "longpress") {
-                handleSOS();
-              }
-            }}
-            accessibilityActions={[
-              { name: "activate", label: "Stop guidance" },
-              { name: "longpress", label: "SOS information" },
-            ]}
             style={styles.touchable}
-            accessibilityLabel="Stop guidance"
+            accessibilityLabel={primaryControlAccessibility.label}
             accessibilityRole="button"
-            accessibilityHint="Double tap to stop guidance. Use the SOS information action for emergency shortcut information."
+            accessibilityHint={primaryControlAccessibility.hint}
             testID="navigation-stop-guidance"
           >
             <View style={styles.content}>
@@ -2015,7 +2800,11 @@ export default function NavigationScreen() {
                 <View style={styles.innerCircle} />
               </Animated.View>
 
-              <Text style={styles.statusText}>{isGuiding ? "Guiding..." : "Stopped"}</Text>
+              <Text style={styles.statusText}>
+                {isGuiding
+                  ? cameraTransitionReadyRef.current ? "Guiding..." : "Starting..."
+                  : "Stopped"}
+              </Text>
 
               {direction ? (
                 <Text style={styles.directionText}>
@@ -2093,7 +2882,7 @@ export default function NavigationScreen() {
         <View style={styles.bottomHint}>
           <Text style={styles.hintText}>
             {permission?.granted
-              ? `Tap to stop${Platform.OS !== "web" ? " | Long press for SOS" : ""}`
+              ? primaryControlAccessibility.visibleHint
               : "Grant camera access to start guidance"}
           </Text>
         </View>

@@ -51,7 +51,7 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
       },
       {
         title: "Diagnostics",
-        body: "Guide Pup may retain bounded product-interaction, performance, provider, request, guidance-result, and sanitized error data. It does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers.",
+        body: "Guide Pup may retain bounded product-interaction, performance, provider, request, and sanitized error data. Derived guidance results such as confidence, direction, and hazard level support service-quality analytics, not tracking. Guide Pup does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers.",
       },
       {
         title: "Temporary camera files",

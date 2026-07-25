@@ -5,6 +5,32 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `52e28d2`
 Contract-tightening continuation start: `bf3da45`
 
+## Current gate on 2026-07-24
+
+- The source contract remains strict Structured Outputs on `gpt-5.6-sol`, prompt `2026-07-18.v1`. Provider-backed staging and production evidence exists only for the superseded `3cc852c` revision until the pending source is committed, deployed, and re-smoked. Cloud continues to own model routing, safety normalization, request IDs, response structure, and conversation-lane AI; the shipping client contains no provider key or direct model call.
+- The pending iOS source change strengthens the ownership boundary without moving analysis into the client: native camera shutdown and JS fallback startup are serialized, fallback analysis waits for a generation-matched `CameraView` ready event, stale callbacks are rejected, and STOP/lifecycle callers share bounded shutdown retries.
+- The unsupported-command path now emits the real error earcon. Placeholder SOS controls and the unimplemented bounding-box setting were removed so accessibility copy no longer promises behavior that does not exist.
+- App, site, privacy matrix, and Apple privacy manifest now agree that derived scene attributes such as confidence, direction, and hazard category may be used for App Functionality and Analytics, with tracking disabled. Raw camera frames remain transient analysis input and are not declared as analytics.
+- Local validation passed: iOS runtime safety `85/85`, privacy/launch contract `13/13`, release-config hardening `10/10`, backend privacy/runtime `50/50`, backend smoke/release `23/23`, Expo/backend typechecks, Expo lint, voice/no-screen contracts, conversation-memory isolation, smoke evidence, and release evidence. The runtime suite compiles and executes the native announcement-delivery policy, rejects every unconfirmed completion or interruption outcome, gives full Help prompts a bounded slow-speech deadline, keeps voice recovery and failed voice STOP feedback in a STOP-only hold, and prevents touch STOP from leaving Navigation until shutdown and spoken confirmation are both proven.
+- The latest 2026-07-24 18:21 PDT sanitized device probe is `blocked`: the phone remains paired/trusted with Developer Mode enabled and visible to `xctrace`, but CoreDevice lists it unavailable, the active process probe fails, no USB or same-LAN execution path is present, and Xcode has no runnable destination. A same-day earlier `ready` probe is historical transport evidence only and does not prove physical guidance quality.
+- The earlier provider smoke at `3cc852c` is superseded historical proof only. It is not current exact-revision evidence for this pending source and must not be used as such. After the source commit, both Workers must be deployed from that exact revision and smokes must be refreshed with new request IDs.
+- A labeled real-scene quality evaluation and blind-user physical validation are still open. Provider-backed contract smoke is not evidence that walking guidance is sufficiently clear, timely, or complete in real scenes.
+
+Commands:
+
+```bash
+npm --prefix expo run test:ios-runtime-safety
+npm --prefix expo run test:privacy-launch-contract
+npm --prefix expo run test:release-config-hardening
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run test:smoke
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+npm --prefix backend/guidepup-api run typecheck
+```
+
+Current blockers: exact-revision Worker redeploy/smoke, a fresh signed iOS artifact, real-iPhone native and fallback validation, and labeled real-scene guidance-quality evidence. MiniCPM remains experimental and is not a launch provider.
+
 ## Current gate on 2026-07-20
 
 - The cloud contract now uses `gpt-5.6-sol` with strict Structured Outputs for direction, hazard level, obstacle, message, scene description, walkability, surface type, lighting, confidence, provider, model, prompt version, and fallback reason.
@@ -257,7 +283,7 @@ Results:
 - `npx --yes wrangler whoami` failed with `Failed to fetch auth token` / `Not logged in`.
 - Sentry project health could not be queried because Sentry auth/org/project env vars are missing and no Sentry connector was available in this tool session.
 
-## Remaining blockers
+## Historical blockers recorded in this May continuation
 
 - Real iPhone no-screen smoke is still not validated: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics on/off -> repeat -> what do you see -> stop guidance.
 - Physical iPhone remains paired with Developer Mode enabled, but unavailable/offline to Xcode in prior device checks.

@@ -48,21 +48,21 @@
               <h2>Data we process</h2>
               <p>
                 Guide Pup processes sampled camera frames; image-derived environment-scanning data such as scene
-                classification, obstacles, surface, lighting, and walkability; voice audio used for Apple speech
-                recognition; an installation-scoped device identifier and session token; product interactions, request
-                identifiers, latency and performance measurements, provider/model metadata, guidance result classes, and
-                sanitized errors. The app does not require a user account and does not intentionally collect contact,
-                financial, health, contacts, or location data in its current shipping path.
+                classification, obstacles, surface, lighting, walkability, confidence, direction, and hazard level; voice
+                audio used for Apple speech recognition; an installation-scoped device identifier and session token;
+                product interactions, request identifiers, latency and performance measurements, provider/model metadata,
+                guidance result classes, and sanitized errors. The app does not require a user account and does not
+                intentionally collect contact, financial, health, contacts, or location data in its current shipping path.
               </p>
             </article>
             <article class="card">
               <h2>Why we process it</h2>
               <p>
-                Camera frames and environment-scanning data support scene analysis and spoken guidance; that
-                environment-scanning data is used only for app functionality. Voice input supports hands-free control.
-                Installation and session identifiers support authorization and rate limiting. Product-interaction,
-                performance, and diagnostic metadata support reliability, abuse prevention, troubleshooting, and
-                service-quality analysis.
+                Camera frames support scene analysis and spoken guidance. Image-derived environment-scanning data supports
+                that app functionality and service-quality analytics; it is not used for tracking. Voice input supports
+                hands-free control. Installation and session identifiers support authorization and rate limiting.
+                Product-interaction, performance, and diagnostic metadata support reliability, abuse prevention,
+                troubleshooting, and service-quality analysis.
               </p>
             </article>
             <article class="card">
@@ -106,8 +106,9 @@
               <h2>Retention and local deletion</h2>
               <p>
                 Camera and speech buffers are handled transiently in the app, and in-app diagnostics keep only a small
-                in-memory history. The installation identifier and preferences remain on the device until app data is
-                cleared or the app is uninstalled. Backend session and rate-limit records expire. Cloudflare platform
+                in-memory history. The installation identifier and session token are stored with SecureStore, which uses
+                the iOS Keychain. iOS Keychain values may persist after the app is uninstalled, so Guide Pup does not
+                promise that uninstall deletes them. Backend session and rate-limit records expire. Cloudflare platform
                 invocation logs are disabled; sanitized custom request and quality logs may persist for up to 7 days
                 because the account plan is not yet verified. For Apple Speech Recognition, audio is not stored unless
                 Improve Siri &amp; Dictation is enabled, while transcripts and related request data associated with a rotating
@@ -120,11 +121,11 @@
               <h2>Your choices and requests</h2>
               <p>
                 Camera and microphone permissions can be denied or revoked in iOS Settings, though core guidance or voice
-                control will then be unavailable. Uninstalling Guide Pup removes its local identifier, preferences, and
-                other app-local data. To request information about service-side data or deletion, email
-                <a href="mailto:charliehan112@gmail.com">charliehan112@gmail.com</a>. Because Guide Pup has no account,
-                we may need a request identifier or approximate time to investigate and may be unable to associate a
-                request with retained service data.
+                control will then be unavailable. Uninstall may remove ordinary app-local data, but it does not reliably
+                delete the SecureStore/Keychain installation identifier or session token. You can
+                <a href="mailto:charliehan112@gmail.com">request deletion by emailing charliehan112@gmail.com</a>.
+                Because Guide Pup has no account, we may need a request identifier or approximate time to investigate and
+                may be unable to associate a request with retained service data.
               </p>
             </article>
             <article class="card">

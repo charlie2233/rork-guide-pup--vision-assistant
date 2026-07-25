@@ -1335,7 +1335,7 @@ function validateIosPrivacySurface() {
   const analytics = "NSPrivacyCollectedDataTypePurposeAnalytics";
   const expectedCollectedData = new Map([
     ["NSPrivacyCollectedDataTypePhotosorVideos", { linked: true, purposes: [appFunctionality] }],
-    ["NSPrivacyCollectedDataTypeEnvironmentScanning", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeEnvironmentScanning", { linked: true, purposes: [appFunctionality, analytics] }],
     ["NSPrivacyCollectedDataTypeAudioData", { linked: true, purposes: [appFunctionality] }],
     ["NSPrivacyCollectedDataTypeDeviceID", { linked: true, purposes: [appFunctionality] }],
     ["NSPrivacyCollectedDataTypeProductInteraction", { linked: true, purposes: [appFunctionality, analytics] }],

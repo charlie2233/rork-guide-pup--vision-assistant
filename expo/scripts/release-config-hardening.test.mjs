@@ -285,7 +285,10 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     assert.match(output, /ProductInteraction purposes must be exactly/);
     assert.match(output, /EnvironmentScanning linked flag must be "true", found "false"/);
     assert.match(output, /EnvironmentScanning tracking flag must be "false", found "true"/);
-    assert.match(output, /EnvironmentScanning purposes must be exactly: NSPrivacyCollectedDataTypePurposeAppFunctionality/);
+    assert.match(
+      output,
+      /EnvironmentScanning purposes must be exactly: NSPrivacyCollectedDataTypePurposeAppFunctionality, NSPrivacyCollectedDataTypePurposeAnalytics/,
+    );
     assert.match(output, /must disclose NSPrivacyCollectedDataTypeOtherDiagnosticData/);
   } finally {
     rmSync(fixtureRoot, { force: true, recursive: true });

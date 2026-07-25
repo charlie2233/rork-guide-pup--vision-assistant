@@ -78,6 +78,77 @@ function safeMovement(overrides = {}) {
   };
 }
 
+function createNavigationCoreAnnouncementHarness({ nativeModule = null } = {}) {
+  const listeners = new Map();
+  const postedAnnouncements = [];
+  let listenerSequence = 0;
+  let removedListenerCount = 0;
+  const AccessibilityInfo = {
+    addEventListener(eventName, listener) {
+      assert.equal(eventName, "announcementFinished");
+      listenerSequence += 1;
+      const listenerId = listenerSequence;
+      listeners.set(listenerId, listener);
+      return {
+        remove() {
+          if (listeners.delete(listenerId)) {
+            removedListenerCount += 1;
+          }
+        },
+      };
+    },
+    announceForAccessibility() {},
+    announceForAccessibilityWithOptions(announcement, options) {
+      postedAnnouncements.push({ announcement, options });
+    },
+  };
+  class MockFile {
+    exists = false;
+    delete() {}
+  }
+  const mocks = new Map([
+    ["expo", { requireOptionalNativeModule: () => nativeModule }],
+    ["expo-file-system", { File: MockFile }],
+    ["expo-haptics", {
+      ImpactFeedbackStyle: { Heavy: "heavy", Light: "light", Medium: "medium" },
+      NotificationFeedbackType: { Error: "error", Success: "success" },
+      impactAsync: async () => {},
+      notificationAsync: async () => {},
+    }],
+    ["expo-image-manipulator", {
+      SaveFormat: { JPEG: "jpeg" },
+      manipulateAsync: async () => {
+        throw new Error("Unexpected image manipulation.");
+      },
+    }],
+    ["react-native", { AccessibilityInfo, Platform: { OS: "ios" } }],
+    ["@/src/lib/diagnostics", {
+      recordAudioCueSnapshot() {},
+      recordHapticSnapshot() {},
+    }],
+  ]);
+  const {
+    GuidePupNavigationCore,
+    getFallbackAnnouncementCompletionTimeoutMs,
+  } = loadTsModule(
+    new URL("../src/native/GuidePupNavigationCore.ts", import.meta.url),
+    mocks,
+  );
+
+  return {
+    activeListenerCount: () => listeners.size,
+    core: GuidePupNavigationCore,
+    getCompletionTimeoutMs: getFallbackAnnouncementCompletionTimeoutMs,
+    emitAnnouncementFinished(event) {
+      for (const listener of [...listeners.values()]) {
+        listener(event);
+      }
+    },
+    postedAnnouncements,
+    removedListenerCount: () => removedListenerCount,
+  };
+}
+
 test("deterministic iOS guard can only preserve safe movement or force STOP", () => {
   const {
     MAX_ANALYSIS_LATENCY_AT_ACTUATION_MS,
@@ -173,7 +244,18 @@ test("camera fallback validation is explicit and never overrides normal native s
 
   assert.equal(shouldForceJsFallbackValidation(JS_FALLBACK_VALIDATION_CAMERA_PATH), true);
   assert.equal(shouldForceJsFallbackValidation([JS_FALLBACK_VALIDATION_CAMERA_PATH]), true);
+  assert.equal(shouldForceJsFallbackValidation([
+    JS_FALLBACK_VALIDATION_CAMERA_PATH,
+    "native-core",
+  ]), true);
+  assert.equal(shouldForceJsFallbackValidation([
+    "native-core",
+    JS_FALLBACK_VALIDATION_CAMERA_PATH,
+  ]), true);
+  assert.equal(shouldForceJsFallbackValidation([]), false);
+  assert.equal(shouldForceJsFallbackValidation(["", "unknown"]), false);
   assert.equal(shouldForceJsFallbackValidation("native-core"), false);
+  assert.equal(shouldForceJsFallbackValidation(""), false);
   assert.equal(shouldForceJsFallbackValidation(undefined), false);
   assert.equal(resolveInitialNavigationCorePath({ nativeAvailable: true }), "native-core");
   assert.equal(resolveInitialNavigationCorePath({ nativeAvailable: false }), "js-fallback");
@@ -181,6 +263,1620 @@ test("camera fallback validation is explicit and never overrides normal native s
     nativeAvailable: true,
     requestedCameraPath: JS_FALLBACK_VALIDATION_CAMERA_PATH,
   }), "js-fallback");
+});
+
+test("spoken camera status fails closed for native recovery and stays truthful for fallback", () => {
+  const { resolveNavigationCameraStatus } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const nativeInput = {
+    activeCameraPath: "native-core",
+    cameraRecoveryGateActive: false,
+    fallbackCameraOwned: false,
+    nativeRecoveryReady: true,
+    nativeSessionActive: true,
+    permissionGranted: true,
+    transitionReady: true,
+  };
+
+  assert.deepEqual({ ...resolveNavigationCameraStatus(nativeInput) }, {
+    cameraReady: true,
+    cameraStatus: "Native camera path is ready.",
+  });
+  assert.deepEqual({ ...resolveNavigationCameraStatus({
+    ...nativeInput,
+    cameraRecoveryGateActive: true,
+  }) }, {
+    cameraReady: false,
+    cameraStatus: "Native camera path is not ready.",
+  });
+  assert.equal(resolveNavigationCameraStatus({
+    ...nativeInput,
+    nativeSessionActive: false,
+  }).cameraReady, false);
+  assert.equal(resolveNavigationCameraStatus({
+    ...nativeInput,
+    nativeRecoveryReady: false,
+  }).cameraReady, false);
+
+  assert.deepEqual({ ...resolveNavigationCameraStatus({
+    ...nativeInput,
+    activeCameraPath: "js-fallback",
+    cameraRecoveryGateActive: true,
+    fallbackCameraOwned: true,
+    nativeRecoveryReady: false,
+    nativeSessionActive: false,
+  }) }, {
+    cameraReady: true,
+    cameraStatus: "Backup camera is owned by this session and ready.",
+  });
+  assert.deepEqual({ ...resolveNavigationCameraStatus({
+    ...nativeInput,
+    activeCameraPath: "js-fallback",
+    fallbackCameraOwned: false,
+  }) }, {
+    cameraReady: false,
+    cameraStatus: "Backup camera is not owned or ready.",
+  });
+  assert.deepEqual({ ...resolveNavigationCameraStatus({
+    ...nativeInput,
+    permissionGranted: false,
+  }) }, {
+    cameraReady: false,
+    cameraStatus: "Camera permission is not granted.",
+  });
+});
+
+test("Navigation primary control exposes its action before and after voice STOP", () => {
+  const { getNavigationPrimaryControlAccessibility } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+
+  assert.deepEqual({ ...getNavigationPrimaryControlAccessibility(true) }, {
+    hint: "Double tap to stop guidance.",
+    label: "Stop guidance",
+    visibleHint: "Tap to stop",
+  });
+  assert.deepEqual({ ...getNavigationPrimaryControlAccessibility(false) }, {
+    hint: "Double tap to return to the Home screen.",
+    label: "Return Home",
+    visibleHint: "Return Home",
+  });
+});
+
+test("fallback camera ownership waits for native release and rejects stale path generations", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let resolveFirstStop;
+  const firstStop = new Promise((resolve) => {
+    resolveFirstStop = resolve;
+  });
+
+  const firstGeneration = coordinator.beginTransition();
+  const firstRelease = coordinator.releaseNativeForFallback(
+    firstGeneration,
+    () => firstStop,
+  );
+  await Promise.resolve();
+  assert.equal(coordinator.hasFallbackOwnership(firstGeneration), false);
+
+  const secondGeneration = coordinator.beginTransition();
+  resolveFirstStop();
+  assert.equal(await firstRelease, false);
+  assert.equal(coordinator.hasFallbackOwnership(firstGeneration), false);
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), false);
+
+  let resolveSecondStop;
+  const secondStop = new Promise((resolve) => {
+    resolveSecondStop = resolve;
+  });
+  const secondRelease = coordinator.releaseNativeForFallback(
+    secondGeneration,
+    () => secondStop,
+  );
+  await Promise.resolve();
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), false);
+  resolveSecondStop();
+  assert.equal(await secondRelease, true);
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), true);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), false);
+  assert.equal(coordinator.markFallbackReady(firstGeneration), false);
+  assert.equal(coordinator.markFallbackReady(secondGeneration), true);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), true);
+  assert.equal(coordinator.markFallbackUnavailable(secondGeneration), true);
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), false);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), false);
+
+  coordinator.cancelTransition(secondGeneration);
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), false);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), false);
+});
+
+test("queued camera shutdown finishes before a superseding native start", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  const operations = [];
+  let resolveStop;
+  const stopGate = new Promise((resolve) => {
+    resolveStop = resolve;
+  });
+
+  const stoppingGeneration = coordinator.beginTransition();
+  const stopResult = coordinator.stopNativeSession(stoppingGeneration, async () => {
+    operations.push("stop-started");
+    await stopGate;
+    operations.push("stop-finished");
+  });
+  await Promise.resolve();
+
+  const startingGeneration = coordinator.beginTransition();
+  const startResult = coordinator.startNativeSession(
+    startingGeneration,
+    async () => {
+      operations.push("start");
+    },
+    async () => {
+      operations.push("stale-start-cleanup");
+    },
+  );
+  assert.deepEqual(operations, ["stop-started"]);
+
+  resolveStop();
+  assert.equal(await stopResult, false);
+  assert.equal(await startResult, true);
+  assert.deepEqual(operations, ["stop-started", "stop-finished", "start"]);
+
+  const staleStop = await coordinator.stopNativeSession(stoppingGeneration, async () => {
+    operations.push("unexpected-stale-stop");
+  });
+  assert.equal(staleStop, false);
+  assert.doesNotMatch(operations.join(","), /unexpected-stale-stop/);
+});
+
+test("native startup deadline rejects into the fallback ownership path", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let startCalls = 0;
+  let stopCalls = 0;
+  const generation = coordinator.beginTransition();
+
+  const startWithFallback = async () => {
+    try {
+      return await coordinator.startNativeSession(
+        generation,
+        () => {
+          startCalls += 1;
+          return new Promise(() => {});
+        },
+        async () => {
+          stopCalls += 1;
+        },
+        8,
+        8,
+      );
+    } catch (error) {
+      assert.equal(error?.name, "GuidePupDeadlineError");
+      assert.match(error?.message ?? "", /native camera start.*8 ms/i);
+      return coordinator.releaseNativeForFallback(
+        generation,
+        async () => {
+          stopCalls += 1;
+        },
+        8,
+      );
+    }
+  };
+
+  assert.equal(await startWithFallback(), true);
+  assert.equal(startCalls, 1);
+  assert.equal(stopCalls, 1);
+  assert.equal(coordinator.hasFallbackOwnership(generation), true);
+});
+
+test("late native startup resolve and reject cannot restore stale ownership", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let resolveLateStart;
+  let lateResolveCleanupCalls = 0;
+  const lateResolvingStart = new Promise((resolve) => {
+    resolveLateStart = resolve;
+  });
+
+  const timedOutGeneration = coordinator.beginTransition();
+  const timedOutStart = coordinator.startNativeSession(
+    timedOutGeneration,
+    () => lateResolvingStart,
+    async () => {
+      lateResolveCleanupCalls += 1;
+    },
+    8,
+    8,
+  );
+  await assert.rejects(timedOutStart, /native camera start.*8 ms/i);
+
+  let rejectLateStart;
+  let lateRejectCleanupCalls = 0;
+  const lateRejectingStart = new Promise((_, reject) => {
+    rejectLateStart = reject;
+  });
+  const rejectedGeneration = coordinator.beginTransition();
+  const rejectedStart = coordinator.startNativeSession(
+    rejectedGeneration,
+    () => lateRejectingStart,
+    async () => {
+      lateRejectCleanupCalls += 1;
+    },
+    8,
+    8,
+  );
+  await assert.rejects(rejectedStart, /native camera start.*8 ms/i);
+
+  const currentGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(
+      currentGeneration,
+      async () => undefined,
+      8,
+    ),
+    true,
+  );
+  resolveLateStart();
+  rejectLateStart(new Error("late native start rejection"));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(lateResolveCleanupCalls, 1);
+  assert.equal(lateRejectCleanupCalls, 0);
+  assert.equal(coordinator.isCurrent(timedOutGeneration), false);
+  assert.equal(coordinator.isCurrent(rejectedGeneration), false);
+  assert.equal(coordinator.hasFallbackOwnership(timedOutGeneration), false);
+  assert.equal(coordinator.hasFallbackOwnership(rejectedGeneration), false);
+  assert.equal(coordinator.hasFallbackOwnership(currentGeneration), true);
+});
+
+test("native startup completion after supersession uses bounded stale cleanup", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let resolveStart;
+  let cleanupCalls = 0;
+  const startGate = new Promise((resolve) => {
+    resolveStart = resolve;
+  });
+
+  const staleGeneration = coordinator.beginTransition();
+  const staleStart = coordinator.startNativeSession(
+    staleGeneration,
+    () => startGate,
+    () => {
+      cleanupCalls += 1;
+      return new Promise(() => {});
+    },
+    50,
+    8,
+  );
+  await Promise.resolve();
+  const currentGeneration = coordinator.beginTransition();
+  resolveStart();
+
+  assert.equal(await staleStart, false);
+  assert.equal(cleanupCalls, 1);
+  assert.equal(coordinator.isCurrent(staleGeneration), false);
+  assert.equal(coordinator.isCurrent(currentGeneration), true);
+});
+
+test("late native startup completion cannot stop a newer native owner", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let resolveLateStart;
+  let staleCleanupCalls = 0;
+  const lateStart = new Promise((resolve) => {
+    resolveLateStart = resolve;
+  });
+
+  const staleGeneration = coordinator.beginTransition();
+  await assert.rejects(
+    coordinator.startNativeSession(
+      staleGeneration,
+      () => lateStart,
+      async () => {
+        staleCleanupCalls += 1;
+      },
+      8,
+      8,
+    ),
+    /native camera start.*8 ms/i,
+  );
+
+  const currentGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.startNativeSession(
+      currentGeneration,
+      async () => undefined,
+      async () => undefined,
+      50,
+      8,
+    ),
+    true,
+  );
+
+  resolveLateStart();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.equal(staleCleanupCalls, 0);
+  assert.equal(coordinator.isCurrent(currentGeneration), true);
+});
+
+test("STOP and its inactive-session effect share one native shutdown", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let stopCalls = 0;
+  let resolveStop;
+  const stopGate = new Promise((resolve) => {
+    resolveStop = resolve;
+  });
+  const stopSession = async () => {
+    stopCalls += 1;
+    await stopGate;
+  };
+
+  const stopCommandRequest = coordinator.requestNativeStop(stopSession);
+  const inactiveEffectRequest = coordinator.requestNativeStop(stopSession);
+  await Promise.resolve();
+
+  assert.equal(stopCommandRequest.created, true);
+  assert.equal(inactiveEffectRequest.created, false);
+  assert.equal(inactiveEffectRequest.generation, stopCommandRequest.generation);
+  assert.equal(inactiveEffectRequest.promise, stopCommandRequest.promise);
+  assert.equal(stopCalls, 1);
+
+  resolveStop();
+  assert.equal(await stopCommandRequest.promise, true);
+  assert.equal(await inactiveEffectRequest.promise, true);
+  assert.equal(stopCalls, 1);
+});
+
+test("concurrent STOP consumers share the same bounded retry sequence", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let stopCalls = 0;
+  const stopSession = async () => {
+    stopCalls += 1;
+    if (stopCalls === 1) {
+      throw new Error("simulated native stop failure");
+    }
+  };
+
+  const stopCommandRequest = coordinator.requestNativeStop(stopSession, 2);
+  const inactiveEffectRequest = coordinator.requestNativeStop(stopSession, 2);
+  assert.equal(inactiveEffectRequest.created, false);
+  assert.equal(inactiveEffectRequest.promise, stopCommandRequest.promise);
+  assert.equal(await stopCommandRequest.promise, true);
+  assert.equal(await inactiveEffectRequest.promise, true);
+  assert.equal(stopCalls, 2);
+});
+
+test("all consumers receive the same final bounded STOP failure", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let stopCalls = 0;
+  const stopSession = async () => {
+    stopCalls += 1;
+    throw new Error(`simulated native stop failure ${stopCalls}`);
+  };
+
+  const stopCommandRequest = coordinator.requestNativeStop(stopSession, 2);
+  const inactiveEffectRequest = coordinator.requestNativeStop(stopSession, 2);
+  assert.equal(inactiveEffectRequest.promise, stopCommandRequest.promise);
+  await assert.rejects(stopCommandRequest.promise, /simulated native stop failure 2/);
+  await assert.rejects(inactiveEffectRequest.promise, /simulated native stop failure 2/);
+  assert.equal(stopCalls, 2);
+
+  const lifecycleCleanupRequest = coordinator.requestNativeStop(stopSession, 2);
+  assert.equal(lifecycleCleanupRequest.created, false);
+  assert.equal(lifecycleCleanupRequest.promise, stopCommandRequest.promise);
+  await assert.rejects(lifecycleCleanupRequest.promise, /simulated native stop failure 2/);
+  assert.equal(stopCalls, 2);
+
+  coordinator.beginTransition();
+  const laterRetry = coordinator.requestNativeStop(async () => undefined, 2);
+  assert.equal(laterRetry.created, true);
+  assert.equal(await laterRetry.promise, true);
+});
+
+test("shared STOP callers get exactly two deadline-bounded native stop attempts", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let stopCalls = 0;
+  const neverSettlingStop = () => {
+    stopCalls += 1;
+    return new Promise(() => {});
+  };
+
+  const stopCommandRequest = coordinator.requestNativeStop(neverSettlingStop, 2, 8);
+  const lifecycleRequest = coordinator.requestNativeStop(neverSettlingStop, 2, 8);
+  const outcomes = await Promise.allSettled([
+    stopCommandRequest.promise,
+    lifecycleRequest.promise,
+  ]);
+
+  assert.equal(lifecycleRequest.created, false);
+  assert.equal(lifecycleRequest.promise, stopCommandRequest.promise);
+  assert.equal(stopCalls, 2);
+  assert.deepEqual(outcomes.map((outcome) => outcome.status), ["rejected", "rejected"]);
+  assert.equal(outcomes[0].reason, outcomes[1].reason);
+  assert.equal(outcomes[0].reason?.name, "GuidePupDeadlineError");
+  assert.match(outcomes[0].reason?.message ?? "", /native camera stop.*8 ms/i);
+});
+
+test("time-bounded shutdown operations settle never-ending work and absorb late rejection", { timeout: 2_000 }, async () => {
+  const { settlePromiseWithin } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  let rejectLate;
+  const lateRejectingOperation = new Promise((_, reject) => {
+    rejectLate = reject;
+  });
+
+  await assert.rejects(
+    settlePromiseWithin(
+      () => lateRejectingOperation,
+      8,
+      "voice listening stop",
+    ),
+    (error) =>
+      error?.name === "GuidePupDeadlineError"
+      && /voice listening stop.*8 ms/i.test(error.message),
+  );
+
+  rejectLate(new Error("late native rejection"));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(
+    await settlePromiseWithin(
+      async () => "stopped",
+      50,
+      "announcement stop",
+    ),
+    "stopped",
+  );
+});
+
+test("native STOP confirmation may exceed the control deadline and rearms only after delivery", { timeout: 3_000 }, async () => {
+  const {
+    settleStopConfirmationDelivery,
+    shouldRearmVoiceAfterStopConfirmation,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  const effects = [];
+  let releaseNativeSpeech;
+  const nativeSpeechGate = new Promise((resolve) => {
+    releaseNativeSpeech = resolve;
+  });
+  let stopCurrent = true;
+
+  const stopFlow = (async () => {
+    const confirmationDelivered = await settleStopConfirmationDelivery({
+      deliver: async () => {
+        effects.push("native-confirmation-started");
+        await nativeSpeechGate;
+        effects.push("native-confirmation-finished");
+      },
+      isCurrent: () => stopCurrent,
+      operationName: "stop confirmation speech",
+      timeoutMs: 2_000,
+    });
+    if (shouldRearmVoiceAfterStopConfirmation({
+      confirmationDelivered,
+      guidancePaused: true,
+      recoveryGateActive: false,
+      shutdownConfirmed: true,
+      stopCurrent,
+    })) {
+      effects.push("listener-rearmed");
+    }
+  })();
+
+  await new Promise((resolve) => setTimeout(resolve, 775));
+  assert.deepEqual(effects, ["native-confirmation-started"]);
+
+  releaseNativeSpeech();
+  await stopFlow;
+  assert.deepEqual(effects, [
+    "native-confirmation-started",
+    "native-confirmation-finished",
+    "listener-rearmed",
+  ]);
+});
+
+test("never-settling or stale STOP confirmation stays bounded and cannot rearm listening", { timeout: 2_000 }, async () => {
+  const {
+    resolveStopRuntimeShutdownTruth,
+    settleStopConfirmationDelivery,
+    shouldRearmVoiceAfterStopConfirmation,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  let rejectLate;
+  const lateRejectingConfirmation = new Promise((_, reject) => {
+    rejectLate = reject;
+  });
+  const startedAt = Date.now();
+  const timedOutDelivery = await settleStopConfirmationDelivery({
+    deliver: () => lateRejectingConfirmation,
+    isCurrent: () => true,
+    operationName: "stop confirmation speech",
+    timeoutMs: 15,
+  });
+
+  assert.equal(timedOutDelivery, false);
+  assert.ok(Date.now() - startedAt < 500);
+  assert.equal(shouldRearmVoiceAfterStopConfirmation({
+    confirmationDelivered: timedOutDelivery,
+    guidancePaused: true,
+    recoveryGateActive: false,
+    shutdownConfirmed: true,
+    stopCurrent: true,
+  }), false);
+
+  rejectLate(new Error("late confirmation rejection"));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const failedAnnouncementDelivery = await settleStopConfirmationDelivery({
+    deliver: async () => {
+      throw new Error("simulated VoiceOver announcement failure");
+    },
+    isCurrent: () => true,
+    operationName: "STOP safety announcement",
+    timeoutMs: 100,
+  });
+  assert.equal(failedAnnouncementDelivery, false);
+  assert.equal(resolveStopRuntimeShutdownTruth({
+    controlOperationsConfirmed: true,
+    runtimeQuiescent: true,
+  }), true);
+
+  let stopCurrent = true;
+  let finishStaleDelivery;
+  const staleDeliveryGate = new Promise((resolve) => {
+    finishStaleDelivery = resolve;
+  });
+  const staleDelivery = settleStopConfirmationDelivery({
+    deliver: () => staleDeliveryGate,
+    isCurrent: () => stopCurrent,
+    operationName: "stop confirmation announcement",
+    timeoutMs: 100,
+  });
+  stopCurrent = false;
+  finishStaleDelivery();
+
+  assert.equal(await staleDelivery, false);
+  assert.equal(shouldRearmVoiceAfterStopConfirmation({
+    confirmationDelivered: true,
+    guidancePaused: true,
+    recoveryGateActive: false,
+    shutdownConfirmed: true,
+    stopCurrent,
+  }), false);
+});
+
+test("touch STOP leaves Navigation only after shutdown and spoken confirmation are both proven", () => {
+  const {
+    shouldLeaveNavigationAfterTouchStop,
+    shouldRetainRuntimeSafetyHoldAfterVoiceRecovery,
+    shouldRetryFailedStop,
+  } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+
+  assert.equal(shouldLeaveNavigationAfterTouchStop({
+    confirmationDelivered: true,
+    shutdownConfirmed: true,
+    stopCurrent: true,
+  }), true);
+
+  for (const failedGate of [
+    {
+      confirmationDelivered: false,
+      shutdownConfirmed: true,
+      stopCurrent: true,
+    },
+    {
+      confirmationDelivered: true,
+      shutdownConfirmed: false,
+      stopCurrent: true,
+    },
+    {
+      confirmationDelivered: true,
+      shutdownConfirmed: true,
+      stopCurrent: false,
+    },
+  ]) {
+    assert.equal(shouldLeaveNavigationAfterTouchStop(failedGate), false);
+  }
+
+  assert.equal(shouldRetainRuntimeSafetyHoldAfterVoiceRecovery({
+    stopSafetyFailureHold: false,
+    touchStopFailureHold: false,
+  }), false);
+  assert.equal(shouldRetainRuntimeSafetyHoldAfterVoiceRecovery({
+    stopSafetyFailureHold: true,
+    touchStopFailureHold: false,
+  }), true);
+  assert.equal(shouldRetainRuntimeSafetyHoldAfterVoiceRecovery({
+    stopSafetyFailureHold: false,
+    touchStopFailureHold: true,
+  }), true);
+
+  assert.equal(shouldRetryFailedStop({
+    guiding: false,
+    stopSafetyFailureHold: true,
+    touchStopFailureHold: false,
+  }), true);
+  assert.equal(shouldRetryFailedStop({
+    guiding: false,
+    stopSafetyFailureHold: false,
+    touchStopFailureHold: true,
+  }), true);
+  assert.equal(shouldRetryFailedStop({
+    guiding: true,
+    stopSafetyFailureHold: true,
+    touchStopFailureHold: true,
+  }), false);
+});
+
+test("Home ordinary VoiceOver delivery stays guarded past 750 ms and rearms only after success", { timeout: 3_000 }, async () => {
+  const { settleCurrentAnnouncementDelivery } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "home-owner-delayed";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  let current = true;
+  let listeningRearmed = false;
+
+  const response = (async () => {
+    const outcome = await settleCurrentAnnouncementDelivery({
+      deliver: () => harness.core.announce(
+        "Guide Pup is ready.",
+        ownerToken,
+        { completionTimeoutMs: 2_000 },
+      ),
+      interrupt: () => harness.core.cancelAnnouncement(ownerToken),
+      isCurrent: () => current,
+    });
+    if (outcome === "completed" && current) {
+      listeningRearmed = true;
+    }
+    return outcome;
+  })();
+
+  assert.equal(harness.activeListenerCount(), 1);
+  await new Promise((resolve) => setTimeout(resolve, 775));
+  assert.equal(listeningRearmed, false);
+
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  assert.equal(await response, "completed");
+  assert.equal(listeningRearmed, true);
+  assert.equal(harness.activeListenerCount(), 0);
+  current = false;
+});
+
+test("Navigation ordinary VoiceOver response keeps STOP-only recognition until completion", { timeout: 3_000 }, async () => {
+  const { settleCurrentAnnouncementDelivery } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "navigation-owner-ordinary-delayed";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  let speechGuardActive = true;
+  const canProcessCommand = (intent) => !speechGuardActive || intent === "stop-guidance";
+
+  const response = (async () => {
+    const outcome = await settleCurrentAnnouncementDelivery({
+      deliver: () => harness.core.announce(
+        "Camera is ready.",
+        ownerToken,
+        { completionTimeoutMs: 2_000 },
+      ),
+      interrupt: () => harness.core.cancelAnnouncement(ownerToken),
+      isCurrent: () => true,
+    });
+    if (outcome !== "unsafe") {
+      speechGuardActive = false;
+    }
+    return outcome;
+  })();
+
+  await new Promise((resolve) => setTimeout(resolve, 775));
+  assert.equal(speechGuardActive, true);
+  assert.equal(canProcessCommand("status"), false);
+  assert.equal(canProcessCommand("stop-guidance"), true);
+
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  assert.equal(await response, "completed");
+  assert.equal(speechGuardActive, false);
+  assert.equal(canProcessCommand("status"), true);
+});
+
+test("ordinary VoiceOver fallback timeout covers slow core prompts and remains bounded", () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const homeHelpPrompt = [
+    "You can say start guidance, status, slower speech, faster speech, more detail, less detail,",
+    "haptics on, haptics off, or help. Guide Pup only accepts this bounded command list for safety.",
+  ].join(" ");
+  const navigationHelpPrompt = [
+    "You can say stop guidance, repeat, status, slower speech, faster speech, more detail,",
+    "less detail, haptics on, haptics off, or what do you see.",
+    "Guide Pup only accepts this bounded command list for safety.",
+  ].join(" ");
+
+  for (const prompt of [homeHelpPrompt, navigationHelpPrompt]) {
+    const wordCount = prompt.split(/\s+/).length;
+    const slowSpeechDurationMs = wordCount * 2_400;
+    const timeoutMs = harness.getCompletionTimeoutMs(prompt);
+    assert.ok(timeoutMs > slowSpeechDurationMs);
+    assert.ok(timeoutMs <= 120_000);
+  }
+
+  assert.equal(harness.getCompletionTimeoutMs("Stop.", 2_000), 2_000);
+  assert.equal(harness.getCompletionTimeoutMs("Short response."), 15_000);
+  assert.equal(
+    harness.getCompletionTimeoutMs(new Array(200).fill("guidance").join(" ")),
+    120_000,
+  );
+});
+
+test("Home can rearm after confirmed announcement interruption but not unsafe cleanup", async () => {
+  const { settleCurrentAnnouncementDelivery } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  let interruptionCalls = 0;
+  const interruptedOutcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      throw new Error("simulated delivery failure");
+    },
+    interrupt: async () => {
+      interruptionCalls += 1;
+    },
+    isCurrent: () => true,
+  });
+
+  assert.equal(interruptedOutcome, "interrupted");
+  assert.equal(interruptionCalls, 1);
+  assert.equal(interruptedOutcome !== "unsafe", true);
+
+  const unsafeOutcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      throw new Error("simulated delivery failure");
+    },
+    interrupt: async () => {
+      throw new Error("simulated interruption failure");
+    },
+    isCurrent: () => true,
+  });
+
+  assert.equal(unsafeOutcome, "unsafe");
+  assert.equal(unsafeOutcome !== "unsafe", false);
+});
+
+test("voice recovery speech guard survives unsafe cleanup and clears after confirmed completion", async () => {
+  const { settleCurrentAnnouncementDelivery } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  let recoveryHoldActive = true;
+  let speechGuardActive = true;
+  const canProcessCommand = (intent) =>
+    (!recoveryHoldActive && !speechGuardActive) || intent === "stop-guidance";
+
+  const outcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      throw new Error("simulated recovery announcement failure");
+    },
+    interrupt: async () => {
+      throw new Error("simulated recovery interruption failure");
+    },
+    isCurrent: () => recoveryHoldActive,
+  });
+  if (outcome !== "unsafe") {
+    speechGuardActive = false;
+  }
+
+  assert.equal(outcome, "unsafe");
+  assert.equal(recoveryHoldActive, true);
+  assert.equal(speechGuardActive, true);
+  assert.equal(canProcessCommand("status"), false);
+  assert.equal(canProcessCommand("more-detail"), false);
+  assert.equal(canProcessCommand("stop-guidance"), true);
+
+  recoveryHoldActive = false;
+
+  let announcementOwnerCurrent = true;
+  let releaseRecoveryAnnouncement;
+  const recoveryAnnouncementGate = new Promise((resolve) => {
+    releaseRecoveryAnnouncement = resolve;
+  });
+  const completedDelivery = settleCurrentAnnouncementDelivery({
+    deliver: () => recoveryAnnouncementGate,
+    interrupt: async () => undefined,
+    isCurrent: () => announcementOwnerCurrent,
+  });
+  let recoveredSpeechGuardActive = true;
+
+  releaseRecoveryAnnouncement();
+  const completedOutcome = await completedDelivery;
+  if (completedOutcome !== "unsafe" && announcementOwnerCurrent) {
+    recoveredSpeechGuardActive = false;
+  }
+
+  assert.equal(completedOutcome, "completed");
+  assert.equal(recoveryHoldActive, false);
+  assert.equal(recoveredSpeechGuardActive, false);
+  announcementOwnerCurrent = false;
+});
+
+test("stale ordinary delivery failure cannot interrupt a newer caller", async () => {
+  const { settleCurrentAnnouncementDelivery } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  let current = true;
+  let rejectDelivery;
+  let interruptionCalls = 0;
+  const deliveryGate = new Promise((_, reject) => {
+    rejectDelivery = reject;
+  });
+  const outcome = settleCurrentAnnouncementDelivery({
+    deliver: () => deliveryGate,
+    interrupt: async () => {
+      interruptionCalls += 1;
+    },
+    isCurrent: () => current,
+  });
+
+  current = false;
+  rejectDelivery(new Error("superseded ordinary announcement"));
+
+  assert.equal(await outcome, "unsafe");
+  assert.equal(interruptionCalls, 0);
+});
+
+test("native ordinary announcement rejection posts one completion-aware JS fallback", async () => {
+  let nativeAnnouncementCalls = 0;
+  const nativeModule = {
+    async announce() {
+      nativeAnnouncementCalls += 1;
+      throw new Error("simulated native rejection");
+    },
+    async claimAnnouncementOwner() {},
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "ordinary-owner-native-reject";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  let delivered = false;
+  const delivery = harness.core.announce(
+    "Ordinary response.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  ).then(() => {
+    delivered = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(nativeAnnouncementCalls, 1);
+  assert.equal(harness.postedAnnouncements.length, 1);
+  assert.equal(harness.activeListenerCount(), 1);
+  assert.equal(delivered, false);
+
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  await delivery;
+  assert.equal(delivered, true);
+  assert.equal(harness.postedAnnouncements.length, 1);
+  assert.equal(harness.activeListenerCount(), 0);
+});
+
+test("aborting in-flight native announcement cancels it without posting JS fallback", async () => {
+  let cancelCalls = 0;
+  let finishNativeDelivery;
+  const nativeDelivery = new Promise((resolve) => {
+    finishNativeDelivery = resolve;
+  });
+  const nativeModule = {
+    async announce() {
+      await nativeDelivery;
+    },
+    async cancelAnnouncement() {
+      cancelCalls += 1;
+    },
+    async claimAnnouncementOwner() {},
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "ordinary-owner-native-abort";
+  const abortController = new AbortController();
+  await harness.core.claimAnnouncementOwner(ownerToken);
+
+  const delivery = harness.core.announce(
+    "Announcement that must be cancelled.",
+    ownerToken,
+    { signal: abortController.signal },
+  );
+  const outcome = delivery.then(() => "resolved", () => "rejected");
+  await new Promise((resolve) => setImmediate(resolve));
+  abortController.abort();
+
+  assert.equal(await outcome, "rejected");
+  assert.equal(cancelCalls, 1);
+  assert.equal(harness.postedAnnouncements.length, 0);
+
+  finishNativeDelivery();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(cancelCalls, 1);
+  assert.equal(harness.postedAnnouncements.length, 0);
+});
+
+test("native cleanup rejection remains unsafe for callers and STOP shutdown", async () => {
+  const nativeModule = {
+    async cancelAnnouncement() {
+      throw new Error("simulated native cancellation rejection");
+    },
+    async claimAnnouncementOwner() {},
+    async interruptAllAnnouncements() {
+      throw new Error("simulated native global interruption rejection");
+    },
+    async releaseAnnouncementOwner() {
+      throw new Error("simulated native owner release rejection");
+    },
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "native-cleanup-rejection";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const {
+    resolveStopRuntimeShutdownTruth,
+    settleCurrentAnnouncementDelivery,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+
+  const deliveryOutcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      throw new Error("simulated announcement delivery failure");
+    },
+    interrupt: () => harness.core.cancelAnnouncement(ownerToken),
+    isCurrent: () => true,
+  });
+
+  assert.equal(deliveryOutcome, "unsafe");
+  await assert.rejects(
+    harness.core.cancelAnnouncement(ownerToken),
+    /Native VoiceOver announcement interruption could not be confirmed/,
+  );
+  await assert.rejects(
+    harness.core.releaseAnnouncementOwner(ownerToken),
+    /Native VoiceOver announcement owner release could not be confirmed/,
+  );
+  const shutdownOutcomes = await Promise.allSettled([
+    harness.core.interruptAllAnnouncements(),
+  ]);
+  assert.equal(shutdownOutcomes[0].status, "rejected");
+  assert.equal(resolveStopRuntimeShutdownTruth({
+    controlOperationsConfirmed: shutdownOutcomes.every(
+      (outcome) => outcome.status === "fulfilled",
+    ),
+    runtimeQuiescent: true,
+  }), false);
+});
+
+test("native cleanup rejection still removes and interrupts pending JS fallback delivery", async () => {
+  const nativeModule = {
+    async announce() {
+      throw new Error("simulated native delivery rejection");
+    },
+    async cancelAnnouncement() {
+      throw new Error("simulated native cancellation rejection");
+    },
+    async claimAnnouncementOwner() {},
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "native-cleanup-pending-fallback";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const delivery = harness.core.announce(
+    "Fallback delivery that must be interrupted.",
+    ownerToken,
+    { completionTimeoutMs: 5_000 },
+  );
+  const deliveryOutcome = delivery.then(() => "resolved", () => "rejected");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 1);
+
+  await assert.rejects(
+    harness.core.cancelAnnouncement(ownerToken),
+    /Native VoiceOver announcement interruption could not be confirmed/,
+  );
+  assert.equal(await deliveryOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+});
+
+test("ordinary fallback rejects failed, mismatched, stale, cancelled, and missing completion", { timeout: 2_000 }, async () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "ordinary-owner-fail-closed";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+
+  const first = harness.core.announce(
+    "First ordinary response.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  );
+  const firstOutcome = first.then(() => "resolved", () => "rejected");
+  const firstPosted = harness.postedAnnouncements[0].announcement;
+  const replacement = harness.core.announce(
+    "Replacement ordinary response.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  );
+  const replacementOutcome = replacement.then(() => "resolved", () => "rejected");
+  assert.equal(await firstOutcome, "rejected");
+  assert.equal(harness.postedAnnouncements[1].announcement, "\u200B");
+  const replacementPosted = harness.postedAnnouncements.at(-1).announcement;
+  assert.notEqual(firstPosted, replacementPosted);
+  assert.equal(harness.activeListenerCount(), 1);
+
+  harness.emitAnnouncementFinished({ announcement: firstPosted, success: true });
+  harness.emitAnnouncementFinished({ announcement: "Mismatched response.", success: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 1);
+
+  harness.emitAnnouncementFinished({ announcement: replacementPosted, success: false });
+  assert.equal(await replacementOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+
+  const cancelled = harness.core.announce(
+    "Cancel ordinary response.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  );
+  const cancelledOutcome = cancelled.then(() => "resolved", () => "rejected");
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.cancelAnnouncement(ownerToken);
+  assert.equal(await cancelledOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+
+  await assert.rejects(
+    harness.core.announce(
+      "No completion response.",
+      ownerToken,
+      { completionTimeoutMs: 20 },
+    ),
+    /announcement completion.*20 ms/i,
+  );
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+});
+
+test("successful native cleanup silences ordinary JS fallback speech", { timeout: 2_000 }, async () => {
+  const nativeCalls = {
+    announce: 0,
+    cancel: 0,
+    interrupt: 0,
+    release: 0,
+  };
+  const nativeModule = {
+    async announce() {
+      nativeCalls.announce += 1;
+      throw new Error("simulated native rejection");
+    },
+    async cancelAnnouncement() {
+      nativeCalls.cancel += 1;
+    },
+    async claimAnnouncementOwner() {},
+    async interruptAllAnnouncements() {
+      nativeCalls.interrupt += 1;
+    },
+    async releaseAnnouncementOwner() {
+      nativeCalls.release += 1;
+    },
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "ordinary-owner-native-cleanup";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+
+  const runCleanupCase = async (message, cleanup) => {
+    const delivery = harness.core.announce(
+      message,
+      ownerToken,
+      { completionTimeoutMs: 5_000 },
+    );
+    const outcome = delivery.then(() => "resolved", () => "rejected");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(harness.activeListenerCount(), 1);
+    await cleanup();
+    assert.equal(await outcome, "rejected");
+    assert.equal(harness.activeListenerCount(), 0);
+    assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+  };
+
+  await runCleanupCase(
+    "Cancel ordinary fallback.",
+    () => harness.core.cancelAnnouncement(ownerToken),
+  );
+  await runCleanupCase(
+    "Release ordinary fallback.",
+    () => harness.core.releaseAnnouncementOwner(ownerToken),
+  );
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  await runCleanupCase(
+    "Interrupt ordinary fallback.",
+    () => harness.core.interruptAllAnnouncements(),
+  );
+
+  assert.deepEqual(nativeCalls, {
+    announce: 3,
+    cancel: 1,
+    interrupt: 1,
+    release: 1,
+  });
+  assert.equal(harness.removedListenerCount(), 3);
+});
+
+test("JS VoiceOver fallback waits past 750 ms for matching completion before rearm", { timeout: 3_000 }, async () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "navigation-owner-delayed";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  let listeningRearmed = false;
+  const delivery = harness.core.supersedeAnnouncement(
+    "Guidance paused. Say start guidance to resume.",
+    ownerToken,
+    { completionTimeoutMs: 2_000 },
+  ).then(() => {
+    listeningRearmed = true;
+  });
+
+  assert.equal(harness.activeListenerCount(), 1);
+  assert.equal(harness.postedAnnouncements.length, 1);
+  await new Promise((resolve) => setTimeout(resolve, 775));
+  assert.equal(listeningRearmed, false);
+
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  await delivery;
+  assert.equal(listeningRearmed, true);
+  assert.equal(harness.activeListenerCount(), 0);
+});
+
+test("native supersede rejection falls through to one completion-aware JS announcement", async () => {
+  let nativeSupersedeCalls = 0;
+  const nativeModule = {
+    async claimAnnouncementOwner() {},
+    async supersedeAnnouncement() {
+      nativeSupersedeCalls += 1;
+      throw new Error("simulated native rejection");
+    },
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "navigation-owner-native-reject";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  let delivered = false;
+  const delivery = harness.core.supersedeAnnouncement(
+    "Guidance paused.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  ).then(() => {
+    delivered = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(nativeSupersedeCalls, 1);
+  assert.equal(harness.postedAnnouncements.length, 1);
+  assert.equal(harness.activeListenerCount(), 1);
+  assert.equal(delivered, false);
+
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  await delivery;
+  assert.equal(delivered, true);
+  assert.equal(harness.postedAnnouncements.length, 1);
+  assert.equal(harness.activeListenerCount(), 0);
+});
+
+test("failed, mismatched, and stale JS completion cannot rearm a newer announcement", async () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "navigation-owner-stale";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const firstDelivery = harness.core.supersedeAnnouncement(
+    "Guidance paused.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  );
+  const firstOutcome = firstDelivery.then(
+    () => "resolved",
+    () => "rejected",
+  );
+  const firstPostedAnnouncement = harness.postedAnnouncements[0].announcement;
+
+  let newerRearmed = false;
+  const newerDelivery = harness.core.supersedeAnnouncement(
+    "Guidance paused.",
+    ownerToken,
+    { completionTimeoutMs: 500 },
+  ).then(
+    () => {
+      newerRearmed = true;
+      return "resolved";
+    },
+    () => "rejected",
+  );
+  assert.equal(harness.postedAnnouncements[1].announcement, "\u200B");
+  const newerPostedAnnouncement = harness.postedAnnouncements.at(-1).announcement;
+
+  assert.equal(await firstOutcome, "rejected");
+  assert.notEqual(firstPostedAnnouncement, newerPostedAnnouncement);
+  assert.equal(harness.activeListenerCount(), 1);
+
+  harness.emitAnnouncementFinished({
+    announcement: firstPostedAnnouncement,
+    success: true,
+  });
+  harness.emitAnnouncementFinished({
+    announcement: "Different announcement",
+    success: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(newerRearmed, false);
+
+  harness.emitAnnouncementFinished({
+    announcement: newerPostedAnnouncement,
+    success: false,
+  });
+  assert.equal(await newerDelivery, "rejected");
+  assert.equal(newerRearmed, false);
+  assert.equal(harness.activeListenerCount(), 0);
+});
+
+test("cancel, release, interrupt, and newer supersede clean pending JS delivery", async () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "navigation-owner-cleanup";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+
+  const cancelled = harness.core.supersedeAnnouncement(
+    "Cancel me.",
+    ownerToken,
+    { completionTimeoutMs: 200 },
+  );
+  const cancelledOutcome = cancelled.then(() => "resolved", () => "rejected");
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.cancelAnnouncement(ownerToken);
+  assert.equal(await cancelledOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+
+  const superseded = harness.core.supersedeAnnouncement(
+    "Supersede me.",
+    ownerToken,
+    { completionTimeoutMs: 200 },
+  );
+  const supersededOutcome = superseded.then(() => "resolved", () => "rejected");
+  const replacement = harness.core.supersedeAnnouncement(
+    "Replacement.",
+    ownerToken,
+    { completionTimeoutMs: 200 },
+  );
+  const replacementOutcome = replacement.then(() => "resolved", () => "rejected");
+  assert.equal(await supersededOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.releaseAnnouncementOwner(ownerToken);
+  assert.equal(await replacementOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const interrupted = harness.core.supersedeAnnouncement(
+    "Interrupt me.",
+    ownerToken,
+    { completionTimeoutMs: 200 },
+  );
+  const interruptedOutcome = interrupted.then(() => "resolved", () => "rejected");
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.interruptAllAnnouncements();
+  assert.equal(await interruptedOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const abortController = new AbortController();
+  const aborted = harness.core.supersedeAnnouncement(
+    "Abort me.",
+    ownerToken,
+    { completionTimeoutMs: 200, signal: abortController.signal },
+  );
+  const abortedOutcome = aborted.then(() => "resolved", () => "rejected");
+  assert.equal(harness.activeListenerCount(), 1);
+  abortController.abort();
+  assert.equal(await abortedOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.ok(harness.removedListenerCount() >= 5);
+});
+
+test("successful native cleanup still silences a pending JS fallback announcement", { timeout: 2_000 }, async () => {
+  const nativeCalls = {
+    cancel: 0,
+    release: 0,
+    supersede: 0,
+  };
+  let nativeSupersedeRejects = true;
+  const nativeModule = {
+    async cancelAnnouncement() {
+      nativeCalls.cancel += 1;
+    },
+    async claimAnnouncementOwner() {},
+    async releaseAnnouncementOwner() {
+      nativeCalls.release += 1;
+    },
+    async supersedeAnnouncement() {
+      nativeCalls.supersede += 1;
+      if (nativeSupersedeRejects) {
+        throw new Error("simulated native rejection");
+      }
+    },
+  };
+  const harness = createNavigationCoreAnnouncementHarness({ nativeModule });
+  const ownerToken = "navigation-owner-native-cleanup";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+
+  const cancelled = harness.core.supersedeAnnouncement(
+    "Cancel pending fallback.",
+    ownerToken,
+    { completionTimeoutMs: 5_000 },
+  );
+  const cancelledOutcome = cancelled.then(() => "resolved", () => "rejected");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.cancelAnnouncement(ownerToken);
+  assert.equal(await cancelledOutcome, "rejected");
+  assert.equal(nativeCalls.cancel, 1);
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+
+  const released = harness.core.supersedeAnnouncement(
+    "Release pending fallback.",
+    ownerToken,
+    { completionTimeoutMs: 5_000 },
+  );
+  const releasedOutcome = released.then(() => "resolved", () => "rejected");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 1);
+  await harness.core.releaseAnnouncementOwner(ownerToken);
+  assert.equal(await releasedOutcome, "rejected");
+  assert.equal(nativeCalls.release, 1);
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const superseded = harness.core.supersedeAnnouncement(
+    "Supersede pending fallback.",
+    ownerToken,
+    { completionTimeoutMs: 5_000 },
+  );
+  const supersededOutcome = superseded.then(() => "resolved", () => "rejected");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 1);
+  nativeSupersedeRejects = false;
+  await harness.core.supersedeAnnouncement(
+    "Native replacement.",
+    ownerToken,
+    { completionTimeoutMs: 5_000 },
+  );
+  assert.equal(await supersededOutcome, "rejected");
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.postedAnnouncements.at(-1).announcement, "\u200B");
+  assert.equal(nativeCalls.supersede, 4);
+  assert.equal(harness.removedListenerCount(), 3);
+});
+
+test("never-firing JS completion is bounded and removes its listener", { timeout: 2_000 }, async () => {
+  const harness = createNavigationCoreAnnouncementHarness();
+  const ownerToken = "navigation-owner-timeout";
+  await harness.core.claimAnnouncementOwner(ownerToken);
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    harness.core.supersedeAnnouncement(
+      "This completion never arrives.",
+      ownerToken,
+      { completionTimeoutMs: 20 },
+    ),
+    /announcement completion.*20 ms/i,
+  );
+
+  assert.ok(Date.now() - startedAt < 500);
+  assert.equal(harness.activeListenerCount(), 0);
+  assert.equal(harness.removedListenerCount(), 1);
+  harness.emitAnnouncementFinished({
+    announcement: harness.postedAnnouncements[0].announcement,
+    success: true,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(harness.activeListenerCount(), 0);
+});
+
+test("stale CameraView readiness and error events cannot mutate a newer fallback owner", async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+
+  const firstGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(firstGeneration, async () => undefined),
+    true,
+  );
+  assert.equal(coordinator.hasFallbackOwnership(firstGeneration), true);
+
+  const secondGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(secondGeneration, async () => undefined),
+    true,
+  );
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), true);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), false);
+
+  assert.equal(coordinator.markFallbackReady(firstGeneration), false);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), false);
+  assert.equal(coordinator.markFallbackUnavailable(firstGeneration), false);
+  assert.equal(coordinator.hasFallbackOwnership(secondGeneration), true);
+  assert.equal(coordinator.markFallbackReady(secondGeneration), true);
+  assert.equal(coordinator.isFallbackReady(secondGeneration), true);
+});
+
+test("fallback readiness deadline fires only for the current unready owner", { timeout: 2_000 }, async () => {
+  const { createCameraOwnershipTransitionCoordinator } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  let staleDeadlineCalls = 0;
+  let currentDeadlineCalls = 0;
+
+  const staleGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(staleGeneration, async () => undefined),
+    true,
+  );
+  coordinator.scheduleFallbackReadinessDeadline(
+    staleGeneration,
+    8,
+    () => {
+      staleDeadlineCalls += 1;
+    },
+  );
+
+  const currentGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(currentGeneration, async () => undefined),
+    true,
+  );
+  await new Promise((resolve) => {
+    coordinator.scheduleFallbackReadinessDeadline(
+      currentGeneration,
+      8,
+      () => {
+        currentDeadlineCalls += 1;
+        resolve();
+      },
+    );
+    coordinator.scheduleFallbackReadinessDeadline(
+      staleGeneration,
+      1,
+      () => {
+        staleDeadlineCalls += 1;
+      },
+    );
+  });
+
+  assert.equal(staleDeadlineCalls, 0);
+  assert.equal(currentDeadlineCalls, 1);
+
+  const readyGeneration = coordinator.beginTransition();
+  assert.equal(
+    await coordinator.releaseNativeForFallback(readyGeneration, async () => undefined),
+    true,
+  );
+  let readyDeadlineCalls = 0;
+  const cancelReadyDeadline = coordinator.scheduleFallbackReadinessDeadline(
+    readyGeneration,
+    8,
+    () => {
+      readyDeadlineCalls += 1;
+    },
+  );
+  assert.equal(coordinator.markFallbackReady(readyGeneration), true);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  cancelReadyDeadline();
+  assert.equal(readyDeadlineCalls, 0);
+});
+
+test("live route requests serialize native, forced fallback, and normal ownership", async () => {
+  const {
+    JS_FALLBACK_VALIDATION_CAMERA_PATH,
+    createCameraOwnershipTransitionCoordinator,
+    shouldForceJsFallbackValidation,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  const operations = [];
+  let nativeActive = false;
+
+  const nativeGeneration = coordinator.beginTransition();
+  assert.equal(shouldForceJsFallbackValidation(undefined), false);
+  assert.equal(await coordinator.startNativeSession(
+    nativeGeneration,
+    async () => {
+      operations.push("native-start-1");
+      nativeActive = true;
+    },
+    async () => {
+      operations.push("native-cleanup-1");
+      nativeActive = false;
+    },
+  ), true);
+  assert.equal(nativeActive, true);
+
+  const fallbackRequest = ["native-core", JS_FALLBACK_VALIDATION_CAMERA_PATH];
+  assert.equal(shouldForceJsFallbackValidation(fallbackRequest), true);
+  const fallbackGeneration = coordinator.beginTransition();
+  assert.equal(await coordinator.releaseNativeForFallback(
+    fallbackGeneration,
+    async () => {
+      operations.push("native-stop-for-fallback");
+      nativeActive = false;
+    },
+  ), true);
+  assert.equal(nativeActive, false);
+  assert.equal(coordinator.hasFallbackOwnership(fallbackGeneration), true);
+  assert.equal(coordinator.markFallbackReady(fallbackGeneration), true);
+
+  const normalRequest = ["unknown", "native-core"];
+  assert.equal(shouldForceJsFallbackValidation(normalRequest), false);
+  const resumedNativeGeneration = coordinator.beginTransition();
+  assert.equal(coordinator.hasFallbackOwnership(fallbackGeneration), false);
+  assert.equal(await coordinator.startNativeSession(
+    resumedNativeGeneration,
+    async () => {
+      assert.equal(coordinator.hasFallbackOwnership(fallbackGeneration), false);
+      operations.push("native-start-2");
+      nativeActive = true;
+    },
+    async () => {
+      operations.push("native-cleanup-2");
+      nativeActive = false;
+    },
+  ), true);
+  assert.equal(nativeActive, true);
+  assert.deepEqual(operations, [
+    "native-start-1",
+    "native-stop-for-fallback",
+    "native-start-2",
+  ]);
 });
 
 test("STOP remains deterministic while spoken guidance is active", () => {

@@ -21,6 +21,25 @@ function normalizeWhitespace(value) {
   return value.replace(/\s+/g, " ");
 }
 
+function loadTsModule(relativePath) {
+  const sourcePath = fileURLToPath(new URL(relativePath, import.meta.url));
+  const compiled = ts.transpileModule(readFileSync(sourcePath, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  const module = { exports: {} };
+
+  vm.runInNewContext(compiled.outputText, {
+    exports: module.exports,
+    module,
+    require,
+  }, { filename: sourcePath });
+
+  return module.exports;
+}
+
 function loadPrivacySanitizer() {
   const compiled = ts.transpileModule(privacySanitizerSource, {
     compilerOptions: {
@@ -168,7 +187,10 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
     {
       NSPrivacyCollectedDataType: "NSPrivacyCollectedDataTypeEnvironmentScanning",
       NSPrivacyCollectedDataTypeLinked: true,
-      NSPrivacyCollectedDataTypePurposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"],
+      NSPrivacyCollectedDataTypePurposes: [
+        "NSPrivacyCollectedDataTypePurposeAppFunctionality",
+        "NSPrivacyCollectedDataTypePurposeAnalytics",
+      ],
       NSPrivacyCollectedDataTypeTracking: false,
     },
   );
@@ -178,7 +200,7 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
     "sampled compressed camera frames",
     "installation-scoped bootstrap token",
     "Apple speech recognition may process voice audio",
-    "bounded product-interaction, performance, provider, request, guidance-result, and sanitized error data",
+    "Derived guidance results such as confidence, direction, and hazard level support service-quality analytics, not tracking",
     "does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers",
   ]) {
     assert.match(inAppSummary, new RegExp(disclosure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
@@ -193,9 +215,19 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
     "product interactions, request identifiers",
     "latency and performance measurements",
     "sanitized errors",
+    "environment-scanning data supports that app functionality and service-quality analytics; it is not used for tracking",
+    "iOS Keychain values may persist after the app is uninstalled",
+    "request deletion by emailing charliehan112@gmail.com",
   ]) {
     assert.match(publicPolicy, new RegExp(disclosure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   }
+  assert.doesNotMatch(publicPolicy, /uninstalling Guide Pup removes (?:its )?(?:local )?identifier/i);
+  assert.doesNotMatch(publicPolicy, /identifier and session token[^.]*until[^.]*app is uninstalled/i);
+
+  const privacyMatrix = normalizeWhitespace(read("../docs/privacy-answer-matrix.md"));
+  assert.match(privacyMatrix, /SecureStore uses the iOS Keychain, so these values may persist after uninstall/i);
+  assert.match(privacyMatrix, /request deletion by emailing `charliehan112@gmail\.com`/i);
+  assert.doesNotMatch(privacyMatrix, /uninstall[^.]*deletes?[^.]*installation/i);
 });
 
 test("native speech prefers on-device recognition without removing service fallback", () => {
@@ -226,9 +258,31 @@ test("native speech prefers on-device recognition without removing service fallb
 test("shipping permission and App Review copy disclose Apple Speech and cloud vision processing", () => {
   const appJson = JSON.parse(read("../app.json"));
   const infoPlist = plist.parse(read("../ios/GuidePupVisionAssistant/Info.plist"));
-  const { launchInputs } = require("../release/launch-inputs.js");
+  const { appReviewCommandSequence, launchInputs } = require("../release/launch-inputs.js");
+  const voiceCommands = loadTsModule("../src/lib/voiceCommands.ts");
+  const voiceConversation = loadTsModule("../src/lib/voiceConversation.ts");
   const speechPermission = appJson.expo.ios.infoPlist.NSSpeechRecognitionUsageDescription;
 
+  assert.match(launchInputs.appReviewNotes, /^Cold launch Guide Pup\./);
+  assert.match(
+    launchInputs.appReviewNotes,
+    /complete the three onboarding screens by activating Continue, Continue, then Start using Guide Pup/i,
+  );
+  assert.match(launchInputs.appReviewNotes, /Guide Pup does not require account sign-in/i);
+  assert.match(launchInputs.appReviewNotes, /On Home, wait for the spoken ready prompt/i);
+  assert.match(
+    launchInputs.appReviewNotes,
+    /Allow microphone and speech-recognition access when iOS requests them[\s\S]*success cue indicating listening is ready[\s\S]*say 'start guidance'/i,
+  );
+  assert.match(
+    launchInputs.appReviewNotes,
+    /say 'start guidance'[\s\S]*Allow camera access when iOS requests it[\s\S]*spoken camera-ready prompt and its success cue[\s\S]*say 'status'/i,
+  );
+  assert.equal(
+    launchInputs.appReviewNotes.match(/'start guidance'/gi)?.length,
+    1,
+    "The canonical cold-start script must say start guidance exactly once.",
+  );
   assert.equal(infoPlist.NSSpeechRecognitionUsageDescription, speechPermission);
   assert.match(speechPermission, /preferred on-device when available/i);
   assert.match(speechPermission, /processed by Apple/i);
@@ -242,9 +296,129 @@ test("shipping permission and App Review copy disclose Apple Speech and cloud vi
     /up to 7 days/i,
     /up to 30 days/i,
     /deterministic command lane/i,
+    /assistive vision and navigation aid/i,
+    /does not guarantee hazard detection or emergency response/i,
   ]) {
     assert.match(launchInputs.appReviewNotes, disclosure);
   }
+
+  for (const step of appReviewCommandSequence) {
+    assert.match(launchInputs.appReviewNotes, new RegExp(`'${step.spokenPhrase}'`));
+    if (step.expectedLane === "voice-command") {
+      assert.equal(voiceCommands.parseVoiceCommand(step.spokenPhrase), step.expectedIntent);
+      assert.equal(voiceConversation.parseConversationPrompt(step.spokenPhrase), null);
+    } else {
+      assert.equal(step.expectedLane, "conversation");
+      assert.equal(voiceCommands.parseVoiceCommand(step.spokenPhrase), null);
+      assert.equal(voiceConversation.parseConversationPrompt(step.spokenPhrase), step.expectedIntent);
+    }
+  }
+
+  const duringSpeechSteps = appReviewCommandSequence.filter((step) => step.duringSpeech);
+  assert.deepEqual(
+    duringSpeechSteps.map((step) => step.spokenPhrase),
+    ["STOP"],
+  );
+  const finalStep = appReviewCommandSequence.at(-1);
+  assert.equal(finalStep.expectedIntent, "stop-guidance");
+  assert.equal(finalStep.duringSpeech, true);
+  assert.equal(voiceCommands.isStopBargeInCommand(finalStep.spokenPhrase), true);
+  assert.match(launchInputs.appReviewNotes, /then say 'STOP' while speech is playing/);
+  assert.match(
+    launchInputs.appReviewNotes,
+    /voice STOP[\s\S]*does not return Home[\s\S]*Use VoiceOver to activate the on-screen Return Home control[\s\S]*before opening Settings/i,
+  );
+  assert.doesNotMatch(launchInputs.appReviewNotes, /on-screen Stop guidance control/i);
+  assert.match(
+    launchInputs.appReviewNotes,
+    /Open Settings, then choose Backup camera check \(the camera fallback check\)/,
+  );
+  assert.match(
+    launchInputs.appReviewNotes,
+    /repeat the same ordered sequence[\s\S]*including 'STOP' while speech is playing/i,
+  );
+});
+
+test("checked-in reviewer notes and screenshot plan remain launch-safe", () => {
+  const { appReviewCommandSequence, launchInputs } = require("../release/launch-inputs.js");
+  const reviewNotes = read("../docs/app-review-notes.md");
+  const screenshotPlan = read("../docs/screenshot-shotlist.md");
+  const launchPhaseReport = read("../../docs/phase-launch1-internal-testflight-smoke.md");
+  const qualityReport = read("../../docs/phase-quality1-guidance-reliability.md");
+  const runtimePhaseReport = read("../../docs/phase-runtime1-real-device-blind-validation.md");
+  const noScreenSection = reviewNotes
+    .split("## No-Screen Review Sequence")[1]
+    .split("\n## ")[0];
+  const renderedSequence = Array.from(noScreenSection.matchAll(/^\d+\..*?`([^`]+)`/gm), (match) => match[1]);
+  const renderedCanonicalNotes = reviewNotes
+    .split("<!-- APP_REVIEW_NOTES_START -->")[1]
+    .split("<!-- APP_REVIEW_NOTES_END -->")[0]
+    .trim();
+
+  assert.match(reviewNotes, /does not guarantee hazard detection or emergency response/i);
+  assert.match(reviewNotes, /does not provide emergency response or an SOS action/i);
+  assert.match(reviewNotes, /No-Screen Review Sequence/);
+  assert.match(reviewNotes, /Cold launch Guide Pup/);
+  assert.match(reviewNotes, /complete the three onboarding screens by activating `Continue`, `Continue`, then `Start using Guide Pup`/i);
+  assert.match(reviewNotes, /Guide Pup does not require account sign-in/i);
+  assert.match(reviewNotes, /On Home, wait for the spoken ready prompt/i);
+  assert.match(reviewNotes, /Allow microphone and speech-recognition access when iOS requests them/i);
+  assert.match(reviewNotes, /Allow camera access when iOS requests it/i);
+  assert.match(reviewNotes, /success cue indicating listening is ready/i);
+  assert.match(reviewNotes, /spoken camera-ready prompt and its success cue/i);
+  assert.match(
+    noScreenSection,
+    /success cue indicating listening is ready[\s\S]*Say `start guidance`[\s\S]*Allow camera access[\s\S]*spoken camera-ready prompt and its success cue[\s\S]*Say `status`/i,
+  );
+  assert.match(reviewNotes, /While spoken guidance is playing, say `STOP`/);
+  assert.match(
+    reviewNotes,
+    /voice STOP[\s\S]*does not return Home[\s\S]*VoiceOver[\s\S]*on-screen `Return Home` control[\s\S]*before opening Settings/i,
+  );
+  assert.doesNotMatch(reviewNotes, /on-screen `Stop guidance` control/i);
+  assert.match(reviewNotes, /Settings > Backup camera check/);
+  assert.match(reviewNotes, /repeat the same ordered sequence/i);
+  assert.doesNotMatch(reviewNotes, /listening cue/i);
+  assert.match(reviewNotes, /Do not state that physical-device or VoiceOver validation has passed/);
+  assert.deepEqual(renderedSequence, appReviewCommandSequence.map((step) => step.spokenPhrase));
+  assert.equal(normalizeWhitespace(renderedCanonicalNotes), normalizeWhitespace(launchInputs.appReviewNotes));
+
+  assert.match(screenshotPlan, /authenticated read-only observation on 2026-07-24/i);
+  assert.match(screenshotPlan, /6\.5-inch Display/i);
+  assert.match(screenshotPlan, /0\/10 screenshots/i);
+  assert.match(screenshotPlan, /`1242 x 2688` or `1284 x 2778`/i);
+  assert.match(screenshotPlan, /Prefer direct capture at `1284 x 2778`/i);
+  assert.match(screenshotPlan, /final authenticated App Store Connect recheck/i);
+  assert.doesNotMatch(screenshotPlan, /1320 x 2868|planned 6\.9-inch/i);
+  assert.match(screenshotPlan, /The first screen with `Start Guidance` visible and no permission sheet/);
+  assert.match(screenshotPlan, /consented, staged empty indoor path with no people or private text/);
+  assert.match(screenshotPlan, /real `Guidance active` state plus the current direction and message from a provider-backed result/);
+  assert.match(screenshotPlan, /Spoken output by itself is not screenshot evidence/);
+  assert.match(screenshotPlan, /Deliberately remove network access/);
+  assert.match(screenshotPlan, /real `Backend unavailable` safe STOP state/);
+  assert.match(screenshotPlan, /then restore network access\. Do not mock/);
+  assert.match(screenshotPlan, /`Speech`, `Descriptions`, and `Haptics` visible\. No Bounding boxes control is present/);
+  assert.match(screenshotPlan, /assistive-only limitation and emergency disclaimer visible/);
+  assert.match(screenshotPlan, /Do not show raw camera content/);
+  assert.match(screenshotPlan, /Do not mock guidance, failures, banners, directions, or messages/);
+  assert.match(screenshotPlan, /does not claim that screenshots have been uploaded or that accessibility validation is complete/);
+
+  assert.match(launchPhaseReport, /authenticated read-only observation on 2026-07-24/i);
+  assert.match(launchPhaseReport, /6\.5-inch Display/i);
+  assert.match(launchPhaseReport, /0\/10 screenshots/i);
+  assert.match(launchPhaseReport, /`1242 x 2688` or `1284 x 2778`/i);
+  assert.match(launchPhaseReport, /prefer direct capture at `1284 x 2778`/i);
+  assert.match(launchPhaseReport, /final authenticated recheck before upload/i);
+  assert.match(launchPhaseReport, /No current build is selected/i);
+  assert.match(launchPhaseReport, /App Review Notes are stale/i);
+  assert.doesNotMatch(launchPhaseReport, /accepted `1320x2868`/i);
+
+  assert.match(qualityReport, /earlier provider smoke at `3cc852c` is superseded historical proof only/i);
+  assert.match(qualityReport, /not current exact-revision evidence/i);
+  assert.match(qualityReport, /iOS runtime safety `85\/85`/i);
+  assert.doesNotMatch(qualityReport, /iOS runtime safety `(?:61|63|65|70|71|77|81)\/(?:61|63|65|70|71|77|81)`/i);
+  assert.match(runtimePhaseReport, /iOS runtime safety `85\/85`/i);
+  assert.doesNotMatch(runtimePhaseReport, /iOS runtime safety `(?:61|63|65|70|71|77|81)\/(?:61|63|65|70|71|77|81)`/i);
 });
 
 function loadNavigationCore({ manipulateAsync, deleteFile } = {}) {

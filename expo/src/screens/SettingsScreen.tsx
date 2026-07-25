@@ -29,7 +29,6 @@ export default function SettingsScreen() {
     updateDescriptionMode,
     updateHapticsEnabled,
     updateSpeechRate,
-    toggleBoundingBoxes,
   } = useSettings();
   const diagnosticsTapCountRef = useRef(0);
   const diagnosticsTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,8 +63,13 @@ export default function SettingsScreen() {
     async (rate: SpeechRate) => {
       const saved = await updateSpeechRate(rate);
       const rateLabel = rate === "slow" ? "Slow" : rate === "fast" ? "Fast" : "Normal";
+      const voiceOverEnabled = saved && Platform.OS === "ios"
+        ? await AccessibilityInfo.isScreenReaderEnabled().catch(() => true)
+        : false;
       const message = saved
-        ? `Speech rate changed to ${rateLabel}`
+        ? voiceOverEnabled
+          ? `App speech rate saved as ${rateLabel} for when VoiceOver is off. VoiceOver controls its own speech rate.`
+          : `Speech rate changed to ${rateLabel}`
         : "Could not save the speech rate. The setting was not changed.";
       setSettingsError(saved ? null : message);
       if (Platform.OS === "ios") {
@@ -89,18 +93,6 @@ export default function SettingsScreen() {
     },
     [updateDescriptionMode],
   );
-
-  const handleBoundingBoxesToggle = useCallback(async () => {
-    const newValue = !settings.showBoundingBoxes;
-    const saved = await toggleBoundingBoxes();
-    const message = saved
-      ? (newValue ? "Bounding boxes turned on" : "Bounding boxes turned off")
-      : "Could not save the bounding boxes setting. The setting was not changed.";
-    setSettingsError(saved ? null : message);
-    if (Platform.OS === "ios") {
-      AccessibilityInfo.announceForAccessibility(message);
-    }
-  }, [settings.showBoundingBoxes, toggleBoundingBoxes]);
 
   const handleHapticsToggle = useCallback(async () => {
     const nextValue = !settings.hapticsEnabled;
@@ -222,7 +214,7 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Guidance feedback</Text>
-          <Text style={styles.sectionDescription}>Touch fallback controls for haptics and tester-only overlays.</Text>
+          <Text style={styles.sectionDescription}>Adjust haptic confirmations for spoken guidance.</Text>
           <View style={styles.toggleCard}>
             <View style={styles.toggleContent}>
               <View style={styles.toggleTextGroup}>
@@ -241,28 +233,6 @@ export default function SettingsScreen() {
                 accessibilityHint="Double tap to turn haptic guidance on or off"
                 accessibilityState={{ checked: settings.hapticsEnabled }}
                 testID="settings-haptics-switch"
-              />
-            </View>
-          </View>
-
-          <View style={styles.toggleCard}>
-            <View style={styles.toggleContent}>
-              <View style={styles.toggleTextGroup}>
-                <Text style={styles.toggleLabel}>Bounding boxes</Text>
-                <Text style={styles.toggleHint}>
-                  Show boxes around detected objects on the camera view.
-                </Text>
-              </View>
-              <Switch
-                value={settings.showBoundingBoxes}
-                onValueChange={handleBoundingBoxesToggle}
-                thumbColor={Colors.palette.textPrimary}
-                trackColor={{ false: "#343843", true: Colors.palette.accent }}
-                accessibilityRole="switch"
-                accessibilityLabel="Show bounding boxes"
-                accessibilityHint="Double tap to toggle bounding boxes around detected objects"
-                accessibilityState={{ checked: settings.showBoundingBoxes }}
-                testID="settings-bounding-boxes-switch"
               />
             </View>
           </View>
@@ -299,20 +269,20 @@ export default function SettingsScreen() {
               title="Safety / emergency"
             />
             <InfoLinkButton
-              accessibilityHint="Double tap to open diagnostics and export sanitized launch evidence"
+              accessibilityHint="Double tap to review system status or export sanitized diagnostics"
               accessibilityLabel="Diagnostics"
-              description="Review backend, voice, camera, and guidance evidence for internal validation."
+              description="Review camera, voice, and service status. Export sanitized diagnostics for support."
               onPress={openDiagnostics}
               testID="settings-diagnostics-link"
               title="Diagnostics"
             />
             <InfoLinkButton
               accessibilityHint="Double tap to start guidance with the backup camera path"
-              accessibilityLabel="Validate backup camera path"
-              description="Checks the fallback camera used when native capture is unavailable."
+              accessibilityLabel="Test backup camera path"
+              description="Test the backup camera path used when native capture is unavailable."
               onPress={openFallbackCameraValidation}
               testID="settings-fallback-camera-validation"
-              title="Camera fallback check"
+              title="Backup camera check"
             />
           </View>
         </View>

@@ -7,19 +7,17 @@ private final class GuidePupAccessibilityAnnouncementController {
     let identifier: Int
     let message: String
     let ownerToken: String
-    var continuations: [CheckedContinuation<Void, Never>]
+    var continuations: [CheckedContinuation<Void, Error>]
     let observer: NSObjectProtocol
     let timeoutWorkItem: DispatchWorkItem
   }
-
-  private static let completionTimeout: TimeInterval = 30
 
   private var nextIdentifier = 0
   private var currentOwnerToken: String?
   private var pendingAnnouncement: PendingAnnouncement?
 
   deinit {
-    finishPendingAnnouncement()
+    completePendingAnnouncement(disposition: .interrupted)
   }
 
   func claimOwner(_ rawOwnerToken: String) async {
@@ -33,7 +31,7 @@ private final class GuidePupAccessibilityAnnouncementController {
         if self.currentOwnerToken != ownerToken {
           if self.pendingAnnouncement != nil {
             self.interruptCurrentAnnouncement()
-            self.finishPendingAnnouncement()
+            self.completePendingAnnouncement(disposition: .ownershipChanged)
           }
           self.currentOwnerToken = ownerToken
         }
@@ -57,7 +55,7 @@ private final class GuidePupAccessibilityAnnouncementController {
 
         if self.pendingAnnouncement?.ownerToken == ownerToken {
           self.interruptCurrentAnnouncement()
-          self.finishPendingAnnouncement()
+          self.completePendingAnnouncement(disposition: .ownershipReleased)
         }
         self.currentOwnerToken = nil
         continuation.resume(returning: ())
@@ -65,14 +63,14 @@ private final class GuidePupAccessibilityAnnouncementController {
     }
   }
 
-  func announce(_ rawMessage: String, ownerToken rawOwnerToken: String) async {
+  func announce(_ rawMessage: String, ownerToken rawOwnerToken: String) async throws {
     let message = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     let ownerToken = rawOwnerToken.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !message.isEmpty, !ownerToken.isEmpty else {
       return
     }
 
-    await withCheckedContinuation { continuation in
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       DispatchQueue.main.async {
         self.beginAnnouncement(
           message,
@@ -101,7 +99,7 @@ private final class GuidePupAccessibilityAnnouncementController {
         }
 
         self.interruptCurrentAnnouncement()
-        self.finishPendingAnnouncement()
+        self.completePendingAnnouncement(disposition: .cancelled)
         continuation.resume(returning: ())
       }
     }
@@ -111,7 +109,7 @@ private final class GuidePupAccessibilityAnnouncementController {
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async {
         self.interruptCurrentAnnouncement()
-        self.finishPendingAnnouncement()
+        self.completePendingAnnouncement(disposition: .interrupted)
         continuation.resume(returning: ())
       }
     }
@@ -131,7 +129,7 @@ private final class GuidePupAccessibilityAnnouncementController {
     UIAccessibility.post(notification: .announcement, argument: interrupt)
   }
 
-  func supersede(_ rawMessage: String, ownerToken rawOwnerToken: String) async {
+  func supersede(_ rawMessage: String, ownerToken rawOwnerToken: String) async throws {
     let message = rawMessage.trimmingCharacters(in: .whitespacesAndNewlines)
     let ownerToken = rawOwnerToken.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !ownerToken.isEmpty else {
@@ -142,7 +140,7 @@ private final class GuidePupAccessibilityAnnouncementController {
       return
     }
 
-    await withCheckedContinuation { continuation in
+    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       DispatchQueue.main.async {
         self.beginAnnouncement(
           message,
@@ -158,17 +156,15 @@ private final class GuidePupAccessibilityAnnouncementController {
     _ message: String,
     ownerToken: String,
     interruptExisting: Bool,
-    continuation: CheckedContinuation<Void, Never>
+    continuation: CheckedContinuation<Void, Error>
   ) {
     guard currentOwnerToken == ownerToken else {
-      continuation.resume(returning: ())
+      resume(continuation, disposition: .ownershipChanged)
       return
     }
 
     guard UIAccessibility.isVoiceOverRunning else {
-      finishPendingAnnouncement()
-      UIAccessibility.post(notification: .announcement, argument: message)
-      continuation.resume(returning: ())
+      resume(continuation, disposition: .voiceOverUnavailable)
       return
     }
 
@@ -183,8 +179,9 @@ private final class GuidePupAccessibilityAnnouncementController {
       return
     }
 
-    takePendingAnnouncementContinuations().forEach { staleContinuation in
-      staleContinuation.resume(returning: ())
+    if pendingAnnouncement != nil {
+      interruptCurrentAnnouncement()
+      completePendingAnnouncement(disposition: .superseded)
     }
     nextIdentifier += 1
     let identifier = nextIdentifier
@@ -197,7 +194,7 @@ private final class GuidePupAccessibilityAnnouncementController {
       self?.handleAnnouncementFinished(notification, identifier: identifier)
     }
     let timeoutWorkItem = DispatchWorkItem { [weak self] in
-      self?.finishPendingAnnouncement(identifier: identifier)
+      self?.timeoutPendingAnnouncement(identifier: identifier)
     }
     pendingAnnouncement = PendingAnnouncement(
       identifier: identifier,
@@ -222,7 +219,7 @@ private final class GuidePupAccessibilityAnnouncementController {
     }
     UIAccessibility.post(notification: .announcement, argument: announcement)
     DispatchQueue.main.asyncAfter(
-      deadline: .now() + Self.completionTimeout,
+      deadline: .now() + GuidePupAnnouncementDeliveryPolicy.completionTimeout(for: message),
       execute: timeoutWorkItem
     )
   }
@@ -236,21 +233,28 @@ private final class GuidePupAccessibilityAnnouncementController {
       return
     }
 
-    finishPendingAnnouncement(identifier: identifier)
+    completePendingAnnouncement(
+      identifier: identifier,
+      disposition: .completed(success: Self.announcementWasSuccessful(notification))
+    )
   }
 
-  private func takePendingAnnouncementContinuations() -> [CheckedContinuation<Void, Never>] {
-    guard let pendingAnnouncement else {
-      return []
+  private func timeoutPendingAnnouncement(identifier: Int) {
+    guard pendingAnnouncement?.identifier == identifier else {
+      return
     }
 
-    self.pendingAnnouncement = nil
-    NotificationCenter.default.removeObserver(pendingAnnouncement.observer)
-    pendingAnnouncement.timeoutWorkItem.cancel()
-    return pendingAnnouncement.continuations
+    interruptCurrentAnnouncement()
+    completePendingAnnouncement(
+      identifier: identifier,
+      disposition: .timedOut
+    )
   }
 
-  private func finishPendingAnnouncement(identifier: Int? = nil) {
+  private func completePendingAnnouncement(
+    identifier: Int? = nil,
+    disposition: GuidePupAnnouncementDeliveryDisposition
+  ) {
     guard let pendingAnnouncement else {
       return
     }
@@ -261,8 +265,26 @@ private final class GuidePupAccessibilityAnnouncementController {
     self.pendingAnnouncement = nil
     NotificationCenter.default.removeObserver(pendingAnnouncement.observer)
     pendingAnnouncement.timeoutWorkItem.cancel()
+    let result = GuidePupAnnouncementDeliveryPolicy.result(for: disposition)
     pendingAnnouncement.continuations.forEach { continuation in
+      switch result {
+      case .success:
+        continuation.resume(returning: ())
+      case .failure(let error):
+        continuation.resume(throwing: error)
+      }
+    }
+  }
+
+  private func resume(
+    _ continuation: CheckedContinuation<Void, Error>,
+    disposition: GuidePupAnnouncementDeliveryDisposition
+  ) {
+    switch GuidePupAnnouncementDeliveryPolicy.result(for: disposition) {
+    case .success:
       continuation.resume(returning: ())
+    case .failure(let error):
+      continuation.resume(throwing: error)
     }
   }
 
@@ -273,6 +295,18 @@ private final class GuidePupAccessibilityAnnouncementController {
     if let message = notification.userInfo?[UIAccessibility.announcementStringValueUserInfoKey]
       as? NSAttributedString {
       return message.string
+    }
+    return nil
+  }
+
+  private static func announcementWasSuccessful(_ notification: Notification) -> Bool? {
+    if let successful =
+      notification.userInfo?[UIAccessibility.announcementWasSuccessfulUserInfoKey] as? Bool {
+      return successful
+    }
+    if let successful =
+      notification.userInfo?[UIAccessibility.announcementWasSuccessfulUserInfoKey] as? NSNumber {
+      return successful.boolValue
     }
     return nil
   }
@@ -320,8 +354,8 @@ public final class GuidePupNavigationCoreModule: Module {
       await announcementController.releaseOwner(ownerToken)
     }
 
-    AsyncFunction("announce") { (message: String, ownerToken: String) async in
-      await announcementController.announce(message, ownerToken: ownerToken)
+    AsyncFunction("announce") { (message: String, ownerToken: String) in
+      try await announcementController.announce(message, ownerToken: ownerToken)
     }
 
     AsyncFunction("cancelAnnouncement") { (ownerToken: String) async in
@@ -332,8 +366,8 @@ public final class GuidePupNavigationCoreModule: Module {
       await announcementController.interruptAll()
     }
 
-    AsyncFunction("supersedeAnnouncement") { (message: String, ownerToken: String) async in
-      await announcementController.supersede(message, ownerToken: ownerToken)
+    AsyncFunction("supersedeAnnouncement") { (message: String, ownerToken: String) in
+      try await announcementController.supersede(message, ownerToken: ownerToken)
     }
 
     AsyncFunction("playHaptic") { (type: String) in

@@ -36,6 +36,11 @@ export interface GuidePupNavigationCoreCaptureResult extends AnalyzeFrameInput {
   timestampMs: number;
 }
 
+export interface GuidePupAnnouncementDeliveryOptions {
+  completionTimeoutMs?: number;
+  signal?: AbortSignal;
+}
+
 export interface GuidePupNavigationCoreState {
   available: boolean;
   lastCaptureLatencyMs?: number;
@@ -91,6 +96,43 @@ const fallbackState: GuidePupNavigationCoreState = {
 
 let fallbackAnnouncementOwnerToken: string | null = null;
 let announcementOwnerSequence = 0;
+const FALLBACK_ANNOUNCEMENT_COMPLETION_TIMEOUT_MINIMUM_MS = 15_000;
+const FALLBACK_ANNOUNCEMENT_COMPLETION_TIMEOUT_MAXIMUM_MS = 120_000;
+const FALLBACK_ANNOUNCEMENT_COMPLETION_GRACE_MS = 8_000;
+const FALLBACK_ANNOUNCEMENT_COMPLETION_MS_PER_WORD = 2_400;
+let fallbackAnnouncementGeneration = 0;
+
+interface PendingFallbackAnnouncement {
+  cancel(error: Error): void;
+  generation: number;
+  ownerToken: string;
+  requestGeneration: number;
+}
+
+let pendingFallbackAnnouncement: PendingFallbackAnnouncement | null = null;
+let fallbackAnnouncementRequestGeneration = 0;
+
+export function getFallbackAnnouncementCompletionTimeoutMs(
+  message: string,
+  requestedTimeoutMs?: number,
+) {
+  if (
+    typeof requestedTimeoutMs === "number"
+    && Number.isFinite(requestedTimeoutMs)
+    && requestedTimeoutMs > 0
+  ) {
+    return Math.max(1, Math.floor(requestedTimeoutMs));
+  }
+
+  const wordCount = Math.max(1, message.trim().split(/\s+/).filter(Boolean).length);
+  const estimatedTimeoutMs =
+    wordCount * FALLBACK_ANNOUNCEMENT_COMPLETION_MS_PER_WORD
+    + FALLBACK_ANNOUNCEMENT_COMPLETION_GRACE_MS;
+  return Math.min(
+    FALLBACK_ANNOUNCEMENT_COMPLETION_TIMEOUT_MAXIMUM_MS,
+    Math.max(FALLBACK_ANNOUNCEMENT_COMPLETION_TIMEOUT_MINIMUM_MS, estimatedTimeoutMs),
+  );
+}
 
 export function createGuidePupAnnouncementOwnerToken(scope: string) {
   announcementOwnerSequence += 1;
@@ -99,6 +141,292 @@ export function createGuidePupAnnouncementOwnerToken(scope: string) {
 
 function getExecutionPath(): GuidePupNavigationCoreExecutionPath {
   return nativeModule ? "native-core" : "js-fallback";
+}
+
+function createFallbackAnnouncementMarker(generation: number) {
+  const encodedGeneration = generation
+    .toString(2)
+    .split("")
+    .map((bit) => bit === "1" ? "\u2063" : "\u2060")
+    .join("");
+  return `\u2063${encodedGeneration}\u2063`;
+}
+
+function cancelPendingFallbackAnnouncement(reason: string, ownerToken?: string) {
+  const pending = pendingFallbackAnnouncement;
+  if (!pending || (ownerToken && pending.ownerToken !== ownerToken)) {
+    return false;
+  }
+
+  pending.cancel(new Error(reason));
+  return true;
+}
+
+function interruptFallbackAccessibilityChannel() {
+  if (Platform.OS !== "ios") {
+    return false;
+  }
+
+  try {
+    AccessibilityInfo.announceForAccessibilityWithOptions("\u200B", { queue: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function waitForFallbackAnnouncementCompletion(
+  message: string,
+  ownerToken: string,
+  requestGeneration: number,
+  options?: GuidePupAnnouncementDeliveryOptions,
+) {
+  if (
+    Platform.OS !== "ios"
+    || fallbackAnnouncementOwnerToken !== ownerToken
+    || fallbackAnnouncementRequestGeneration !== requestGeneration
+    || options?.signal?.aborted
+  ) {
+    return Promise.reject(new Error("VoiceOver announcement ownership is no longer current."));
+  }
+  if (
+    typeof AccessibilityInfo.addEventListener !== "function"
+    || typeof AccessibilityInfo.announceForAccessibilityWithOptions !== "function"
+  ) {
+    return Promise.reject(new Error("VoiceOver announcement completion is unavailable."));
+  }
+
+  const completionTimeoutMs = getFallbackAnnouncementCompletionTimeoutMs(
+    message,
+    options?.completionTimeoutMs,
+  );
+  const generation = fallbackAnnouncementGeneration + 1;
+  fallbackAnnouncementGeneration = generation;
+  const postedAnnouncement = `${message}${createFallbackAnnouncementMarker(generation)}`;
+  const signal = options?.signal;
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let subscription: ReturnType<typeof AccessibilityInfo.addEventListener> | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    function cleanup() {
+      if (subscription) {
+        subscription.remove();
+        subscription = null;
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      signal?.removeEventListener("abort", handleAbort);
+      if (pendingFallbackAnnouncement?.generation === generation) {
+        pendingFallbackAnnouncement = null;
+      }
+    }
+
+    function settle(error?: Error, interrupt = false) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      if (interrupt) {
+        interruptFallbackAccessibilityChannel();
+      }
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    }
+
+    function handleAbort() {
+      settle(new Error("VoiceOver announcement delivery was cancelled."), true);
+    }
+
+    try {
+      subscription = AccessibilityInfo.addEventListener(
+        "announcementFinished",
+        (event) => {
+          if (
+            pendingFallbackAnnouncement?.generation !== generation
+            || pendingFallbackAnnouncement.ownerToken !== ownerToken
+            || pendingFallbackAnnouncement.requestGeneration !== requestGeneration
+            || fallbackAnnouncementOwnerToken !== ownerToken
+            || fallbackAnnouncementRequestGeneration !== requestGeneration
+            || event.announcement !== postedAnnouncement
+          ) {
+            return;
+          }
+          if (!event.success) {
+            settle(new Error("VoiceOver announcement delivery failed."), true);
+            return;
+          }
+          settle();
+        },
+      );
+      timeoutId = setTimeout(() => {
+        settle(
+          new Error(
+            `VoiceOver announcement completion did not arrive within ${completionTimeoutMs} ms.`,
+          ),
+          true,
+        );
+      }, completionTimeoutMs);
+      signal?.addEventListener("abort", handleAbort, { once: true });
+      if (
+        signal?.aborted
+        || fallbackAnnouncementOwnerToken !== ownerToken
+        || fallbackAnnouncementRequestGeneration !== requestGeneration
+      ) {
+        settle(new Error("VoiceOver announcement ownership is no longer current."));
+        return;
+      }
+      pendingFallbackAnnouncement = {
+        cancel: settle,
+        generation,
+        ownerToken,
+        requestGeneration,
+      };
+      AccessibilityInfo.announceForAccessibilityWithOptions(postedAnnouncement, { queue: false });
+    } catch (error) {
+      settle(
+        error instanceof Error
+          ? error
+          : new Error("VoiceOver announcement delivery could not start."),
+        true,
+      );
+    }
+  });
+}
+
+function beginAnnouncementRequest() {
+  fallbackAnnouncementRequestGeneration += 1;
+  const requestGeneration = fallbackAnnouncementRequestGeneration;
+  const pendingCancelled = cancelPendingFallbackAnnouncement(
+    "VoiceOver announcement was replaced by newer output.",
+  );
+  if (pendingCancelled && !interruptFallbackAccessibilityChannel()) {
+    throw new Error("VoiceOver announcement interruption could not be posted.");
+  }
+  return requestGeneration;
+}
+
+function invalidateAnnouncementRequests() {
+  fallbackAnnouncementRequestGeneration += 1;
+}
+
+function announcementRequestIsCurrent(
+  requestGeneration: number,
+  ownerToken: string,
+  signal?: AbortSignal,
+) {
+  return (
+    Platform.OS === "ios"
+    && fallbackAnnouncementOwnerToken === ownerToken
+    && fallbackAnnouncementRequestGeneration === requestGeneration
+    && !signal?.aborted
+  );
+}
+
+function settleNativeAnnouncementDelivery(input: {
+  cancel: () => Promise<void>;
+  deliver: () => Promise<void>;
+  signal?: AbortSignal;
+}) {
+  const signal = input.signal;
+  if (!signal) {
+    return input.deliver();
+  }
+  if (signal.aborted) {
+    void input.cancel().catch(() => undefined);
+    return Promise.reject(new Error("VoiceOver announcement delivery was cancelled."));
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", handleAbort);
+    };
+    const settle = (error?: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    };
+    const handleAbort = () => {
+      void input.cancel().catch(() => undefined);
+      settle(new Error("VoiceOver announcement delivery was cancelled."));
+    };
+
+    signal.addEventListener("abort", handleAbort, { once: true });
+    if (signal.aborted) {
+      handleAbort();
+      return;
+    }
+    void Promise.resolve()
+      .then(input.deliver)
+      .then(
+        () => settle(),
+        (error) => settle(error),
+      );
+  });
+}
+
+async function deliverAnnouncementWithFallback(input: {
+  message: string;
+  nativeCancellation: (() => Promise<void>) | null;
+  nativeDelivery: (() => Promise<void>) | null;
+  options?: GuidePupAnnouncementDeliveryOptions;
+  ownerToken: string;
+}) {
+  if (
+    Platform.OS !== "ios"
+    || fallbackAnnouncementOwnerToken !== input.ownerToken
+    || input.options?.signal?.aborted
+  ) {
+    throw new Error("VoiceOver announcement ownership is no longer current.");
+  }
+
+  const requestGeneration = beginAnnouncementRequest();
+  if (input.nativeDelivery) {
+    let nativeRejected = false;
+    try {
+      await settleNativeAnnouncementDelivery({
+        cancel: input.nativeCancellation
+          ?? (() => Promise.resolve()),
+        deliver: input.nativeDelivery,
+        signal: input.options?.signal,
+      });
+    } catch {
+      nativeRejected = true;
+    }
+    if (!announcementRequestIsCurrent(
+      requestGeneration,
+      input.ownerToken,
+      input.options?.signal,
+    )) {
+      throw new Error("VoiceOver announcement ownership is no longer current.");
+    }
+    if (!nativeRejected) {
+      return;
+    }
+  }
+
+  await waitForFallbackAnnouncementCompletion(
+    input.message,
+    input.ownerToken,
+    requestGeneration,
+    input.options,
+  );
 }
 
 const pendingTemporaryFrameCleanup = new Set<string>();
@@ -285,9 +613,25 @@ async function claimAnnouncementOwner(ownerToken: string) {
     return;
   }
 
+  const previousOwnerToken = fallbackAnnouncementOwnerToken;
+  const ownerChanged = previousOwnerToken !== null && previousOwnerToken !== trimmedOwnerToken;
+  if (ownerChanged) {
+    invalidateAnnouncementRequests();
+  }
+  const pendingCancelled = ownerChanged
+    ? cancelPendingFallbackAnnouncement(
+      "VoiceOver announcement ownership changed.",
+      previousOwnerToken,
+    )
+    : false;
+  const fallbackInterrupted =
+    !pendingCancelled || interruptFallbackAccessibilityChannel();
   fallbackAnnouncementOwnerToken = trimmedOwnerToken;
   if (nativeModule) {
     await nativeModule.claimAnnouncementOwner(trimmedOwnerToken).catch(() => undefined);
+  }
+  if (!fallbackInterrupted) {
+    throw new Error("VoiceOver announcement interruption could not be posted.");
   }
 }
 
@@ -297,33 +641,57 @@ async function releaseAnnouncementOwner(ownerToken: string) {
     return;
   }
 
+  const ownerIsCurrent = fallbackAnnouncementOwnerToken === trimmedOwnerToken;
+  if (ownerIsCurrent) {
+    invalidateAnnouncementRequests();
+  }
+  const pendingCancelled = cancelPendingFallbackAnnouncement(
+    "VoiceOver announcement ownership was released.",
+    trimmedOwnerToken,
+  );
+  const fallbackInterrupted =
+    !pendingCancelled || interruptFallbackAccessibilityChannel();
   if (fallbackAnnouncementOwnerToken === trimmedOwnerToken) {
     fallbackAnnouncementOwnerToken = null;
   }
+  let nativeReleased = true;
   if (nativeModule) {
-    await nativeModule.releaseAnnouncementOwner(trimmedOwnerToken).catch(() => undefined);
+    try {
+      await nativeModule.releaseAnnouncementOwner(trimmedOwnerToken);
+    } catch {
+      nativeReleased = false;
+    }
+  }
+  if (!fallbackInterrupted) {
+    throw new Error("VoiceOver announcement interruption could not be posted.");
+  }
+  if (!nativeReleased) {
+    throw new Error("Native VoiceOver announcement owner release could not be confirmed.");
   }
 }
 
-async function announce(message: string, ownerToken: string) {
+async function announce(
+  message: string,
+  ownerToken: string,
+  options?: GuidePupAnnouncementDeliveryOptions,
+) {
   const trimmed = message.trim();
   const trimmedOwnerToken = ownerToken.trim();
   if (!trimmed || !trimmedOwnerToken) {
     return;
   }
 
-  if (nativeModule) {
-    try {
-      await nativeModule.announce(trimmed, trimmedOwnerToken);
-      return;
-    } catch {
-      // Fall through to the JS accessibility path if the native bridge rejects.
-    }
-  }
-
-  if (Platform.OS === "ios" && fallbackAnnouncementOwnerToken === trimmedOwnerToken) {
-    await AccessibilityInfo.announceForAccessibility(trimmed);
-  }
+  await deliverAnnouncementWithFallback({
+    message: trimmed,
+    nativeCancellation: nativeModule
+      ? () => nativeModule.cancelAnnouncement(trimmedOwnerToken)
+      : null,
+    nativeDelivery: nativeModule
+      ? () => nativeModule.announce(trimmed, trimmedOwnerToken)
+      : null,
+    options,
+    ownerToken: trimmedOwnerToken,
+  });
 }
 
 async function cancelAnnouncement(ownerToken: string) {
@@ -332,28 +700,73 @@ async function cancelAnnouncement(ownerToken: string) {
     return;
   }
 
-  if (nativeModule) {
-    await nativeModule.cancelAnnouncement(trimmedOwnerToken).catch(() => undefined);
-    return;
+  const ownerIsCurrent = fallbackAnnouncementOwnerToken === trimmedOwnerToken;
+  if (ownerIsCurrent) {
+    invalidateAnnouncementRequests();
   }
-
-  if (Platform.OS === "ios" && fallbackAnnouncementOwnerToken === trimmedOwnerToken) {
-    AccessibilityInfo.announceForAccessibilityWithOptions("\u200B", { queue: false });
+  const pendingCancelled = cancelPendingFallbackAnnouncement(
+    "VoiceOver announcement delivery was cancelled.",
+    trimmedOwnerToken,
+  );
+  const fallbackInterrupted =
+    !pendingCancelled || interruptFallbackAccessibilityChannel();
+  let nativeInterrupted = true;
+  if (nativeModule) {
+    try {
+      await nativeModule.cancelAnnouncement(trimmedOwnerToken);
+    } catch {
+      nativeInterrupted = false;
+    }
+  } else if (
+    !pendingCancelled
+    &&
+    Platform.OS === "ios"
+    && fallbackAnnouncementOwnerToken === trimmedOwnerToken
+  ) {
+    if (!interruptFallbackAccessibilityChannel()) {
+      throw new Error("VoiceOver announcement interruption could not be posted.");
+    }
+  }
+  if (!fallbackInterrupted) {
+    throw new Error("VoiceOver announcement interruption could not be posted.");
+  }
+  if (!nativeInterrupted) {
+    throw new Error("Native VoiceOver announcement interruption could not be confirmed.");
   }
 }
 
 async function interruptAllAnnouncements() {
+  invalidateAnnouncementRequests();
+  const pendingCancelled = cancelPendingFallbackAnnouncement(
+    "VoiceOver announcements were interrupted.",
+  );
+  const fallbackInterrupted =
+    !pendingCancelled || interruptFallbackAccessibilityChannel();
+  let nativeInterrupted = true;
   if (nativeModule) {
-    await nativeModule.interruptAllAnnouncements().catch(() => undefined);
-    return;
+    try {
+      await nativeModule.interruptAllAnnouncements();
+    } catch {
+      nativeInterrupted = false;
+    }
+  } else if (!pendingCancelled) {
+    if (!interruptFallbackAccessibilityChannel()) {
+      throw new Error("VoiceOver announcement interruption could not be posted.");
+    }
   }
-
-  if (Platform.OS === "ios") {
-    AccessibilityInfo.announceForAccessibilityWithOptions("\u200B", { queue: false });
+  if (!fallbackInterrupted) {
+    throw new Error("VoiceOver announcement interruption could not be posted.");
+  }
+  if (!nativeInterrupted) {
+    throw new Error("Native VoiceOver announcements could not be interrupted.");
   }
 }
 
-async function supersedeAnnouncement(message: string, ownerToken: string) {
+async function supersedeAnnouncement(
+  message: string,
+  ownerToken: string,
+  options?: GuidePupAnnouncementDeliveryOptions,
+) {
   const trimmed = message.trim();
   const trimmedOwnerToken = ownerToken.trim();
   if (!trimmedOwnerToken) {
@@ -363,19 +776,17 @@ async function supersedeAnnouncement(message: string, ownerToken: string) {
     await cancelAnnouncement(trimmedOwnerToken);
     return;
   }
-
-  if (nativeModule) {
-    try {
-      await nativeModule.supersedeAnnouncement(trimmed, trimmedOwnerToken);
-      return;
-    } catch {
-      // Fall through to the single JS accessibility channel.
-    }
-  }
-
-  if (Platform.OS === "ios" && fallbackAnnouncementOwnerToken === trimmedOwnerToken) {
-    AccessibilityInfo.announceForAccessibilityWithOptions(trimmed, { queue: false });
-  }
+  await deliverAnnouncementWithFallback({
+    message: trimmed,
+    nativeCancellation: nativeModule
+      ? () => nativeModule.cancelAnnouncement(trimmedOwnerToken)
+      : null,
+    nativeDelivery: nativeModule
+      ? () => nativeModule.supersedeAnnouncement(trimmed, trimmedOwnerToken)
+      : null,
+    options,
+    ownerToken: trimmedOwnerToken,
+  });
 }
 
 async function playFallbackHaptic(type: GuidePupNavigationCoreHapticType) {

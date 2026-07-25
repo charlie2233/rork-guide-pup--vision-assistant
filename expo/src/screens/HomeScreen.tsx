@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useVoice } from '@/src/components/VoiceAnnouncer';
-import { useSettings } from '@/src/providers/SettingsProvider';
+import { type SpeechRate, useSettings } from '@/src/providers/SettingsProvider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGuidePupRouter } from '@/src/lib/router';
 import { recordVoiceSnapshot } from '@/src/lib/diagnostics';
@@ -20,6 +20,7 @@ import {
   type GuidePupHandledTranscript,
 } from '@/src/lib/voiceCommands';
 import { buildVoiceStatusSummary, describeHaptics, describeSpeechRate, fasterSpeechRate, slowerSpeechRate } from '@/src/lib/voiceSettings';
+import { settleCurrentAnnouncementDelivery } from '@/src/lib/runtimeSafety';
 import {
   createGuidePupAnnouncementOwnerToken,
   GuidePupNavigationCore,
@@ -49,6 +50,7 @@ export default function HomeScreen() {
   const voiceRecoveryExhaustedHandledRef = useRef(false);
   const voiceResponseGenerationRef = useRef(0);
   const announcementOwnerTokenRef = useRef<string | null>(null);
+  const listeningCueOwnerTokenRef = useRef<string | null>(null);
   const voiceSessionAttemptGenerationRef = useRef(0);
   const voiceSessionOwnerTokenRef = useRef<string | null>(null);
   const voiceOverResolutionRef = useRef<Promise<VoiceOverState> | null>(null);
@@ -180,7 +182,14 @@ export default function HomeScreen() {
           return;
         }
         if (voiceOverState === "enabled") {
-          await GuidePupNavigationCore.announce(permissionMessage, announcementOwnerToken).catch(() => undefined);
+          await settleCurrentAnnouncementDelivery({
+            deliver: () => GuidePupNavigationCore.announce(
+              permissionMessage,
+              announcementOwnerToken,
+            ),
+            interrupt: () => GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken),
+            isCurrent: attemptIsCurrent,
+          });
         } else {
           await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
           await GuidePupVoiceControl.speak(permissionMessage, {
@@ -225,6 +234,15 @@ export default function HomeScreen() {
           speechPermission: state.speechPermission,
           voiceProcessingEnabled: state.voiceProcessingEnabled,
         });
+      }
+      if (
+        state?.listening
+        && voiceSessionOwnerTokenRef.current === ownerToken
+        && attemptIsCurrent()
+        && listeningCueOwnerTokenRef.current !== ownerToken
+      ) {
+        listeningCueOwnerTokenRef.current = ownerToken;
+        await GuidePupNavigationCore.playAudioCue("success").catch(() => undefined);
       }
     } catch (error) {
       recordVoiceSnapshot({
@@ -291,7 +309,28 @@ export default function HomeScreen() {
       return;
     }
     if (voiceOverState === "enabled") {
-      await GuidePupNavigationCore.announce(message, announcementOwnerToken).catch(() => undefined);
+      const announcementOutcome = await settleCurrentAnnouncementDelivery({
+        deliver: () => GuidePupNavigationCore.announce(message, announcementOwnerToken),
+        interrupt: () => GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken),
+        isCurrent: responseIsCurrent,
+      });
+      if (announcementOutcome === "unsafe") {
+        return;
+      }
+      if (announcementOutcome === "interrupted") {
+        recordVoiceSnapshot({
+          lastError: "VoiceOver announcement delivery failed and was interrupted.",
+          listening: false,
+          speaking: false,
+        });
+        if (settings.hapticsEnabled) {
+          await GuidePupNavigationCore.playHaptic("error").catch(() => undefined);
+          if (!responseIsCurrent()) {
+            return;
+          }
+        }
+        void GuidePupNavigationCore.playAudioCue("error");
+      }
     } else {
       await GuidePupNavigationCore.cancelAnnouncement(announcementOwnerToken).catch(() => undefined);
       if (!responseIsCurrent()) {
@@ -325,6 +364,35 @@ export default function HomeScreen() {
   useEffect(() => {
     speakVoiceResponseRef.current = speakVoiceResponse;
   }, [speakVoiceResponse]);
+
+  const announceSpeechRateResult = useCallback(async (input: {
+    nextRate: SpeechRate;
+    result: "already" | "failed" | "saved";
+    undoCommand: "faster speech" | "slower speech";
+  }) => {
+    if (input.result === "failed") {
+      await speakVoiceResponse(
+        "I could not save the speech rate. The setting was not changed.",
+        "stop",
+      );
+      return;
+    }
+
+    const voiceOverState = await resolveVoiceOverState();
+    const rateDescription = describeSpeechRate(input.nextRate);
+    const message = voiceOverState === "enabled"
+      ? input.result === "already"
+        ? `App speech rate is already saved as ${rateDescription} for when VoiceOver is off. VoiceOver controls its own speech rate.`
+        : `App speech rate saved as ${rateDescription} for when VoiceOver is off. VoiceOver controls its own speech rate.`
+      : input.result === "already"
+        ? `Speech rate is already ${rateDescription}.`
+        : `Speech rate set to ${rateDescription}. Say ${input.undoCommand} to undo.`;
+    await speakVoiceResponse(
+      message,
+      input.result === "saved" ? "success" : null,
+      input.nextRate === "slow" ? 0.7 : input.nextRate === "fast" ? 1.2 : 0.9,
+    );
+  }, [resolveVoiceOverState, speakVoiceResponse]);
 
   const startGuidanceFromHome = useCallback(() => {
     voiceResponseGenerationRef.current += 1;
@@ -384,6 +452,10 @@ export default function HomeScreen() {
       void releaseOwnedAnnouncementOwner({
         ownerRef: announcementOwnerTokenRef,
         release: (ownerToken) => GuidePupNavigationCore.releaseAnnouncementOwner(ownerToken),
+      }).catch(() => {
+        recordVoiceSnapshot({
+          lastError: "VoiceOver announcement owner release could not be confirmed.",
+        });
       });
       void stopOwnedVoiceSession({
         ownerRef: voiceSessionOwnerTokenRef,
@@ -473,31 +545,35 @@ export default function HomeScreen() {
         case "slower-speech": {
           const nextRate = slowerSpeechRate(settings.speechRate);
           if (nextRate === settings.speechRate) {
-            void speakVoiceResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`, null);
+            void announceSpeechRateResult({
+              nextRate,
+              result: "already",
+              undoCommand: "faster speech",
+            });
             return;
           }
-          void updateSpeechRate(nextRate).then((saved) => speakVoiceResponse(
-            saved
-              ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say faster speech to undo.`
-              : "I could not save the speech rate. The setting was not changed.",
-            saved ? "success" : "stop",
-            saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
-          ));
+          void updateSpeechRate(nextRate).then((saved) => announceSpeechRateResult({
+            nextRate,
+            result: saved ? "saved" : "failed",
+            undoCommand: "faster speech",
+          }));
           return;
         }
         case "faster-speech": {
           const nextRate = fasterSpeechRate(settings.speechRate);
           if (nextRate === settings.speechRate) {
-            void speakVoiceResponse(`Speech rate is already ${describeSpeechRate(nextRate)}.`, null);
+            void announceSpeechRateResult({
+              nextRate,
+              result: "already",
+              undoCommand: "slower speech",
+            });
             return;
           }
-          void updateSpeechRate(nextRate).then((saved) => speakVoiceResponse(
-            saved
-              ? `Speech rate set to ${describeSpeechRate(nextRate)}. Say slower speech to undo.`
-              : "I could not save the speech rate. The setting was not changed.",
-            saved ? "success" : "stop",
-            saved ? (nextRate === "slow" ? 0.7 : nextRate === "fast" ? 1.2 : 0.9) : undefined,
-          ));
+          void updateSpeechRate(nextRate).then((saved) => announceSpeechRateResult({
+            nextRate,
+            result: saved ? "saved" : "failed",
+            undoCommand: "slower speech",
+          }));
           return;
         }
         case "more-detail":
@@ -606,6 +682,7 @@ export default function HomeScreen() {
       stateSubscription.remove();
     };
   }, [
+    announceSpeechRateResult,
     router,
     settings,
     speakVoiceResponse,
@@ -618,17 +695,6 @@ export default function HomeScreen() {
 
   const handlePress = () => {
     startGuidanceFromHome();
-  };
-
-  const handleLongPress = () => {
-    if (settings.hapticsEnabled) {
-      void GuidePupNavigationCore.playHaptic("error");
-    }
-    void GuidePupNavigationCore.playAudioCue("error");
-    void speakVoiceResponse(
-      "SOS shortcut is not connected in this build. Use your phone emergency shortcut if you need help.",
-      null,
-    );
   };
 
   const handleOpenSettings = () => {
@@ -649,11 +715,11 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={styles.button}
           onPress={handlePress}
-          onLongPress={handleLongPress}
           activeOpacity={0.8}
           accessibilityLabel="Start Guidance"
           accessibilityRole="button"
-          accessibilityHint="Double tap to start guidance. Long press for SOS."
+          accessibilityHint="Double tap to start guidance."
+          testID="home-start-guidance"
         >
           <Text style={styles.text}>Start Guidance</Text>
         </TouchableOpacity>

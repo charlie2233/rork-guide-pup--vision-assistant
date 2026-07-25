@@ -4,13 +4,34 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `c2b8781`
 
+## Current gate on 2026-07-24
+
+- Apple identifiers are confirmed: App Store Connect app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, target build `4`, team `K99RADPB9G`, SKU `EX1766553072106`, and copyright `2026 XIANMIN CHEN`. Support email is `charliehan112@gmail.com`.
+- App Store Connect version `1.0.0` remains Prepare for Submission. No current build is selected, the only previously visible build is expired build `2`, App Review Notes are stale, and App Privacy and accessibility declarations are unpublished. Canonical source notes will be pushed later; no App Store UI mutation was made during this read-only check.
+- Support URL, marketing URL, and privacy URL were authenticated in App Store Connect as `https://guidepup-site.pages.dev/support`, `https://guidepup-site.pages.dev`, and `https://guidepup-site.pages.dev/privacy`.
+- The pending launch-source change closes camera handoff, STOP-retry, VoiceOver delivery, review-copy, and privacy-manifest gaps. A failed touch STOP now remains on Navigation in a retryable critical hold, voice-recovery speech keeps non-STOP commands blocked until delivery or interruption is confirmed, and unconfirmed voice STOP shutdown/feedback retains the same safety hold until a bounded retry succeeds. App Review notes derive from one canonical ordered no-screen command sequence and disclose that Guide Pup is assistive, may miss hazards, and is not an emergency service.
+- The `3cc852c` Ad Hoc archive, App Store IPA, candidate manifest, backend smoke files, and simulator screenshots are superseded. They must not be uploaded or presented as current evidence. A new exact-revision archive and fresh direct-capture screenshots are required.
+- An authenticated read-only observation on 2026-07-24 showed the live iOS 1.0.0 screenshot slot labeled `6.5-inch Display`, accepting portrait `1242 x 2688` or `1284 x 2778` plus landscape equivalents, with `0/10 screenshots`. Prefer direct capture at `1284 x 2778` when available, but no matching asset is claimed yet. The final set still requires real Home, provider-backed active guidance, genuine network-loss safe STOP, Settings, and optional Safety states, plus a final authenticated recheck before upload. Mock guidance, raw/private media, debug state, and internal diagnostics are prohibited.
+- Local source gates currently pass. A same-day sanitized wired-iPhone check previously reported `ready`, but the latest 2026-07-24 18:21 PDT check is `blocked`: the phone remains paired/trusted with Developer Mode enabled and visible to `xctrace`, while CoreDevice lists it unavailable, the active process probe fails, no USB or same-LAN path is detected, and Xcode has no runnable destination. The earlier pass is transport history, not launch-passing sensory proof. `check:no-screen-evidence` remains intentionally blocked until transport is restored and the exact-revision physical no-screen run is completed.
+
+Commands:
+
+```bash
+npm --prefix expo run release:preflight:preview
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run check:ios-device -- --json
+git diff --check
+```
+
+Submission decision: do not upload or submit yet. Required order is exact source commit -> exact Worker deploy/smoke -> fresh signed candidate -> real-iPhone native and JS-fallback no-screen evidence -> TestFlight upload/process/install -> repeat the no-screen smoke on the processed build -> capture final screenshots -> complete privacy/accessibility metadata -> final authenticated review -> submit.
+
 ## Current gate on 2026-07-20
 
 - Apple identifiers are resolved: app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, build `4`, team `K99RADPB9G`, and copyright `2026 XIANMIN CHEN`. App Store Connect authentication must be rechecked before any metadata mutation; no upload or submission is claimed.
 - Apple Developer remains authenticated. Distribution signing, the App Store profile, and a newly generated one-device Ad Hoc profile are present. The Ad Hoc profile permits exact archive installation for blind validation while retaining `get-task-allow=false` and the Apple Distribution identity.
 - A signed build `4` archive and exported App Store IPA were produced from commit `da95d8e`; deep codesign, App Store and Ad Hoc entitlements, privacy manifests, production API routing, and client secret/direct-provider scans passed. They are superseded because the final source now adds Apple's required Environment Scanning disclosure and an explicit VoiceOver-accessible JS fallback validation route; a new exact-revision archive and IPA are required.
 - Exact-commit staging and production Workers from `da95d8e` passed strict provider-backed guidance and scene-query smoke with `gpt-5.6-sol` and prompt `2026-07-18.v1`. Any new tracked revision must be redeployed and re-smoked before candidate evidence is regenerated.
-- Two 6.9-inch simulator screenshot candidates exist at `expo/store-assets/screenshots/01-home-6.9.jpg` and `02-settings-6.9.jpg`, both `1320x2868`. They meet dimensions but are not final store-quality assets and are not proof of the physical no-screen flow.
+- Two superseded 6.9-inch simulator screenshot candidates exist at `expo/store-assets/screenshots/01-home-6.9.jpg` and `02-settings-6.9.jpg`, both `1320x2868`. They do not match the currently observed 6.5-inch portrait sizes, are not final store-quality assets, and are not proof of the physical no-screen flow.
 - App Store Connect still has no current candidate build attached, App Privacy is not completed, and Support URL/build/screenshots need final authenticated review. Submission remains blocked until the real-iPhone no-screen artifact passes on the rebuilt candidate, the same archive is uploaded and processed in TestFlight, and the processed build passes the no-screen smoke again.
 
 All later dated evidence is retained as phase history. Older authentication, model, device, and unresolved-input statements below do not override the current gate above.

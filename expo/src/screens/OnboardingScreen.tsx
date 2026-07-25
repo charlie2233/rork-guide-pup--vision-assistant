@@ -9,7 +9,8 @@ import { useSettings } from "@/src/providers/SettingsProvider";
 const onboardingSteps = [
   {
     title: "Welcome to Guide Pup",
-    description: "I use your camera and voice to guide you through any space.",
+    description:
+      "Guide Pup uses your camera and voice for assistive guidance. It may miss hazards, so stop whenever you are uncertain.",
     buttonLabel: "Continue",
   },
   {

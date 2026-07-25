@@ -5,6 +5,32 @@ Branch: `codex/guidepup-credentialed-launch`
 Continuation start: `efa5e34`
 Latest continuation start: `b5c1c5e`
 
+## Current gate on 2026-07-24
+
+- The pending launch-source change serializes native-camera and JS-fallback ownership. A fallback `CameraView` cannot mount or analyze until native shutdown resolves, stale native/fallback generations cannot reclaim ownership, and simultaneous STOP/lifecycle shutdown callers share one bounded two-attempt native-stop sequence.
+- The required voice path remains deterministic: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics off/on -> repeat -> what do you see -> STOP during speech. The conversation answer remains separate from command parsing and cannot mutate navigation or settings.
+- Current local validation passed: iOS runtime safety `85/85`, privacy/launch contract `13/13`, no-screen evidence schema `23/23`, release config hardening `10/10`, Expo typecheck, lint, voice-command contract, static no-screen contract, conversation-memory isolation, smoke-evidence contract, and release-evidence contract.
+- The exact pending working tree also completed an official Release simulator build, install, and launch after CocoaPods included the executable native announcement policy. The launch log contains no GuidePup crash or runtime error. Simulator integration is not physical speech, VoiceOver, haptic, audio, or camera evidence.
+- These checks are source/static proof only. They do not prove that speech input is recognized, confirmations and earcons are audible, haptics are felt, VoiceOver announces correctly, STOP cuts through physical playback, settings survive a real relaunch, or either camera path captures on an iPhone.
+- A 2026-07-24 sanitized readiness recheck previously reported `ready`, proving the paired/trusted Developer Mode phone could execute a bounded CoreDevice process probe at that moment. The latest 18:21 PDT recheck is `blocked`: the phone is still paired/trusted and visible to `xctrace`, but CoreDevice lists it unavailable, the process probe fails, no USB or same-LAN path is detected, and Xcode has no runnable destination. Only identifier suffixes are retained in checked-in evidence.
+- The earlier `3cc852c` Ad Hoc install and process-liveness check are superseded by the pending source change and cannot satisfy this phase. No current `expo/release/no-screen-smoke.latest.json` exists.
+
+Commands:
+
+```bash
+npm --prefix expo run test:ios-runtime-safety
+npm --prefix expo run test:privacy-launch-contract
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run test:no-screen-evidence
+npm --prefix expo run check:no-screen-evidence
+npm --prefix expo run check:ios-device -- --json
+xcrun devicectl list devices --timeout 30 --json-output '<private-temporary-file>'
+system_profiler SPUSBDataType -json
+```
+
+Current blocker: restore the wired or same-LAN execution path, build and install the exact post-change revision, then complete both native-core and explicit JS-fallback no-screen runs. A prior transport pass does not replace current connectivity or sensory validation, and this phase is not launch-passing until the sanitized no-screen evidence artifact validates.
+
 ## Current gate on 2026-07-20
 
 - The launch candidate is version `1.0.0`, build `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`.

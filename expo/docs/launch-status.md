@@ -1,26 +1,28 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-07-20
+Last updated: 2026-07-24
 
 ## Current decision
 
-Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, Apple identifiers, distribution signing, and executable iPhone readiness are verified, but submission remains intentionally blocked on sensory no-screen evidence, an exact post-fix candidate, TestFlight retest, and final App Store Connect completion.
+Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, distribution signing, and the current active iPhone transport probe are verified, but the pending source is not yet committed or deployed. Submission remains intentionally blocked on exact-revision backend and binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
 
 Current hard blockers:
 
 - Rebuild the exact post-fix revision, install it on the wired iPhone, and complete the no-screen sequence with spoken input/output, VoiceOver, audible earcons, felt haptics, interruption recovery, settings persistence, native camera capture, explicit JS fallback capture, and partial STOP cut-through. No sensory pass is inferred from process liveness.
+- Restore and keep the iPhone unlocked on a wired or same-LAN execution path for the exact-candidate run. A same-day sanitized probe previously passed, but the latest 2026-07-24 18:21 PDT check is blocked: paired/trusted and Developer Mode enabled, yet CoreDevice unavailable, no active process probe, no USB/LAN path, and no Xcode runnable destination. Neither transport snapshot is sensory validation.
 - Redeploy and strictly smoke staging/production after the final tracked commit, then bind the sanitized request IDs and signed binary hash into candidate and no-screen evidence.
-- Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, Support URL, build selection, agreements, and App Review metadata in App Store Connect.
+- Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, App Accessibility, build selection, agreements, App Review metadata, and a final authenticated URL recheck in App Store Connect.
 
 Sentry is deliberately disabled, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
 
 Current local evidence:
 
-- Commit `da95d8e` is deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. Any later tracked revision must be redeployed before candidate evidence is valid.
-- A signed `da95d8e` Ad Hoc archive installed and launched on the paired/trusted Developer Mode iPhone; the suffix-only CoreDevice readiness probe passed. That archive and its App Store IPA passed deep codesign, entitlements, privacy-manifest, endpoint, and client-secret scans, but are superseded by the final privacy/fallback fixes.
-- Apple's Environment Scanning category is now declared as linked, App Functionality only, no tracking. Privacy contract tests pass `12/12`, focused runtime/source-contract tests pass `26/26`, no-screen evidence tests pass `23/23`, and TypeScript, lint, voice, release-evidence, smoke-evidence, and static no-screen checks pass.
-- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. The last authenticated read showed build `2` expired, no current build selected, App Privacy not started, no screenshots attached, and Support URL blank; reauthenticate before mutation.
+- Commit `3cc852c` was deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. The pending source change supersedes that proof, so both Workers must be redeployed and re-smoked after the final commit.
+- A signed `3cc852c` Ad Hoc candidate previously installed and launched on the paired/trusted Developer Mode iPhone. Its archive, IPA, candidate manifest, smoke files, and screenshots are superseded by the pending camera, voice, privacy, and reviewer-flow fixes and must not be submitted.
+- Apple's Environment Scanning category is declared as linked, for App Functionality and Analytics, with no tracking. Derived confidence, direction, and hazard-level results support bounded service-quality analysis; Photos or Videos remains App Functionality only.
+- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. An authenticated 2026-07-24 read showed no current build selected, App Privacy and App Accessibility not started, and `0/10` screenshots in the live 6.5-inch slot. Support, marketing, and privacy URLs are present.
 - Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Secret values were not read or logged.
+- The exact pending working tree built successfully, installed, and launched in a Release iOS simulator after the native announcement policy and CocoaPods integration changed. The fresh launch log contains no GuidePup crash or runtime error. This is native integration proof only, not a signed archive, hardware validation, or TestFlight evidence.
 
 All detailed backend and release sections below are retained as phase history. The decision and evidence above are authoritative for the current candidate.
 
