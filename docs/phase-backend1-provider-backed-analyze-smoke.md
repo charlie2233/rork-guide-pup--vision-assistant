@@ -4,14 +4,15 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
 
-## Current gate on 2026-07-19
+## Current gate on 2026-07-24
 
 - Wrangler OAuth is authenticated to the intended Cloudflare account. Staging and production each expose the required secret names `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; secret values were not read, printed, or written to the repository.
-- Commit `da95d8e` was deployed to staging Worker version `7dad98be-c5d8-4acf-9530-7acdba48ab0a` and production Worker version `2a71cbcc-bb23-4181-8389-b95e78c4a889`. Both strict dual-lane smokes passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, compact sampled-frame context, bounded retries/cost controls, deterministic STOP overrides, and stamped runtime provenance.
-- Staging request IDs: health `aab9772c-433f-4c33-9394-aca51f5ef6fa`, bootstrap `cc948ee8-0ea7-4a5a-829b-dac136784f18`, guidance `9ac44901-039b-465b-b0bc-1c62dfd962fe`, and scene query `db9e28d0-c397-4c6e-8fcd-e00fc721b6de`.
-- Production request IDs: health `ec9a6521-5029-49f2-8b5d-3b4fae132af2`, bootstrap `c72b69a2-3435-40ac-8628-5d5e5b0efeaa`, guidance `4d494d55-17c1-4615-9a03-1c96c6e2f7ec`, and scene query `76ba74e2-4dda-4465-a748-c1f74afdc4ce`.
+- Exact source commit `87196ef75b322d0b6f2f535a3164d9c098511bef` was deployed to staging Worker version `b5a53893-f108-4e54-9fc9-681b540a9b5f` and production Worker version `5f48006b-4b0a-400c-96a1-1c701b09b46a`. Both strict dual-lane smokes passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, compact sampled-frame context, bounded retries/cost controls, deterministic STOP overrides, and runtime identity bound to the active deployment.
+- Staging request IDs: health `551482b3-d811-4315-8a07-41e5485fc591`, bootstrap `2ed503ee-747f-40e3-bcbb-d4f2e07109dc`, guidance `99416589-7b47-46b7-8279-bd82965d9cfc`, and scene query `bda49849-9fdd-4821-84b9-ca3e722859e4`.
+- Production request IDs: health `ec738267-0fff-40c6-b2c3-675deb8e659d`, bootstrap `238122f6-9e6b-434b-b37b-9bf802225846`, guidance `11f66d6b-7bf4-4509-9f8a-be244dade670`, and scene query `b12859ee-bd84-4a66-b3bf-baf0ef3a003c`.
 - Backend privacy/runtime tests passed `50/50`; backend smoke and release-evidence tests passed `23/23`; typecheck and staging/production Wrangler dry-runs passed.
 - Any later tracked source commit must be redeployed and re-smoked before its signed candidate is accepted. The generated `smoke-results-*.latest` artifacts are the machine-readable authority for that exact revision and intentionally contain no raw media, credentials, tokens, signed URLs, or full device identifiers.
+- The backend launch gate is passing for this exact source. This proves provider routing, schema, safety normalization, provenance, and privacy-safe evidence; it does not prove physical camera/audio behavior or real-scene guidance quality.
 
 All later dated sections are retained as phase history. Their older model, authentication, device, request-ID, and blocker statements are not current launch claims; the gate above is authoritative for this candidate.
 

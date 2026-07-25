@@ -5,15 +5,16 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `f7eb562`
 Conversation-lane continuation start: `55622a1`
 
-## Current gate on 2026-07-20
+## Current gate on 2026-07-24
 
-- Explicit partial or final STOP remains deterministic while Guide Pup is speaking; the command parser no longer rejects a real STOP based on overlap with synthesized text.
+- Source commit `87196ef75b322d0b6f2f535a3164d9c098511bef` is pushed and keeps explicit partial or final STOP deterministic while Guide Pup is speaking; the command parser does not reject a real STOP based on overlap with synthesized text.
 - Native acoustic echo cancellation is required through `.voiceChat` and voice processing. Voice startup fails closed when that protection cannot be enabled, and diagnostics/no-screen evidence require the observed native `voiceProcessingEnabled` signal.
 - Home, Navigation, and the voice provider use owner-scoped native sessions. STOP and route cleanup invalidate pending attempts, while stale successful or rejected starts can stop only their own owner token.
-- Focused iOS runtime behavior and source-contract tests passed `29/29`; the full Expo scripted suite passed `93/93` before the candidate commit.
-- The post-race-fix arm64 Release simulator build for build `4` exited `0`; artifact inspection confirmed the expected app identity, privacy manifest, production backend URL, and absence of shipping provider keys/direct OpenAI calls. Hardware voice and accessibility behavior remains unclaimed.
+- Native announcement delivery now resolves only for an explicit completed/interrupted outcome, uses bounded deadlines, and rejects cancellation, owner transition, release, timeout, and unsafe outcomes. Voice recovery and failed STOP feedback keep the command lane in a persistent STOP-only safety hold until same-generation shutdown and spoken confirmation succeed.
+- Current iOS runtime safety tests passed `85/85`; privacy/launch contract passed `13/13`; release hardening passed `10/10`; typecheck, lint, voice/static no-screen contracts, and conversation-lane memory isolation passed.
+- The final official arm64 Release simulator build, install, and launch for build `4` exited `0`; artifact inspection confirmed the expected app identity, privacy manifest, production backend URL, and absence of shipping provider keys/direct OpenAI calls. Hardware voice and accessibility behavior remains unclaimed.
 - Settings now provides an explicit VoiceOver-reachable backup-camera validation route. It changes no persisted setting, cannot be selected by a model, forces only `js-fallback` for that route, and speaks that the fallback check is active while preserving STOP, haptics, VoiceOver, and timing ownership on iOS.
-- These tests do not replace the physical build `4` no-screen sequence. Real self-echo resistance, STOP cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruptions, and settings persistence remain hardware gates.
+- Exact-source staging and production Workers passed distinct provider-backed guidance and scene-query smokes, but cloud evidence cannot replace the physical build `4` no-screen sequence. The latest device probe is blocked on the unavailable wired/same-LAN execution path; real self-echo resistance, STOP cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruptions, and settings persistence remain hardware gates.
 
 Later dated sections retain phase history. The current owner-scoped listener and VoiceOver interruption behavior is described by the gate above and the latest bullets below.
 

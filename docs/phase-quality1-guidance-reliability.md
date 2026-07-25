@@ -7,13 +7,13 @@ Contract-tightening continuation start: `bf3da45`
 
 ## Current gate on 2026-07-24
 
-- The source contract remains strict Structured Outputs on `gpt-5.6-sol`, prompt `2026-07-18.v1`. Provider-backed staging and production evidence exists only for the superseded `3cc852c` revision until the pending source is committed, deployed, and re-smoked. Cloud continues to own model routing, safety normalization, request IDs, response structure, and conversation-lane AI; the shipping client contains no provider key or direct model call.
-- The pending iOS source change strengthens the ownership boundary without moving analysis into the client: native camera shutdown and JS fallback startup are serialized, fallback analysis waits for a generation-matched `CameraView` ready event, stale callbacks are rejected, and STOP/lifecycle callers share bounded shutdown retries.
+- Exact source `87196ef75b322d0b6f2f535a3164d9c098511bef` is pushed and deployed to staging and production with strict Structured Outputs on `gpt-5.6-sol`, prompt `2026-07-18.v1`. Both fresh dual-lane smokes are provider-backed, launch-valid, and bound to the active Worker versions. Cloud continues to own model routing, safety normalization, request IDs, response structure, and conversation-lane AI; the shipping client contains no provider key or direct model call.
+- The committed iOS source strengthens the ownership boundary without moving analysis into the client: native camera shutdown and JS fallback startup are serialized, fallback analysis waits for a generation-matched `CameraView` ready event, stale callbacks are rejected, and STOP/lifecycle callers share bounded shutdown retries.
 - The unsupported-command path now emits the real error earcon. Placeholder SOS controls and the unimplemented bounding-box setting were removed so accessibility copy no longer promises behavior that does not exist.
 - App, site, privacy matrix, and Apple privacy manifest now agree that derived scene attributes such as confidence, direction, and hazard category may be used for App Functionality and Analytics, with tracking disabled. Raw camera frames remain transient analysis input and are not declared as analytics.
 - Local validation passed: iOS runtime safety `85/85`, privacy/launch contract `13/13`, release-config hardening `10/10`, backend privacy/runtime `50/50`, backend smoke/release `23/23`, Expo/backend typechecks, Expo lint, voice/no-screen contracts, conversation-memory isolation, smoke evidence, and release evidence. The runtime suite compiles and executes the native announcement-delivery policy, rejects every unconfirmed completion or interruption outcome, gives full Help prompts a bounded slow-speech deadline, keeps voice recovery and failed voice STOP feedback in a STOP-only hold, and prevents touch STOP from leaving Navigation until shutdown and spoken confirmation are both proven.
 - The latest 2026-07-24 18:21 PDT sanitized device probe is `blocked`: the phone remains paired/trusted with Developer Mode enabled and visible to `xctrace`, but CoreDevice lists it unavailable, the active process probe fails, no USB or same-LAN execution path is present, and Xcode has no runnable destination. A same-day earlier `ready` probe is historical transport evidence only and does not prove physical guidance quality.
-- The earlier provider smoke at `3cc852c` is superseded historical proof only. It is not current exact-revision evidence for this pending source and must not be used as such. After the source commit, both Workers must be deployed from that exact revision and smokes must be refreshed with new request IDs.
+- Current staging request IDs are health `551482b3-d811-4315-8a07-41e5485fc591`, bootstrap `2ed503ee-747f-40e3-bcbb-d4f2e07109dc`, guidance `99416589-7b47-46b7-8279-bd82965d9cfc`, and scene query `bda49849-9fdd-4821-84b9-ca3e722859e4`. Current production request IDs are health `ec738267-0fff-40c6-b2c3-675deb8e659d`, bootstrap `238122f6-9e6b-434b-b37b-9bf802225846`, guidance `11f66d6b-7bf4-4509-9f8a-be244dade670`, and scene query `b12859ee-bd84-4a66-b3bf-baf0ef3a003c`.
 - A labeled real-scene quality evaluation and blind-user physical validation are still open. Provider-backed contract smoke is not evidence that walking guidance is sufficiently clear, timely, or complete in real scenes.
 
 Commands:
@@ -29,7 +29,7 @@ npm --prefix expo run lint
 npm --prefix backend/guidepup-api run typecheck
 ```
 
-Current blockers: exact-revision Worker redeploy/smoke, a fresh signed iOS artifact, real-iPhone native and fallback validation, and labeled real-scene guidance-quality evidence. MiniCPM remains experimental and is not a launch provider.
+Current blockers: a fresh signed iOS artifact, real-iPhone native and fallback validation, and labeled real-scene guidance-quality evidence. MiniCPM remains experimental and is not a launch provider.
 
 ## Current gate on 2026-07-20
 
