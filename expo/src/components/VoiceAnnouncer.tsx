@@ -42,7 +42,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       if (sessionRef.current !== sessionId) {
         return;
       }
-      const keepListeningDuringSpeech = Boolean(voiceState?.listening)
+      const keepListeningDuringSpeech =
+        speechOptions?.keepListeningDuringSpeech === true
+        && Boolean(voiceState?.listening)
         && canKeepListeningForStopBargeInDuringSpeech(combinedMessage);
 
       if (sessionRef.current !== sessionId) {

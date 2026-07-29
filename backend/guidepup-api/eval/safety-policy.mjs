@@ -7,6 +7,9 @@ export function getSafetyStopReason(input) {
   if (input.hasCloseObstacle === true) {
     return "close-obstacle";
   }
+  if (input.hasPathBlockingObstacle === true) {
+    return "path-blocking-obstacle";
+  }
   if (input.pathClear === false) {
     return "path-not-clear";
   }

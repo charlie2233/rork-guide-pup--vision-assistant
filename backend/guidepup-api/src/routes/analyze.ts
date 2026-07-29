@@ -11,6 +11,18 @@ import {
 } from "../schemas/vision";
 import { getProviderSummary, getVisionProvider } from "../providers";
 
+export const MAX_ANALYZE_REQUEST_BODY_BYTES = 1_600_000;
+
+class AnalyzePayloadTooLargeError extends Error {}
+
+function cancelUnreadRequestBody(request: Request) {
+  if (!request.body || request.body.locked) {
+    return;
+  }
+
+  void request.body.cancel().catch(() => undefined);
+}
+
 function getDeviceId(request: Request) {
   return request.headers.get("x-guidepup-device-id")?.trim();
 }
@@ -38,6 +50,65 @@ function invalidRequestResponse(request: Request, env: Env, requestId: string) {
   });
 }
 
+function payloadTooLargeResponse(request: Request, env: Env, requestId: string) {
+  return jsonResponse(request, env, {
+    error: {
+      code: "payload_too_large",
+      message: "Request payload is too large.",
+    },
+  }, {
+    headers: {
+      "x-request-id": requestId,
+    },
+    status: 413,
+  });
+}
+
+async function readBoundedJsonBody(request: Request) {
+  const contentLength = request.headers.get("content-length")?.trim();
+  if (contentLength && /^\d+$/.test(contentLength)) {
+    const declaredBytes = Number(contentLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes > MAX_ANALYZE_REQUEST_BODY_BYTES) {
+      cancelUnreadRequestBody(request);
+      throw new AnalyzePayloadTooLargeError();
+    }
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) {
+    return JSON.parse("");
+  }
+
+  const decoder = new TextDecoder();
+  let byteCount = 0;
+  let rawText = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      byteCount += value.byteLength;
+      if (byteCount > MAX_ANALYZE_REQUEST_BODY_BYTES) {
+        void reader.cancel().catch(() => undefined);
+        throw new AnalyzePayloadTooLargeError();
+      }
+      rawText += decoder.decode(value, { stream: true });
+    }
+  } catch (error) {
+    if (!(error instanceof AnalyzePayloadTooLargeError)) {
+      void reader.cancel().catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  rawText += decoder.decode();
+
+  return JSON.parse(rawText) as unknown;
+}
+
 export async function handleAnalyze(
   request: Request,
   env: Env,
@@ -47,8 +118,8 @@ export async function handleAnalyze(
   const startedAt = Date.now();
   const deviceId = getDeviceId(request);
   const sessionToken = getBearerToken(request);
-
   if (!deviceId || !sessionToken) {
+    cancelUnreadRequestBody(request);
     return jsonResponse(request, env, {
       error: {
         code: "unauthorized",
@@ -62,8 +133,12 @@ export async function handleAnalyze(
     });
   }
 
-  const sessionIsValid = await verifySessionToken(sessionToken, deviceId, env);
+  const sessionIsValid = await verifySessionToken(sessionToken, deviceId, env).catch((error) => {
+    cancelUnreadRequestBody(request);
+    throw error;
+  });
   if (!sessionIsValid) {
+    cancelUnreadRequestBody(request);
     return jsonResponse(request, env, {
       error: {
         code: "unauthorized",
@@ -77,30 +152,26 @@ export async function handleAnalyze(
     });
   }
 
-  let rawBody: unknown;
+  let promptVersion: string;
+  let deviceRateLimit: Awaited<ReturnType<typeof enforceRateLimit>>;
+  let ipRateLimit: Awaited<ReturnType<typeof enforceAnalyzeIpRateLimit>> | undefined;
   try {
-    rawBody = await request.json();
-  } catch {
-    return invalidRequestResponse(request, env, requestId);
+    promptVersion = getPromptVersion(env);
+    deviceRateLimit = await enforceRateLimit(deviceId, env);
+    ipRateLimit = deviceRateLimit.allowed
+      ? await enforceAnalyzeIpRateLimit(request, env)
+      : undefined;
+  } catch (error) {
+    cancelUnreadRequestBody(request);
+    throw error;
   }
-
-  const parsedBody = AnalyzeVisionRequestSchema.safeParse(rawBody);
-  if (!parsedBody.success) {
-    return invalidRequestResponse(request, env, requestId);
-  }
-
-  const body = parsedBody.data;
-  const promptVersion = getPromptVersion(env);
-  const deviceRateLimit = await enforceRateLimit(deviceId, env);
-  const ipRateLimit = deviceRateLimit.allowed
-    ? await enforceAnalyzeIpRateLimit(request, env)
-    : undefined;
   const rateLimit = deviceRateLimit.allowed && ipRateLimit
     ? ipRateLimit
     : deviceRateLimit;
   const rateLimitScope = deviceRateLimit.allowed ? "analyze-ip" : "device";
 
   if (!rateLimit.allowed) {
+    cancelUnreadRequestBody(request);
     const infrastructureUnavailable = rateLimit.reason === "infrastructure-unavailable";
     const providerSummary = getProviderSummary(env);
     const safeResponse = createSafeFallbackResponse({
@@ -116,7 +187,6 @@ export async function handleAnalyze(
 
     logWarn(infrastructureUnavailable ? "vision.rate_limit_unavailable" : "vision.rate_limited", {
       deviceId,
-      interactionMode: body.interactionMode,
       latencyMs: Date.now() - startedAt,
       rateLimitScope,
       requestId,
@@ -143,6 +213,22 @@ export async function handleAnalyze(
     });
   }
 
+  let rawBody: unknown;
+  try {
+    rawBody = await readBoundedJsonBody(request);
+  } catch (error) {
+    if (error instanceof AnalyzePayloadTooLargeError) {
+      return payloadTooLargeResponse(request, env, requestId);
+    }
+    return invalidRequestResponse(request, env, requestId);
+  }
+
+  const parsedBody = AnalyzeVisionRequestSchema.safeParse(rawBody);
+  if (!parsedBody.success) {
+    return invalidRequestResponse(request, env, requestId);
+  }
+
+  const body = parsedBody.data;
   const provider = getVisionProvider(env);
 
   try {

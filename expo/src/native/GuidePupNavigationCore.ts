@@ -18,6 +18,21 @@ export type GuidePupNavigationCoreRecoveryState =
   | "exhausted";
 export type GuidePupNavigationCoreHapticType = "stop" | "left" | "right" | "forward" | "error" | "success";
 export type GuidePupNavigationCoreAudioCueType = GuidePupNavigationCoreHapticType;
+export type GuidePupSensoryFeedbackOutcome = "failure" | "success";
+export type GuidePupDistributionEnvironment =
+  | "apple-sandbox"
+  | "app-store-production"
+  | "xcode"
+  | "unknown"
+  | "none";
+
+export interface GuidePupDistributionEvidence {
+  appStoreAppIdMatched: boolean;
+  bundleVersionMatched: boolean;
+  transactionVerified: boolean;
+  identityMatched: boolean;
+  environment: GuidePupDistributionEnvironment;
+}
 
 export interface GuidePupNavigationCoreStartOptions {
   preferredCamera?: "back";
@@ -67,6 +82,7 @@ interface GuidePupNavigationCoreNativeModule {
   cancelAnnouncement(ownerToken: string): Promise<void>;
   claimAnnouncementOwner(ownerToken: string): Promise<void>;
   captureFrame(): Promise<Omit<GuidePupNavigationCoreCaptureResult, "executionPath">>;
+  getDistributionEvidence?(): Promise<GuidePupDistributionEvidence>;
   getState(): Promise<GuidePupNavigationCoreState>;
   interruptAllAnnouncements(): Promise<void>;
   isAvailable(): Promise<boolean>;
@@ -92,6 +108,14 @@ const fallbackState: GuidePupNavigationCoreState = {
   sessionActive: false,
   sessionState: "idle",
   voiceOverRunning: false,
+};
+
+const fallbackDistributionEvidence: GuidePupDistributionEvidence = {
+  appStoreAppIdMatched: false,
+  bundleVersionMatched: false,
+  transactionVerified: false,
+  identityMatched: false,
+  environment: "none",
 };
 
 let fallbackAnnouncementOwnerToken: string | null = null;
@@ -813,14 +837,16 @@ async function playFallbackHaptic(type: GuidePupNavigationCoreHapticType) {
   await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 }
 
-async function playHaptic(type: GuidePupNavigationCoreHapticType) {
+async function playHapticWithOutcome(
+  type: GuidePupNavigationCoreHapticType,
+): Promise<GuidePupSensoryFeedbackOutcome> {
   recordHapticSnapshot({ type });
 
   if (nativeModule) {
     try {
       await nativeModule.playHaptic(type);
       recordHapticSnapshot({ executionPath: "native-core", outcome: "success", type });
-      return;
+      return "success";
     } catch {
       // Fall through to the JS haptics fallback if the native bridge rejects.
     }
@@ -829,6 +855,7 @@ async function playHaptic(type: GuidePupNavigationCoreHapticType) {
   try {
     await playFallbackHaptic(type);
     recordHapticSnapshot({ executionPath: "js-fallback", outcome: "success", type });
+    return "success";
   } catch (error) {
     recordHapticSnapshot({
       error: error instanceof Error ? error.message : "Haptic feedback failed.",
@@ -836,11 +863,20 @@ async function playHaptic(type: GuidePupNavigationCoreHapticType) {
       outcome: "failure",
       type,
     });
-    throw error;
+    return "failure";
   }
 }
 
-async function playAudioCue(type: GuidePupNavigationCoreAudioCueType) {
+async function playHaptic(type: GuidePupNavigationCoreHapticType) {
+  const outcome = await playHapticWithOutcome(type);
+  if (outcome === "failure") {
+    throw new Error("Haptic feedback failed.");
+  }
+}
+
+async function playAudioCueWithOutcome(
+  type: GuidePupNavigationCoreAudioCueType,
+): Promise<GuidePupSensoryFeedbackOutcome> {
   recordAudioCueSnapshot({ type });
 
   if (!nativeModule) {
@@ -850,12 +886,13 @@ async function playAudioCue(type: GuidePupNavigationCoreAudioCueType) {
       outcome: "failure",
       type,
     });
-    return;
+    return "failure";
   }
 
   try {
     await nativeModule.playAudioCue(type);
     recordAudioCueSnapshot({ executionPath: "native-core", outcome: "success", type });
+    return "success";
   } catch (error) {
     recordAudioCueSnapshot({
       error: error instanceof Error ? error.message : "Audio cue failed.",
@@ -863,7 +900,12 @@ async function playAudioCue(type: GuidePupNavigationCoreAudioCueType) {
       outcome: "failure",
       type,
     });
+    return "failure";
   }
+}
+
+async function playAudioCue(type: GuidePupNavigationCoreAudioCueType) {
+  await playAudioCueWithOutcome(type);
 }
 
 async function getState(): Promise<GuidePupNavigationCoreState> {
@@ -872,6 +914,45 @@ async function getState(): Promise<GuidePupNavigationCoreState> {
   }
 
   return fallbackState;
+}
+
+async function getDistributionEvidence(): Promise<GuidePupDistributionEvidence> {
+  if (!nativeModule?.getDistributionEvidence) {
+    return fallbackDistributionEvidence;
+  }
+
+  try {
+    const evidence = await nativeModule.getDistributionEvidence();
+    if (
+      typeof evidence?.transactionVerified !== "boolean"
+      || typeof evidence?.appStoreAppIdMatched !== "boolean"
+      || typeof evidence?.bundleVersionMatched !== "boolean"
+      || typeof evidence?.identityMatched !== "boolean"
+      || ![
+        "apple-sandbox",
+        "app-store-production",
+        "xcode",
+        "unknown",
+        "none",
+      ].includes(evidence.environment)
+      || (
+        evidence.transactionVerified
+          ? evidence.environment === "none"
+            || !evidence.appStoreAppIdMatched
+            || !evidence.bundleVersionMatched
+          : evidence.environment !== "none"
+            || evidence.identityMatched
+            || evidence.appStoreAppIdMatched
+            || evidence.bundleVersionMatched
+      )
+    ) {
+      return fallbackDistributionEvidence;
+    }
+
+    return evidence;
+  } catch {
+    return fallbackDistributionEvidence;
+  }
 }
 
 async function isAvailable() {
@@ -896,6 +977,7 @@ export const GuidePupNavigationCore = {
   cancelAnnouncement,
   claimAnnouncementOwner,
   captureFrame,
+  getDistributionEvidence,
   getState,
   implementation: getExecutionPath(),
   interruptAllAnnouncements,
@@ -904,7 +986,9 @@ export const GuidePupNavigationCore = {
     return Boolean(nativeModule);
   },
   playAudioCue,
+  playAudioCueWithOutcome,
   playHaptic,
+  playHapticWithOutcome,
   releaseAnnouncementOwner,
   startSession,
   stopSession,

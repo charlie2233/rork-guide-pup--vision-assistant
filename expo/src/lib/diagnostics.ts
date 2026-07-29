@@ -15,6 +15,7 @@ export type DiagnosticsAnalyzeDirection = "turn-left" | "turn-right" | "forward"
 export type DiagnosticsHazardLevel = "none" | "low" | "medium" | "high";
 export type DiagnosticsLighting = "dark" | "dim" | "normal" | "bright" | "unknown";
 export type DiagnosticsWalkability = "clear" | "caution" | "uncertain";
+export type DiagnosticsVisionInteractionMode = "guidance" | "scene-query";
 export type DiagnosticsSessionStatus = "unknown" | "bootstrapping" | "ready" | "cleared" | "failed";
 export type DiagnosticsNavigationExecutionPath = "native-core" | "js-fallback";
 export type DiagnosticsVoiceExecutionPath = "native-voice" | "js-fallback";
@@ -25,6 +26,17 @@ export type DiagnosticsStopBargeInRecognizedCommand = "stop-guidance-partial" | 
 export type DiagnosticsHapticOutcome = "none" | "success" | "failure";
 export type DiagnosticsAudioCueOutcome = "none" | "success" | "failure";
 export type DiagnosticsRecoveryState = "idle" | "recovering" | "interrupted" | "background" | "exhausted";
+export type DiagnosticsDistributionEnvironment =
+  | "apple-sandbox"
+  | "app-store-production"
+  | "xcode"
+  | "unknown"
+  | "none";
+
+const DIAGNOSTICS_REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DIAGNOSTICS_GIT_REVISION_PATTERN = /^[0-9a-f]{40,64}$/;
+const DIAGNOSTICS_WORKER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
 export interface DiagnosticsRuntimeSnapshot {
   apiBaseUrl?: string;
@@ -33,10 +45,12 @@ export interface DiagnosticsRuntimeSnapshot {
   appVersion?: string;
   buildVersion?: string;
   bundleIdentifier?: string;
+  candidateIdentifier?: string;
   emergencyDisclaimer: string;
   experimentalTabsEnabled: boolean;
   privacyPolicyUrl?: string;
   releaseTrack: string;
+  sourceRevision?: string;
   crashReportingEnabled: boolean;
   slug?: string;
   supportEmail?: string;
@@ -52,6 +66,15 @@ export interface DiagnosticsCameraPermissionSnapshot {
   updatedAt: number;
 }
 
+export interface DiagnosticsDistributionSnapshot {
+  appStoreAppIdMatched: boolean;
+  bundleVersionMatched: boolean;
+  environment: DiagnosticsDistributionEnvironment;
+  identityMatched: boolean;
+  transactionVerified: boolean;
+  updatedAt: number;
+}
+
 export interface DiagnosticsSessionSnapshot {
   deviceIdSuffix?: string;
   error?: string;
@@ -62,16 +85,31 @@ export interface DiagnosticsSessionSnapshot {
 }
 
 export interface DiagnosticsHealthSnapshot {
+  analyzeDeviceRateLimitPerMinute?: number;
+  analyzeIpRateLimitPerMinute?: number;
   benchmarkProviders?: string[];
+  bootstrapIpRateLimitPerMinute?: number;
   checkedAt: number;
+  defaultMaxCompletionTokens?: number;
   defaultModel?: string;
   defaultProvider?: string;
+  defaultReasoningEffort?: string;
+  defaultRequestTimeoutMs?: number;
+  defaultRetryCount?: number;
+  defaultRetryDelayMs?: number;
+  deploymentIdentityValid?: boolean;
   environment?: string;
   error?: string;
   ok: boolean;
   promptVersion?: string;
+  providerGlobalCallLimitPerMinute?: number;
   requestId?: string;
   latencyMs?: number;
+  sessionTtlSeconds?: number;
+  sourceRevision?: string;
+  structuredOutputMode?: string;
+  workerIdentity?: string;
+  workerVersionId?: string;
 }
 
 export interface DiagnosticsCaptureHeuristics {
@@ -147,10 +185,13 @@ export interface DiagnosticsStopBargeInSnapshot {
   armedDuringSpeech: boolean;
   attemptedDuringSpeech: boolean;
   audioCueAttempted: boolean;
+  audioCueOutcome: "failure" | "not-attempted" | "pending" | "success";
   cameraInactiveAfterStop: boolean | null;
   cutThrough: boolean | null;
+  feedbackObservedAt: number | null;
   guidancePaused: boolean;
   hapticAttempted: boolean;
+  hapticOutcome: "failure" | "not-attempted" | "pending" | "success";
   lastRecognizedAt?: number;
   listeningStoppedAfterStop: boolean | null;
   postStopObservedAt: number | null;
@@ -158,6 +199,7 @@ export interface DiagnosticsStopBargeInSnapshot {
   recognizedDuringSpeech: boolean;
   recognizedPhase?: DiagnosticsStopBargeInRecognitionPhase;
   staleSpeechAfterStop: boolean | null;
+  stopEventId?: string;
   updatedAt: number;
 }
 
@@ -175,6 +217,7 @@ export interface DiagnosticsAnalyzeEvent {
   hazardLevel?: DiagnosticsHazardLevel;
   hasImage?: boolean;
   id: string;
+  interactionMode?: DiagnosticsVisionInteractionMode;
   latencyMs?: number;
   lighting?: DiagnosticsLighting;
   message?: string;
@@ -201,6 +244,7 @@ export interface DiagnosticsAnalyzeEvent {
 export interface DiagnosticsSnapshot {
   audioCue: DiagnosticsAudioCueSnapshot;
   cameraPermission: DiagnosticsCameraPermissionSnapshot | null;
+  distribution: DiagnosticsDistributionSnapshot;
   haptics: DiagnosticsHapticSnapshot;
   lastAnalyze: DiagnosticsAnalyzeEvent | null;
   lastHealthCheck: DiagnosticsHealthSnapshot | null;
@@ -221,10 +265,12 @@ const createInitialRuntime = (): DiagnosticsRuntimeSnapshot => ({
   appVersion: undefined,
   buildVersion: undefined,
   bundleIdentifier: undefined,
+  candidateIdentifier: undefined,
   emergencyDisclaimer: appConfig.emergencyDisclaimer,
   experimentalTabsEnabled: appConfig.enableExperimentalTabs,
   privacyPolicyUrl: appConfig.privacyPolicyUrl,
   releaseTrack: appConfig.releaseTrack,
+  sourceRevision: undefined,
   crashReportingEnabled: false,
   slug: undefined,
   supportEmail: appConfig.supportEmail,
@@ -237,10 +283,13 @@ const createInitialStopBargeInSnapshot = (): DiagnosticsStopBargeInSnapshot => (
   armedDuringSpeech: false,
   attemptedDuringSpeech: false,
   audioCueAttempted: false,
+  audioCueOutcome: "not-attempted",
   cameraInactiveAfterStop: null,
   cutThrough: null,
+  feedbackObservedAt: null,
   guidancePaused: false,
   hapticAttempted: false,
+  hapticOutcome: "not-attempted",
   listeningStoppedAfterStop: null,
   postStopObservedAt: null,
   recognizedDuringSpeech: false,
@@ -256,6 +305,14 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
     updatedAt: Date.now(),
   },
   cameraPermission: null,
+  distribution: {
+    appStoreAppIdMatched: false,
+    bundleVersionMatched: false,
+    environment: "none",
+    identityMatched: false,
+    transactionVerified: false,
+    updatedAt: Date.now(),
+  },
   haptics: {
     failureCount: 0,
     lastOutcome: "none",
@@ -292,6 +349,22 @@ const createInitialSnapshot = (): DiagnosticsSnapshot => ({
 
 let snapshot = createInitialSnapshot();
 const listeners = new Set<() => void>();
+const OMITTED_DIAGNOSTIC_TEXT = "Content omitted";
+const SAFE_RECOGNIZED_COMMANDS = new Set([
+  "start-guidance",
+  "status",
+  "help",
+  "slower-speech",
+  "faster-speech",
+  "more-detail",
+  "less-detail",
+  "haptics-off",
+  "haptics-on",
+  "repeat",
+  "what-do-you-see",
+  "stop-guidance",
+  "stop-guidance-partial",
+]);
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -302,8 +375,12 @@ function updateSnapshot(mutator: (current: DiagnosticsSnapshot) => DiagnosticsSn
   emit();
 }
 
-function createEventId() {
-  return `diag_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+export function createDiagnosticsEventId() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = token === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 export function sanitizeUrlForDisplay(value?: string) {
@@ -311,15 +388,20 @@ export function sanitizeUrlForDisplay(value?: string) {
     return undefined;
   }
 
+  const trimmed = value.trim();
+  if (findDiagnosticsExportPrivacyIssues(trimmed).length > 0) {
+    return OMITTED_DIAGNOSTIC_TEXT;
+  }
+
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(trimmed);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return value.trim();
+      return trimmed;
     }
     const pathname = parsed.pathname.replace(/\/+$/, "");
     return `${parsed.origin}${pathname}`;
   } catch {
-    return value.trim();
+    return trimmed;
   }
 }
 
@@ -329,7 +411,95 @@ export function sanitizeMessage(value?: string, maxLength = 160) {
     return undefined;
   }
 
+  if (findDiagnosticsExportPrivacyIssues(trimmed).length > 0) {
+    return OMITTED_DIAGNOSTIC_TEXT;
+  }
+
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
+}
+
+function sanitizeStructuredIdentifier(
+  value: string | undefined,
+  pattern: RegExp,
+  allowedLiteral?: string,
+) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return pattern.test(trimmed) || trimmed === allowedLiteral ? trimmed : undefined;
+}
+
+function omitFreeFormDiagnosticText(value?: string) {
+  return value?.trim() ? OMITTED_DIAGNOSTIC_TEXT : undefined;
+}
+
+function sanitizeRecognizedCommand(value?: string) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized && SAFE_RECOGNIZED_COMMANDS.has(normalized)
+    ? normalized
+    : omitFreeFormDiagnosticText(value);
+}
+
+const DIAGNOSTICS_EXPORT_PRIVACY_PATTERNS = [
+  {
+    label: "email address",
+    pattern: /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i,
+  },
+  {
+    label: "phone number",
+    pattern: /(?:(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)|\d{2,4})[\s.-]\d{3,4}[\s.-]\d{4}\b|(?:^|[^\d])(?:1)?[2-9]\d{2}[2-9]\d{6}(?!\d))/,
+  },
+  {
+    label: "raw media",
+    pattern: /data:(?:image|audio|video)\/[a-z0-9.+-]+;base64,/i,
+  },
+  {
+    label: "bearer credential",
+    pattern: /\bbearer\s+[a-z0-9._~+/=-]{8,}/i,
+  },
+  {
+    label: "JWT",
+    pattern: /\beyJ[a-z0-9_-]{8,}\.[a-z0-9_-]{8,}\.[a-z0-9_-]{8,}\b/i,
+  },
+  {
+    label: "provider key",
+    pattern: /\b(?:sk-(?:proj-|svcacct-)?[a-z0-9_-]{16,}|hf_[a-z0-9]{20,})\b/i,
+  },
+  {
+    label: "keyed secret",
+    pattern: /(?:^|[^a-z0-9])["']?(?:authorization|password|passcode|credential|credentials|secret|token|refresh[-_]?token|bootstrap[-_]?token|build[-_]?token|debug[-_]?benchmark[-_]?token|session[-_]?token|api[-_]?key|access[-_]?key|private[-_]?key|client[-_]?secret|signing[-_]?secret|secret[-_]?access[-_]?key|service[-_]?account[-_]?key|signature)["']?\s*[:=]\s*["']?(?:bearer\s+)?[^\s"',;}&]{8,}/i,
+  },
+  {
+    label: "private key",
+    pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  },
+  {
+    label: "signed URL",
+    pattern: /https?:\/\/[^\s<>"']*[?&](?:x-amz-|x-goog-|signature|sig|token|key|expires)=/i,
+  },
+  {
+    label: "local URI",
+    pattern: /(?:file|content):\/\/[^\s<>"']+/i,
+  },
+  {
+    label: "local path",
+    pattern: /(?:^|[\s([{"'=])(?:\/(?:Users|private|var|tmp|Volumes|home|data|storage|sdcard)(?:\/[^\s<>"')\]}]+)+|[a-z]:\\)/i,
+  },
+  {
+    label: "Apple device identifier",
+    pattern: /(?:\b(?:udid|device(?:\s+id|\s+identifier)?)\b\s*[:=]?\s*)[0-9a-f]{40}\b/i,
+  },
+  {
+    label: "long encoded value",
+    pattern: /\b(?:[a-z0-9+/]{80,}={0,2}|[a-z0-9_-]{100,})\b/i,
+  },
+] as const;
+
+export function findDiagnosticsExportPrivacyIssues(value: string) {
+  return DIAGNOSTICS_EXPORT_PRIVACY_PATTERNS
+    .filter(({ pattern }) => pattern.test(value))
+    .map(({ label }) => label);
 }
 
 function sanitizeCaptureHeuristics(input?: DiagnosticsCaptureHeuristics) {
@@ -347,6 +517,16 @@ function sanitizeCaptureHeuristics(input?: DiagnosticsCaptureHeuristics) {
   };
 
   return Object.values(heuristics).some((value) => value !== undefined) ? heuristics : undefined;
+}
+
+function sanitizeBoundedInteger(
+  value: number | undefined,
+  min: number,
+  max: number,
+) {
+  return Number.isInteger(value) && value !== undefined && value >= min && value <= max
+    ? value
+    : undefined;
 }
 
 export function classifyAnalyzeError(errorMessage?: string) {
@@ -422,6 +602,26 @@ export function recordCameraPermissionSnapshot(snapshotInput: {
   }));
 }
 
+export function recordDistributionEvidenceSnapshot(input: {
+  appStoreAppIdMatched: boolean;
+  bundleVersionMatched: boolean;
+  environment: DiagnosticsDistributionEnvironment;
+  identityMatched: boolean;
+  transactionVerified: boolean;
+}) {
+  updateSnapshot((current) => ({
+    ...current,
+    distribution: {
+      appStoreAppIdMatched: input.appStoreAppIdMatched,
+      bundleVersionMatched: input.bundleVersionMatched,
+      environment: input.environment,
+      identityMatched: input.identityMatched,
+      transactionVerified: input.transactionVerified,
+      updatedAt: Date.now(),
+    },
+  }));
+}
+
 function normalizeDeviceIdSuffix(deviceId?: string) {
   if (!deviceId) {
     return undefined;
@@ -446,9 +646,11 @@ export function recordSessionBootstrapState(input: {
     ...current,
     session: {
       deviceIdSuffix: input.deviceId ? normalizeDeviceIdSuffix(input.deviceId) : current.session.deviceIdSuffix,
-      error: sanitizeMessage(input.error, 120),
+      error: omitFreeFormDiagnosticText(input.error),
       expiresAt: input.expiresAt ?? current.session.expiresAt,
-      requestId: sanitizeMessage(input.requestId, 80) ?? current.session.requestId,
+      requestId:
+        sanitizeStructuredIdentifier(input.requestId, DIAGNOSTICS_REQUEST_ID_PATTERN)
+        ?? current.session.requestId,
       status: input.status,
       updatedAt: Date.now(),
     },
@@ -466,29 +668,104 @@ export function recordSessionCleared() {
 }
 
 export function recordHealthCheckSnapshot(input: {
+  analyzeDeviceRateLimitPerMinute?: number;
+  analyzeIpRateLimitPerMinute?: number;
   benchmarkProviders?: string[];
+  bootstrapIpRateLimitPerMinute?: number;
+  defaultMaxCompletionTokens?: number;
   defaultModel?: string;
   defaultProvider?: string;
+  defaultReasoningEffort?: string;
+  defaultRequestTimeoutMs?: number;
+  defaultRetryCount?: number;
+  defaultRetryDelayMs?: number;
+  deploymentIdentityValid?: boolean;
   environment?: string;
   error?: string;
   ok: boolean;
   promptVersion?: string;
+  providerGlobalCallLimitPerMinute?: number;
   requestId?: string;
   latencyMs?: number;
+  sessionTtlSeconds?: number;
+  sourceRevision?: string;
+  structuredOutputMode?: string;
+  workerIdentity?: string;
+  workerVersionId?: string;
 }) {
   updateSnapshot((current) => ({
     ...current,
     lastHealthCheck: {
-      benchmarkProviders: input.benchmarkProviders,
+      analyzeDeviceRateLimitPerMinute: sanitizeBoundedInteger(
+        input.analyzeDeviceRateLimitPerMinute,
+        1,
+        60,
+      ),
+      analyzeIpRateLimitPerMinute: sanitizeBoundedInteger(
+        input.analyzeIpRateLimitPerMinute,
+        10,
+        300,
+      ),
+      benchmarkProviders: input.benchmarkProviders
+        ?.map((provider) => sanitizeMessage(provider, 64))
+        .filter((provider): provider is string => Boolean(provider))
+        .slice(0, 4),
+      bootstrapIpRateLimitPerMinute: sanitizeBoundedInteger(
+        input.bootstrapIpRateLimitPerMinute,
+        1,
+        60,
+      ),
       checkedAt: Date.now(),
-      defaultModel: input.defaultModel,
-      defaultProvider: input.defaultProvider,
-      environment: input.environment,
-      error: sanitizeMessage(input.error, 120),
+      defaultMaxCompletionTokens: sanitizeBoundedInteger(
+        input.defaultMaxCompletionTokens,
+        128,
+        1200,
+      ),
+      defaultModel: sanitizeMessage(input.defaultModel, 64),
+      defaultProvider: sanitizeMessage(input.defaultProvider, 64),
+      defaultReasoningEffort: sanitizeMessage(input.defaultReasoningEffort, 16),
+      defaultRequestTimeoutMs: sanitizeBoundedInteger(
+        input.defaultRequestTimeoutMs,
+        3000,
+        30000,
+      ),
+      defaultRetryCount: sanitizeBoundedInteger(input.defaultRetryCount, 0, 2),
+      defaultRetryDelayMs: sanitizeBoundedInteger(input.defaultRetryDelayMs, 0, 2000),
+      deploymentIdentityValid:
+        typeof input.deploymentIdentityValid === "boolean"
+          ? input.deploymentIdentityValid
+          : undefined,
+      environment: sanitizeMessage(input.environment, 32),
+      error: omitFreeFormDiagnosticText(input.error),
       latencyMs: input.latencyMs,
       ok: input.ok,
-      promptVersion: input.promptVersion,
-      requestId: input.requestId,
+      promptVersion: sanitizeMessage(input.promptVersion, 40),
+      providerGlobalCallLimitPerMinute: sanitizeBoundedInteger(
+        input.providerGlobalCallLimitPerMinute,
+        20,
+        600,
+      ),
+      requestId: sanitizeStructuredIdentifier(input.requestId, DIAGNOSTICS_REQUEST_ID_PATTERN),
+      sessionTtlSeconds: sanitizeBoundedInteger(
+        input.sessionTtlSeconds,
+        5 * 60,
+        7 * 24 * 60 * 60,
+      ),
+      sourceRevision: sanitizeStructuredIdentifier(
+        input.sourceRevision,
+        DIAGNOSTICS_GIT_REVISION_PATTERN,
+        "development",
+      ),
+      structuredOutputMode: sanitizeMessage(input.structuredOutputMode, 32),
+      workerIdentity: sanitizeStructuredIdentifier(
+        input.workerIdentity,
+        DIAGNOSTICS_WORKER_ID_PATTERN,
+      ),
+      workerVersionId: sanitizeStructuredIdentifier(
+        input.workerVersionId,
+        DIAGNOSTICS_REQUEST_ID_PATTERN,
+        "development",
+      ),
     },
   }));
 }
@@ -511,7 +788,9 @@ export function recordNavigationLoopSnapshot(input: {
       executionPath: input.executionPath ?? current.navigationLoop.executionPath,
       lastCaptureLatencyMs: input.lastCaptureLatencyMs ?? current.navigationLoop.lastCaptureLatencyMs,
       lastError:
-        input.lastError === undefined ? current.navigationLoop.lastError : sanitizeMessage(input.lastError ?? undefined, 120),
+        input.lastError === undefined
+          ? current.navigationLoop.lastError
+          : omitFreeFormDiagnosticText(input.lastError ?? undefined),
       lastTotalGuidanceLoopLatencyMs:
         input.lastTotalGuidanceLoopLatencyMs ?? current.navigationLoop.lastTotalGuidanceLoopLatencyMs,
       recoveryState: input.recoveryState ?? current.navigationLoop.recoveryState,
@@ -539,7 +818,7 @@ export function recordHapticSnapshot(input: {
         failureCount: current.haptics.failureCount + (input.outcome === "failure" ? 1 : 0),
         lastAttemptedAt: isCompletion ? current.haptics.lastAttemptedAt : now,
         lastCompletedAt: isCompletion ? now : current.haptics.lastCompletedAt,
-        lastError: sanitizeMessage(input.error, 120),
+        lastError: omitFreeFormDiagnosticText(input.error),
         lastExecutionPath: input.executionPath ?? current.haptics.lastExecutionPath,
         lastOutcome: outcome,
         lastType: sanitizeMessage(input.type, 40),
@@ -567,7 +846,7 @@ export function recordAudioCueSnapshot(input: {
         failureCount: current.audioCue.failureCount + (input.outcome === "failure" ? 1 : 0),
         lastAttemptedAt: isCompletion ? current.audioCue.lastAttemptedAt : now,
         lastCompletedAt: isCompletion ? now : current.audioCue.lastCompletedAt,
-        lastError: sanitizeMessage(input.error, 120),
+        lastError: omitFreeFormDiagnosticText(input.error),
         lastExecutionPath: input.executionPath ?? current.audioCue.lastExecutionPath,
         lastOutcome: outcome,
         lastType: sanitizeMessage(input.type, 40),
@@ -612,11 +891,14 @@ export function recordVoiceSnapshot(input: {
       ...current.voice,
       available: input.available ?? current.voice.available,
       executionPath: input.executionPath ?? current.voice.executionPath,
-      lastError: input.lastError === undefined ? current.voice.lastError : sanitizeMessage(input.lastError ?? undefined, 120),
+      lastError:
+        input.lastError === undefined
+          ? current.voice.lastError
+          : omitFreeFormDiagnosticText(input.lastError ?? undefined),
       lastRecognizedCommand:
         input.lastRecognizedCommand === undefined
           ? current.voice.lastRecognizedCommand
-          : sanitizeMessage(input.lastRecognizedCommand ?? undefined, 80),
+          : sanitizeRecognizedCommand(input.lastRecognizedCommand ?? undefined),
       lastRecognizedAt:
         input.lastRecognizedCommandPhase !== undefined || input.lastRecognizedAt !== undefined
           ? input.lastRecognizedAt ?? now
@@ -627,13 +909,19 @@ export function recordVoiceSnapshot(input: {
       lastVoiceStateChangedAt:
         input.lastVoiceStateChangedAt ?? (hasVoiceStateChange ? now : current.voice.lastVoiceStateChangedAt),
       listening: nextListening,
-      microphonePermission: input.microphonePermission ?? current.voice.microphonePermission,
+      microphonePermission:
+        input.microphonePermission === undefined
+          ? current.voice.microphonePermission
+          : sanitizeMessage(input.microphonePermission, 32),
       recoveryState: input.recoveryState ?? current.voice.recoveryState,
       speaking: nextSpeaking,
       speechListeningOverlapActive: nextOverlapActive,
       speechListeningOverlapCount:
         current.voice.speechListeningOverlapCount + (isNewOverlap ? 1 : 0),
-      speechPermission: input.speechPermission ?? current.voice.speechPermission,
+      speechPermission:
+        input.speechPermission === undefined
+          ? current.voice.speechPermission
+          : sanitizeMessage(input.speechPermission, 32),
       unexpectedSpeechListeningOverlapCount:
         current.voice.unexpectedSpeechListeningOverlapCount
         + (isNewOverlap && nextOverlapReason === "unexpected" ? 1 : 0),
@@ -659,13 +947,19 @@ export function recordStopBargeInSnapshot(input: Partial<Omit<DiagnosticsStopBar
       armedDuringSpeech: input.armedDuringSpeech ?? current.stopBargeIn.armedDuringSpeech,
       attemptedDuringSpeech: input.attemptedDuringSpeech ?? current.stopBargeIn.attemptedDuringSpeech,
       audioCueAttempted: input.audioCueAttempted ?? current.stopBargeIn.audioCueAttempted,
+      audioCueOutcome: input.audioCueOutcome ?? current.stopBargeIn.audioCueOutcome,
       cameraInactiveAfterStop:
         input.cameraInactiveAfterStop !== undefined
           ? input.cameraInactiveAfterStop
           : current.stopBargeIn.cameraInactiveAfterStop,
       cutThrough: input.cutThrough !== undefined ? input.cutThrough : current.stopBargeIn.cutThrough,
+      feedbackObservedAt:
+        input.feedbackObservedAt !== undefined
+          ? input.feedbackObservedAt
+          : current.stopBargeIn.feedbackObservedAt,
       guidancePaused: input.guidancePaused ?? current.stopBargeIn.guidancePaused,
       hapticAttempted: input.hapticAttempted ?? current.stopBargeIn.hapticAttempted,
+      hapticOutcome: input.hapticOutcome ?? current.stopBargeIn.hapticOutcome,
       lastRecognizedAt: input.lastRecognizedAt ?? current.stopBargeIn.lastRecognizedAt,
       listeningStoppedAfterStop:
         input.listeningStoppedAfterStop !== undefined
@@ -682,6 +976,7 @@ export function recordStopBargeInSnapshot(input: Partial<Omit<DiagnosticsStopBar
         input.staleSpeechAfterStop !== undefined
           ? input.staleSpeechAfterStop
           : current.stopBargeIn.staleSpeechAfterStop,
+      stopEventId: input.stopEventId ?? current.stopBargeIn.stopEventId,
       updatedAt: now,
     },
   }));
@@ -706,27 +1001,29 @@ export function recordAnalyzeEvent(
     captureHeuristics: sanitizeCaptureHeuristics(input.captureHeuristics),
     confidence: input.confidence,
     direction: input.direction,
-    error: sanitizeMessage(input.error, 120),
-    fallbackReason: sanitizeMessage(input.fallbackReason, 120),
+    error: omitFreeFormDiagnosticText(input.error),
+    fallbackReason: omitFreeFormDiagnosticText(input.fallbackReason),
     frameId: sanitizeMessage(input.frameId, 80),
-    frameSummary: sanitizeMessage(input.frameSummary, 280),
+    frameSummary: omitFreeFormDiagnosticText(input.frameSummary),
     frameTimestampMs: input.frameTimestampMs,
-    id: input.id || createEventId(),
+    id: input.id || createDiagnosticsEventId(),
     hasImage: input.hasImage,
+    interactionMode: input.interactionMode,
     latencyMs: input.latencyMs,
     lighting: input.lighting,
-    message: sanitizeMessage(input.message, 160),
+    message: omitFreeFormDiagnosticText(input.message),
+    model: sanitizeMessage(input.model, 64),
     nativePath: input.nativePath,
     platform: sanitizeMessage(input.platform, 16),
-    priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
+    priorGuidanceSummary: omitFreeFormDiagnosticText(input.priorGuidanceSummary),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
     provider: sanitizeMessage(input.provider, 64),
-    requestId: sanitizeMessage(input.requestId, 80),
+    requestId: sanitizeStructuredIdentifier(input.requestId, DIAGNOSTICS_REQUEST_ID_PATTERN),
     sampledFrame: input.sampledFrame,
-    safeReason: sanitizeMessage(input.safeReason, 120),
-    sceneDescription: sanitizeMessage(input.sceneDescription, 160),
+    safeReason: omitFreeFormDiagnosticText(input.safeReason),
+    sceneDescription: omitFreeFormDiagnosticText(input.sceneDescription),
     sessionId: sanitizeMessage(input.sessionId, 80),
-    surfaceType: sanitizeMessage(input.surfaceType, 80),
+    surfaceType: omitFreeFormDiagnosticText(input.surfaceType),
     walkability: input.walkability,
     timestamp: input.timestamp ?? Date.now(),
   };
@@ -818,10 +1115,30 @@ function findAnalyzeEventForPath(input: DiagnosticsSnapshot, nativePath: Diagnos
     || (input.lastAnalyze?.nativePath === nativePath ? input.lastAnalyze : undefined);
 }
 
+function findAnalyzeEventForInteractionMode(
+  input: DiagnosticsSnapshot,
+  interactionMode: DiagnosticsVisionInteractionMode,
+) {
+  return input.recentAnalyzeEvents.find((event) =>
+    event.interactionMode === interactionMode && Boolean(event.requestId))
+    || (
+      input.lastAnalyze?.interactionMode === interactionMode
+        ? input.lastAnalyze
+        : undefined
+    );
+}
+
 function buildCameraPathEvidence(nativePath: DiagnosticsNavigationExecutionPath, event?: DiagnosticsAnalyzeEvent) {
   return {
-    captureHeuristics: event?.captureHeuristics || {},
-    frameSummary: event?.frameSummary || "",
+    captureHeuristics: {
+      captureLatencyMs: event?.captureHeuristics?.captureLatencyMs ?? -1,
+      frameAgeMs: event?.captureHeuristics?.frameAgeMs ?? -1,
+      imageSource: event?.captureHeuristics?.imageSource || "unknown",
+      resizedForUpload: event?.captureHeuristics?.resizedForUpload ?? false,
+      uploadedHeight: event?.captureHeuristics?.uploadedHeight || 0,
+      uploadedWidth: event?.captureHeuristics?.uploadedWidth || 0,
+    },
+    frameSummary: "",
     hasImage: event?.hasImage === true,
     nativePath,
     outcome: event?.outcome === "success" ? "success" : "missing",
@@ -836,9 +1153,11 @@ function buildCameraPathEvidence(nativePath: DiagnosticsNavigationExecutionPath,
 
 function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
   const baseStep = (id: string) => ({
+    eventId: "",
     id,
     noScreenRequired: false,
     notes: "",
+    observedAt: "",
     pass: false,
     spokenFeedbackConfirmed: false,
     voiceRecognized: false,
@@ -898,6 +1217,10 @@ function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
     },
     {
       ...baseStep("stop-guidance"),
+      eventId: input.stopBargeIn.stopEventId || "",
+      observedAt: input.stopBargeIn.lastRecognizedAt
+        ? new Date(input.stopBargeIn.lastRecognizedAt).toISOString()
+        : "",
       stopCutThrough: input.stopBargeIn.cutThrough === true
         && input.stopBargeIn.recognizedDuringSpeech
         && input.stopBargeIn.recognizedPhase === "partial"
@@ -909,9 +1232,50 @@ function buildNoScreenSequenceDraft(input: DiagnosticsSnapshot) {
   ];
 }
 
+function buildStopBargeInEvidenceDraft(input: DiagnosticsSnapshot) {
+  const toIsoDate = (value?: number | null) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? new Date(value).toISOString()
+      : "";
+
+  return {
+    analysisInactiveAfterStop: input.stopBargeIn.analysisInactiveAfterStop,
+    armedDuringSpeech: input.stopBargeIn.armedDuringSpeech,
+    attemptedDuringSpeech: input.stopBargeIn.attemptedDuringSpeech,
+    audioCueAttempted: input.stopBargeIn.audioCueAttempted,
+    audioCueOutcome: input.stopBargeIn.audioCueOutcome,
+    cameraInactiveAfterStop: input.stopBargeIn.cameraInactiveAfterStop,
+    cutThrough: input.stopBargeIn.cutThrough,
+    eventId: input.stopBargeIn.stopEventId || "",
+    feedbackObservedAt: toIsoDate(input.stopBargeIn.feedbackObservedAt),
+    guidancePaused: input.stopBargeIn.guidancePaused,
+    hapticAttempted: input.stopBargeIn.hapticAttempted,
+    hapticOutcome: input.stopBargeIn.hapticOutcome,
+    lastSpeechListeningOverlapReason:
+      input.voice.lastSpeechListeningOverlapReason || "",
+    listeningStoppedAfterStop: input.stopBargeIn.listeningStoppedAfterStop,
+    observedAt: toIsoDate(input.stopBargeIn.lastRecognizedAt),
+    postStopObservedAt: toIsoDate(input.stopBargeIn.postStopObservedAt),
+    recognizedCommand: input.stopBargeIn.recognizedCommand || "",
+    recognizedDuringSpeech: input.stopBargeIn.recognizedDuringSpeech,
+    recognizedPhase: input.stopBargeIn.recognizedPhase || "",
+    speechListeningInvariant:
+      input.voice.unexpectedSpeechListeningOverlapCount === 0
+      && (
+        !input.voice.speechListeningOverlapActive
+        || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in"
+      )
+        ? "PASS"
+        : "FAIL",
+    staleSpeechAfterStop: input.stopBargeIn.staleSpeechAfterStop,
+    unexpectedSpeechListeningOverlapCount:
+      input.voice.unexpectedSpeechListeningOverlapCount,
+  };
+}
+
 export function buildNoScreenSmokeEvidenceDraft(
   input = getDiagnosticsSnapshot(),
-  options: { settings?: DiagnosticsEvidenceSettingsSnapshot; operator?: string } = {},
+  options: { settings?: DiagnosticsEvidenceSettingsSnapshot } = {},
 ) {
   const generatedAt = new Date().toISOString();
   const releaseTrack = inferEvidenceReleaseTrack(input.runtime.releaseTrack);
@@ -919,6 +1283,8 @@ export function buildNoScreenSmokeEvidenceDraft(
   const providerBacked = input.lastAnalyze?.outcome === "success";
   const nativeCoreEvent = findAnalyzeEventForPath(input, "native-core");
   const jsFallbackEvent = findAnalyzeEventForPath(input, "js-fallback");
+  const guidanceEvent = findAnalyzeEventForInteractionMode(input, "guidance");
+  const sceneQueryEvent = findAnalyzeEventForInteractionMode(input, "scene-query");
   const currentSettings = {
     descriptionMode: options.settings?.descriptionMode || "short",
     hapticsEnabled: options.settings?.hapticsEnabled ?? true,
@@ -934,7 +1300,8 @@ export function buildNoScreenSmokeEvidenceDraft(
     && typeof input.stopBargeIn.postStopObservedAt === "number";
 
   return {
-    artifactVersion: 1,
+    appStoreConnectBuildRecordIdentifier: "",
+    artifactVersion: 3,
     assistiveTech: {
       audioCuesAudible: false,
       hapticsFelt: false,
@@ -946,17 +1313,27 @@ export function buildNoScreenSmokeEvidenceDraft(
     backendSmoke: {
       analyzeStatusCode: providerBacked ? 200 : 0,
       apiBaseUrl: input.runtime.apiBaseUrl || "",
+      artifactVersion: 0,
       bootstrapStatusCode: input.session.status === "ready" ? 200 : 0,
       environment,
       executionPath: getAnalyzeExecutionPath(input.lastAnalyze),
+      generatedAt: "",
       healthStatusCode: input.lastHealthCheck?.ok ? 200 : 0,
       model: input.lastAnalyze?.model || input.lastHealthCheck?.defaultModel || "",
       promptVersion: input.lastAnalyze?.promptVersion || input.lastHealthCheck?.promptVersion || "",
+      provenance: {
+        sourceRevision: input.lastHealthCheck?.sourceRevision || "",
+        workerDeploymentId: "",
+        workerVersionCreatedAt: "",
+        workerVersionId: input.lastHealthCheck?.workerVersionId || "",
+      },
       providerBacked,
       requestIds: {
         analyze: input.lastAnalyze?.requestId || "",
         bootstrap: input.session.requestId || "",
+        guidanceAnalyze: guidanceEvent?.requestId || "",
         health: input.lastHealthCheck?.requestId || "",
+        sceneQueryAnalyze: sceneQueryEvent?.requestId || "",
       },
       structuredOutputValid: analyzeEventHasStructuredFields(input.lastAnalyze),
       walkability: input.lastAnalyze?.walkability || "",
@@ -964,6 +1341,26 @@ export function buildNoScreenSmokeEvidenceDraft(
     cameraPaths: {
       jsFallback: buildCameraPathEvidence("js-fallback", jsFallbackEvent),
       nativeCore: buildCameraPathEvidence("native-core", nativeCoreEvent),
+    },
+    commandSequences: {
+      jsFallback: {
+        analyzeRequestId: jsFallbackEvent?.requestId || "",
+        completedAt: "",
+        executionId: "",
+        executionPath: "js-fallback",
+        startedAt: "",
+        steps: buildNoScreenSequenceDraft(input),
+        stopBargeIn: buildStopBargeInEvidenceDraft(input),
+      },
+      nativeCore: {
+        analyzeRequestId: nativeCoreEvent?.requestId || "",
+        completedAt: "",
+        executionId: "",
+        executionPath: "native-core",
+        startedAt: "",
+        steps: buildNoScreenSequenceDraft(input),
+        stopBargeIn: buildStopBargeInEvidenceDraft(input),
+      },
     },
     device: {
       appVersion: input.runtime.appVersion || "",
@@ -975,12 +1372,22 @@ export function buildNoScreenSmokeEvidenceDraft(
       osVersion: "",
     },
     deviceReadiness: {
+      coreDeviceExecutionReady: false,
+      coreDeviceProbe: {
+        checkedAt: "",
+        exitStatus: null,
+        outcome: "not-run",
+        type: "devicectl-process-info",
+      },
+      ddiServicesAvailable: false,
       developerModeEnabled: false,
       paired: false,
       result: "draft",
       trusted: false,
+      tunnelConnected: false,
       usbOrSameLan: false,
       xcodeDestinationAvailable: false,
+      xctraceVisible: false,
     },
     diagnostics: {
       audioCues: {
@@ -1012,16 +1419,60 @@ export function buildNoScreenSmokeEvidenceDraft(
       voiceOverRunning: input.navigationLoop.voiceOverRunning === true,
     },
     generatedAt,
+    humanAttestation: {
+      attestedAt: "",
+      blindParticipantSelfAttested: false,
+      installationSourceConfirmed: false,
+      nonvisualOperationConfirmed: false,
+      participantRoleConfirmed: false,
+      sensoryObservationsConfirmed: false,
+    },
+    installationEvidence: {
+      appStoreAppIdMatched: input.distribution.appStoreAppIdMatched,
+      appTransactionVerified: input.distribution.transactionVerified,
+      appIdentityMatched: input.distribution.identityMatched,
+      bundleVersionMatched: input.distribution.bundleVersionMatched,
+      distributionEnvironment: input.distribution.environment,
+      installedValidationIpaSha256: "",
+      storeKitEvidencePurpose: "apple-signed-app-identity-only",
+    },
+    installationSource: "unverified",
+    interactionAssistance: "unverified",
+    interruptionRecovery: {
+      audioRoute: {
+        attempted: false,
+        boundedRecoveryConfirmed: false,
+        conservativeStopConfirmed: false,
+        explicitRestartConfirmed: false,
+        explicitRestartRequired: false,
+        guidanceInactiveAfterInterruption: false,
+        noContinuedGuidance: false,
+        recoveryLatencyMs: -1,
+      },
+      backgroundForeground: {
+        attempted: false,
+        boundedRecoveryConfirmed: false,
+        conservativeStopConfirmed: false,
+        explicitRestartConfirmed: false,
+        explicitRestartRequired: false,
+        guidanceInactiveAfterInterruption: false,
+        noContinuedGuidance: false,
+        recoveryLatencyMs: -1,
+      },
+    },
     noScreen: {
       cleanInstallOrReset: false,
+      nonvisualOperation: false,
       noScreenUsed: false,
-      screenReadingUsed: false,
-      visualAssistanceUsed: false,
-      voiceOnlyNavigation: false,
+      visualScreenInspectionUsed: false,
+      voiceAndVoiceOverOnly: false,
     },
-    operator: options.operator || "Internal tester",
+    operator: "operator-required",
+    participantLabel: "participant-required",
+    participantRole: "unverified",
     privacy: {
       containsFullDeviceIds: false,
+      containsIdentityContactData: false,
       containsRawAudio: false,
       containsRawMedia: false,
       containsSecrets: false,
@@ -1035,13 +1486,14 @@ export function buildNoScreenSmokeEvidenceDraft(
       buildNumber: input.runtime.buildVersion || "",
       buildProfile: releaseTrack,
       bundleIdentifier: input.runtime.bundleIdentifier || "",
+      candidateBinarySha256: "",
+      candidateIdentifier: input.runtime.candidateIdentifier || "",
       generatedAt,
       releaseTrack,
       runId: `no-screen-smoke-${generatedAt.replace(/[:.]/g, "-")}`,
-      schemaVersion: 1,
+      schemaVersion: 3,
+      sourceRevision: input.runtime.sourceRevision || "",
     },
-    screenUse: "draft",
-    sequence: buildNoScreenSequenceDraft(input),
     settingsPersistence: {
       afterRelaunch: currentSettings,
       afterRestore: currentSettings,
@@ -1050,30 +1502,9 @@ export function buildNoScreenSmokeEvidenceDraft(
       nonDefaultSettingSurvivedRelaunch: false,
       restoredDefaultsAfterValidation: false,
     },
-    stopBargeIn: {
-      analysisInactiveAfterStop: input.stopBargeIn.analysisInactiveAfterStop,
-      armedDuringSpeech: input.stopBargeIn.armedDuringSpeech,
-      attemptedDuringSpeech: input.stopBargeIn.attemptedDuringSpeech,
-      audioCueAttempted: input.stopBargeIn.audioCueAttempted,
-      cameraInactiveAfterStop: input.stopBargeIn.cameraInactiveAfterStop,
-      cutThrough: input.stopBargeIn.cutThrough,
-      guidancePaused: input.stopBargeIn.guidancePaused,
-      hapticAttempted: input.stopBargeIn.hapticAttempted,
-      lastSpeechListeningOverlapReason: input.voice.lastSpeechListeningOverlapReason || "",
-      listeningStoppedAfterStop: input.stopBargeIn.listeningStoppedAfterStop,
-      postStopObservedAt: input.stopBargeIn.postStopObservedAt,
-      recognizedCommand: input.stopBargeIn.recognizedCommand || "",
-      recognizedDuringSpeech: input.stopBargeIn.recognizedDuringSpeech,
-      recognizedPhase: input.stopBargeIn.recognizedPhase || "",
-      speechListeningInvariant:
-        input.voice.unexpectedSpeechListeningOverlapCount === 0
-        && (!input.voice.speechListeningOverlapActive || input.voice.lastSpeechListeningOverlapReason === "stop-barge-in")
-          ? "PASS"
-          : "FAIL",
-      staleSpeechAfterStop: input.stopBargeIn.staleSpeechAfterStop,
-      unexpectedSpeechListeningOverlapCount: input.voice.unexpectedSpeechListeningOverlapCount,
-    },
     validationMode: "real-iphone-no-screen",
+    visualScreenUse: "unverified",
+    visualPromptingUsed: null,
     voiceOver: {
       runningAtExport: input.navigationLoop.voiceOverRunning === true,
       runningAtStart: false,
@@ -1085,7 +1516,7 @@ export function buildNoScreenSmokeEvidenceDraft(
 
 export function buildNoScreenSmokeEvidenceDraftJson(
   input = getDiagnosticsSnapshot(),
-  options: { settings?: DiagnosticsEvidenceSettingsSnapshot; operator?: string } = {},
+  options: { settings?: DiagnosticsEvidenceSettingsSnapshot } = {},
 ) {
   return JSON.stringify(buildNoScreenSmokeEvidenceDraft(input, options), null, 2);
 }
@@ -1100,6 +1531,11 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- App: ${runtime.appName}`);
   lines.push(`- Environment: ${runtime.appEnv}`);
   lines.push(`- Release track: ${runtime.releaseTrack}`);
+  lines.push(`- Candidate identifier: ${runtime.candidateIdentifier || "Not found in repo"}`);
+  lines.push(`- Source revision: ${runtime.sourceRevision || "Not found in repo"}`);
+  lines.push(`- App transaction verified: ${input.distribution.transactionVerified ? "yes" : "no"}`);
+  lines.push(`- App identity matched: ${input.distribution.identityMatched ? "yes" : "no"}`);
+  lines.push(`- Distribution environment: ${input.distribution.environment}`);
   lines.push(`- Version: ${runtime.appVersion || "Not found in repo"}`);
   lines.push(`- Build: ${runtime.buildVersion || "Not found in repo"}`);
   lines.push(`- Bundle ID: ${runtime.bundleIdentifier || "Not found in repo"}`);
@@ -1109,7 +1545,6 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Website: ${runtime.websiteUrl || "Not found in repo"}`);
   lines.push(`- Privacy URL: ${runtime.privacyPolicyUrl || "Not found in repo"}`);
   lines.push(`- Support URL: ${runtime.supportUrl || "Not found in repo"}`);
-  lines.push(`- Support email: ${runtime.supportEmail || "Not found in repo"}`);
   lines.push("");
   lines.push("## Camera");
   lines.push(
@@ -1123,7 +1558,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   lines.push(`- Device suffix: ${session.deviceIdSuffix || "Not found in repo"}`);
   lines.push(`- Bootstrap request ID: ${session.requestId || "Not found in repo"}`);
   lines.push(`- Expires at: ${session.expiresAt || "Not found in repo"}`);
-  lines.push(`- Error: ${session.error || "None"}`);
+  lines.push(`- Error recorded: ${session.error ? "yes" : "no"}`);
   lines.push("");
   lines.push("## Voice control");
   lines.push(`- Native voice module available: ${input.voice.available ? "yes" : "no"}`);
@@ -1167,7 +1602,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
         : "Not found in repo"
     }`,
   );
-  lines.push(`- Last voice-module error: ${input.voice.lastError || "None"}`);
+  lines.push(`- Voice-module error recorded: ${input.voice.lastError ? "yes" : "no"}`);
   lines.push("");
   lines.push("## Guidance loop");
   lines.push(`- Native module available: ${input.navigationLoop.available ? "yes" : "no"}`);
@@ -1188,7 +1623,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
         : "Not found in repo"
     }`,
   );
-  lines.push(`- Last native/core error: ${input.navigationLoop.lastError || "None"}`);
+  lines.push(`- Native/core error recorded: ${input.navigationLoop.lastError ? "yes" : "no"}`);
   lines.push("");
   lines.push("## Audio cues");
   lines.push(`- Last type: ${input.audioCue.lastType || "None"}`);
@@ -1210,7 +1645,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   );
   lines.push(`- Success count: ${input.audioCue.successCount}`);
   lines.push(`- Failure count: ${input.audioCue.failureCount}`);
-  lines.push(`- Last error: ${input.audioCue.lastError || "None"}`);
+  lines.push(`- Error recorded: ${input.audioCue.lastError ? "yes" : "no"}`);
   lines.push("");
   lines.push("## Haptics");
   lines.push(`- Last type: ${input.haptics.lastType || "None"}`);
@@ -1232,7 +1667,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
   );
   lines.push(`- Success count: ${input.haptics.successCount}`);
   lines.push(`- Failure count: ${input.haptics.failureCount}`);
-  lines.push(`- Last error: ${input.haptics.lastError || "None"}`);
+  lines.push(`- Error recorded: ${input.haptics.lastError ? "yes" : "no"}`);
   lines.push("");
   lines.push("## Backend health");
   if (lastHealthCheck) {
@@ -1243,7 +1678,7 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Default model: ${lastHealthCheck.defaultModel || "Not found in repo"}`);
     lines.push(`- Benchmark providers: ${lastHealthCheck.benchmarkProviders?.join(", ") || "Not found in repo"}`);
     lines.push(`- Latency: ${typeof lastHealthCheck.latencyMs === "number" ? `${Math.round(lastHealthCheck.latencyMs)}ms` : "Not found in repo"}`);
-    lines.push(`- Error: ${lastHealthCheck.error || "None"}`);
+    lines.push(`- Error recorded: ${lastHealthCheck.error ? "yes" : "no"}`);
   } else {
     lines.push("- Not checked yet");
   }
@@ -1258,9 +1693,6 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
     lines.push(`- Request ID: ${lastAnalyze.requestId || "Not found in repo"}`);
     lines.push(`- Prompt version: ${lastAnalyze.promptVersion || "Not found in repo"}`);
     lines.push(`- App version: ${lastAnalyze.appVersion || "Not found in repo"}`);
-    lines.push(`- Session ID: ${lastAnalyze.sessionId || "Not found in repo"}`);
-    lines.push(`- Frame ID: ${lastAnalyze.frameId || "Not found in repo"}`);
-    lines.push(`- Frame summary: ${lastAnalyze.frameSummary || "Not found in repo"}`);
     lines.push(`- Frame timestamp: ${
       typeof lastAnalyze.frameTimestampMs === "number"
         ? new Date(lastAnalyze.frameTimestampMs).toISOString()
@@ -1297,19 +1729,14 @@ export function buildDiagnosticsReport(input = getDiagnosticsSnapshot()) {
         ? `${lastAnalyze.sourceWidth}x${lastAnalyze.sourceHeight}`
         : "Not found in repo"
     }`);
-    lines.push(`- Prior guidance summary: ${lastAnalyze.priorGuidanceSummary || "None"}`);
     lines.push(`- Direction: ${lastAnalyze.direction || "Not found in repo"}`);
     lines.push(`- Obstacle: ${typeof lastAnalyze.obstacle === "boolean" ? String(lastAnalyze.obstacle) : "Not found in repo"}`);
     lines.push(`- Hazard level: ${lastAnalyze.hazardLevel || "Not found in repo"}`);
     lines.push(`- Lighting: ${lastAnalyze.lighting || "Not found in repo"}`);
     lines.push(`- Surface type: ${lastAnalyze.surfaceType || "Not found in repo"}`);
     lines.push(`- Walkability: ${lastAnalyze.walkability || "Not found in repo"}`);
-    lines.push(`- Scene description: ${lastAnalyze.sceneDescription || "Not found in repo"}`);
     lines.push(`- Confidence: ${typeof lastAnalyze.confidence === "number" ? `${Math.round(lastAnalyze.confidence * 100)}%` : "Not found in repo"}`);
-    lines.push(`- Fallback reason: ${lastAnalyze.fallbackReason || "None"}`);
-    lines.push(`- Message: ${lastAnalyze.message || "Not found in repo"}`);
-    lines.push(`- Error: ${lastAnalyze.error || "None"}`);
-    lines.push(`- Safe reason: ${lastAnalyze.safeReason || "None"}`);
+    lines.push("- Scene and free-form error text: omitted from export");
   } else {
     lines.push("- Not found in repo");
   }

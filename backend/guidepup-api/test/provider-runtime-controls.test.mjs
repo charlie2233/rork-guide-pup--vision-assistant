@@ -30,6 +30,7 @@ test("OpenAI-compatible provider has bounded launch runtime controls", () => {
   }
 
   assert.match(providerSource, /max_completion_tokens:\s*runtimeConfig\.maxCompletionTokens/);
+  assert.match(providerSource, /store:\s*false/);
   assert.match(providerSource, /AbortController/);
   assert.match(providerSource, /isRetryableStatus/);
   assert.match(providerSource, /retryCount:\s*parseBoundedInteger/);
@@ -256,8 +257,10 @@ test("provider can use one bounded fallback call and correlates the failover log
 });
 
 test("provider propagates the local request ID and captures only bounded upstream metadata", async () => {
+  let outboundBody;
   let outboundHeaders;
   const { exports } = loadProviderWithFetch(async (_url, init) => {
+    outboundBody = JSON.parse(init.body);
     outboundHeaders = new Headers(init.headers);
     return Response.json({
       choices: [{ message: { content: JSON.stringify(validProviderVision()) } }],
@@ -286,6 +289,7 @@ test("provider propagates the local request ID and captures only bounded upstrea
   });
 
   assert.equal(outboundHeaders.get("x-client-request-id"), "11111111-1111-4111-8111-111111111111");
+  assert.equal(outboundBody.store, false);
   assert.equal(result.upstreamRequestId, "req_upstream-123");
   assert.equal(result.usage.inputTokens, 321);
   assert.equal(result.usage.outputTokens, undefined);

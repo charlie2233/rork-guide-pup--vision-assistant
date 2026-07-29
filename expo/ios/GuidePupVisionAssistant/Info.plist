@@ -34,6 +34,10 @@
     </array>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>GuidePupAppStoreConnectAppID</key>
+    <string>6756947790</string>
+    <key>GuidePupExpectedBuildNumber</key>
+    <string>4</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>

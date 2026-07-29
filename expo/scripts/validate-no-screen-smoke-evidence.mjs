@@ -9,16 +9,19 @@ import {
   validateNoScreenSmokeEvidenceArtifact,
 } from "./no-screen-smoke-evidence.mjs";
 import {
+  buildExpectedReleaseRuntimeConfigs,
   DEFAULT_RELEASE_CANDIDATE_PATH,
-  validateReleaseCandidateEvidence,
+  validateReleaseCandidateEvidenceSourceBinding,
 } from "./release-candidate-evidence.mjs";
 import { resolveReleaseSourceState } from "./release-source-state.mjs";
 import { validateSmokeArtifactContract } from "../../backend/guidepup-api/eval/smoke-contract.mjs";
+import { resolveWorkerProvenance } from "../../backend/guidepup-api/eval/run-live-smoke.mjs";
 
 const require = createRequire(import.meta.url);
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const { isPlaceholderValue, launchInputs } = require("../release/launch-inputs");
 const DEFAULT_PRODUCTION_SMOKE_PATH = "../backend/guidepup-api/eval/smoke-results-production.latest.json";
+const easJson = JSON.parse(fs.readFileSync(path.join(projectDir, "eas.json"), "utf8"));
 
 function readJsonArtifact(relativePath, label) {
   const artifactPath = path.resolve(projectDir, relativePath);
@@ -39,7 +42,8 @@ function parseArgs(argv) {
     artifact: NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH,
     backendSmoke: DEFAULT_PRODUCTION_SMOKE_PATH,
     candidate: DEFAULT_RELEASE_CANDIDATE_PATH,
-    track: "testflight",
+    installationSource: "ad-hoc",
+    participantRole: "internal-tester",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -53,14 +57,34 @@ function parseArgs(argv) {
     } else if (arg === "--candidate") {
       args.candidate = argv[index + 1];
       index += 1;
-    } else if (arg === "--track") {
-      args.track = argv[index + 1];
+    } else if (arg === "--installation-source") {
+      args.installationSource = argv[index + 1];
+      index += 1;
+    } else if (arg === "--participant-role") {
+      args.participantRole = argv[index + 1];
       index += 1;
     }
   }
 
-  if (!new Set(["store", "testflight"]).has(args.track)) {
-    console.error(`No-screen validation track must be testflight or store, found: ${args.track}`);
+  if (!new Set(["ad-hoc", "testflight"]).has(args.installationSource)) {
+    console.error(
+      `No-screen installation source must be ad-hoc or testflight, found: ${args.installationSource}`,
+    );
+    process.exit(1);
+  }
+  if (!new Set(["internal-tester", "blind-participant"]).has(args.participantRole)) {
+    console.error(
+      `No-screen participant role must be internal-tester or blind-participant, found: ${args.participantRole}`,
+    );
+    process.exit(1);
+  }
+  if (
+    args.installationSource === "testflight"
+    && args.participantRole !== "blind-participant"
+  ) {
+    console.error(
+      "TestFlight no-screen evidence requires participant role blind-participant.",
+    );
     process.exit(1);
   }
 
@@ -77,16 +101,26 @@ try {
 }
 
 const candidate = readJsonArtifact(args.candidate, "Release candidate evidence");
-const candidateValidation = validateReleaseCandidateEvidence(candidate, {
+const candidateValidation = validateReleaseCandidateEvidenceSourceBinding(candidate, {
   appVersion: launchInputs.iosMarketingVersion,
   buildNumber: launchInputs.iosBuildNumber,
   bundleIdentifier: launchInputs.iosBundleIdentifier,
+  releaseRuntimeConfigs: buildExpectedReleaseRuntimeConfigs(easJson),
   sourceRevision: sourceState.sourceRevision,
   teamIdentifier: launchInputs.appleTeamId,
 });
 if (!candidateValidation.valid) {
-  console.error("Release candidate evidence is not launch-valid.");
+  console.error("Release candidate evidence is not structurally source-bound.");
   console.error(candidateValidation.errors.join("\n"));
+  process.exit(1);
+}
+if (
+  args.installationSource === "testflight"
+  && !new Set(["testflight", "store"]).has(candidate.release.buildProfile)
+) {
+  console.error(
+    `TestFlight installation evidence requires a testflight or store candidate, found build profile: ${candidate.release.buildProfile ?? "missing"}`,
+  );
   process.exit(1);
 }
 
@@ -105,6 +139,31 @@ if (!backendSmokeValidation.valid) {
   process.exit(1);
 }
 
+let activeWorkerProvenance;
+try {
+  activeWorkerProvenance = resolveWorkerProvenance("production", sourceState.sourceRevision);
+} catch {
+  console.error(
+    "Production backend smoke evidence cannot be accepted because the active production Worker could not be verified.",
+  );
+  process.exit(1);
+}
+
+const activeWorkerMismatches = [
+  ["workerDeploymentId", backendSmoke.provenance?.workerDeploymentId],
+  ["workerVersionId", backendSmoke.provenance?.workerVersionId],
+  ["workerVersionCreatedAt", backendSmoke.provenance?.workerVersionCreatedAt],
+]
+  .filter(([field, value]) => value !== activeWorkerProvenance[field])
+  .map(([field]) => field);
+
+if (activeWorkerMismatches.length > 0) {
+  console.error(
+    `Production backend smoke evidence does not match the active production Worker: ${activeWorkerMismatches.join(", ")}.`,
+  );
+  process.exit(1);
+}
+
 const artifact = readNoScreenSmokeEvidenceArtifact(projectDir, args.artifact);
 
 if (!artifact) {
@@ -119,13 +178,19 @@ const result = validateNoScreenSmokeEvidenceArtifact(artifact, {
   expectedAppVersion: launchInputs.iosMarketingVersion,
   expectedBackendSmokeArtifact: backendSmoke,
   expectedBuildNumber: launchInputs.iosBuildNumber,
-  expectedBuildProfile: args.track,
+  expectedBuildProfile: candidate.release.buildProfile,
   expectedBundleIdentifier: isPlaceholderValue(launchInputs.iosBundleIdentifier)
     ? undefined
     : launchInputs.iosBundleIdentifier,
   expectedCandidateBinarySha256: candidate.archive.binarySha256,
+  expectedCandidateIdentifier: candidate.release.candidateBinding.candidateIdentifier,
+  expectedCandidateIpaSha256: candidate.ipa.sha256,
+  expectedValidationIpaSha256: candidate.validationIpa.sha256,
+  expectedCandidateGeneratedAt: candidate.generatedAt,
+  expectedInstallationSource: args.installationSource,
+  expectedParticipantRole: args.participantRole,
   expectedPromptVersion: launchInputs.productionPromptVersion,
-  expectedReleaseTrack: args.track,
+  expectedReleaseTrack: candidate.release.evidenceTrack,
   expectedSourceRevision: sourceState.sourceRevision,
   expectedVisionModel: launchInputs.productionVisionModel,
   requireCandidateBinding: true,

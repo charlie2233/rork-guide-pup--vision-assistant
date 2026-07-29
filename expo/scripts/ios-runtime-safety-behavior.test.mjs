@@ -149,6 +149,30 @@ function createNavigationCoreAnnouncementHarness({ nativeModule = null } = {}) {
   };
 }
 
+test("STOP sensory calls expose the outcome of that exact delivery attempt", async () => {
+  const hapticSuccessAudioFailure = createNavigationCoreAnnouncementHarness({
+    nativeModule: {
+      playAudioCue: async () => {
+        throw new Error("simulated audio failure");
+      },
+      playHaptic: async () => {},
+    },
+  }).core;
+
+  assert.equal(
+    await hapticSuccessAudioFailure.playHapticWithOutcome("stop"),
+    "success",
+  );
+  assert.equal(
+    await hapticSuccessAudioFailure.playAudioCueWithOutcome("stop"),
+    "failure",
+  );
+
+  const fallback = createNavigationCoreAnnouncementHarness().core;
+  assert.equal(await fallback.playHapticWithOutcome("stop"), "success");
+  assert.equal(await fallback.playAudioCueWithOutcome("stop"), "failure");
+});
+
 test("deterministic iOS guard can only preserve safe movement or force STOP", () => {
   const {
     MAX_ANALYSIS_LATENCY_AT_ACTUATION_MS,
@@ -435,6 +459,221 @@ test("queued camera shutdown finishes before a superseding native start", async 
   });
   assert.equal(staleStop, false);
   assert.doesNotMatch(operations.join(","), /unexpected-stale-stop/);
+});
+
+test("quick blur and refocus settles the exact stop before starting a new camera owner", async () => {
+  const {
+    createCameraOwnershipTransitionCoordinator,
+    resolveRecoveryCameraShutdownTruth,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  const coordinator = createCameraOwnershipTransitionCoordinator();
+  const operations = [];
+  let nativeSessionActive = true;
+  let resolvePhysicalStop;
+  let resolveRefocusStart;
+  const physicalStopGate = new Promise((resolve) => {
+    resolvePhysicalStop = resolve;
+  });
+  const refocusStartGate = new Promise((resolve) => {
+    resolveRefocusStart = resolve;
+  });
+
+  const blurStopRequest = coordinator.requestNativeStop(async () => {
+    operations.push("blur-stop-started");
+    await physicalStopGate;
+    nativeSessionActive = false;
+    operations.push("blur-stop-finished");
+  });
+  await Promise.resolve();
+
+  const refocusGeneration = coordinator.beginTransition();
+  const refocusStart = coordinator.startNativeSession(
+    refocusGeneration,
+    async () => {
+      operations.push("refocus-started");
+      await refocusStartGate;
+      nativeSessionActive = true;
+      operations.push("refocus-ready");
+    },
+    async () => {
+      operations.push("refocus-stale-cleanup");
+    },
+  );
+  assert.deepEqual(operations, ["blur-stop-started"]);
+
+  resolvePhysicalStop();
+  const stopCompleted = await blurStopRequest.promise;
+  assert.equal(stopCompleted, true);
+  assert.equal(nativeSessionActive, false);
+  assert.equal(resolveRecoveryCameraShutdownTruth({
+    nativeSessionActive,
+    stateReadCompleted: true,
+    stopCompleted,
+  }), true);
+
+  resolveRefocusStart();
+  assert.equal(await refocusStart, true);
+  assert.equal(nativeSessionActive, true);
+  assert.deepEqual(operations, [
+    "blur-stop-started",
+    "blur-stop-finished",
+    "refocus-started",
+    "refocus-ready",
+  ]);
+
+  let staleStopCalls = 0;
+  assert.equal(
+    await coordinator.stopNativeSession(blurStopRequest.generation, async () => {
+      staleStopCalls += 1;
+      nativeSessionActive = false;
+    }),
+    false,
+  );
+  assert.equal(staleStopCalls, 0);
+  assert.equal(nativeSessionActive, true);
+  assert.equal(coordinator.isCurrent(refocusGeneration), true);
+});
+
+test("route teardown blocks late voice recovery and queued resume until exact settlement", () => {
+  const { createRouteTeardownLaunchBarrier } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const barrier = createRouteTeardownLaunchBarrier();
+  const effects = {
+    cameraGateActive: true,
+    cameraTransitions: 0,
+    guiding: false,
+    runtimeSafetyHold: true,
+    voiceOwner: null,
+    voiceRecoveryGateActive: true,
+  };
+  let persistentSafetyHold = false;
+
+  const runOrdinaryRouteCallback = (focusGeneration, callback) => {
+    if (
+      !barrier.isFocusCurrent(focusGeneration)
+      || barrier.isBlocked()
+      || persistentSafetyHold
+    ) {
+      return false;
+    }
+    callback();
+    return true;
+  };
+  const launchFocusedRuntime = (focusGeneration, owner) =>
+    runOrdinaryRouteCallback(focusGeneration, () => {
+      effects.runtimeSafetyHold = false;
+      effects.voiceRecoveryGateActive = false;
+      effects.cameraGateActive = false;
+      effects.guiding = true;
+      effects.cameraTransitions += 1;
+      effects.voiceOwner = owner;
+    });
+
+  const oldFocusGeneration = barrier.beginFocus();
+  const lateOldOwnerCallback = (callback) =>
+    runOrdinaryRouteCallback(oldFocusGeneration, callback);
+  barrier.endFocus(oldFocusGeneration);
+  const teardownGeneration = barrier.beginTeardown();
+
+  const refocusGeneration = barrier.beginFocus();
+  assert.equal(
+    barrier.waitForTeardown(refocusGeneration, teardownGeneration),
+    true,
+  );
+  assert.equal(barrier.isBlocked(), true);
+
+  const lateIdleListening = () =>
+    runOrdinaryRouteCallback(refocusGeneration, () => {
+      effects.voiceRecoveryGateActive = false;
+      effects.runtimeSafetyHold = false;
+    });
+  const queuedStartGuidance = () =>
+    launchFocusedRuntime(refocusGeneration, "queued-old-owner");
+
+  assert.equal(lateIdleListening(), false);
+  assert.equal(queuedStartGuidance(), false);
+  assert.deepEqual(effects, {
+    cameraGateActive: true,
+    cameraTransitions: 0,
+    guiding: false,
+    runtimeSafetyHold: true,
+    voiceOwner: null,
+    voiceRecoveryGateActive: true,
+  });
+
+  assert.equal(barrier.settleTeardown(teardownGeneration + 1), false);
+  assert.equal(
+    barrier.completeFocusSettlement(refocusGeneration, teardownGeneration),
+    false,
+  );
+  assert.equal(barrier.isBlocked(), true);
+
+  assert.equal(barrier.settleTeardown(teardownGeneration), true);
+  assert.equal(
+    barrier.isBlocked(),
+    true,
+    "The wait barrier must remain active until the current focus consumes the exact settlement.",
+  );
+  assert.equal(lateIdleListening(), false);
+  assert.equal(queuedStartGuidance(), false);
+  assert.equal(
+    barrier.completeFocusSettlement(refocusGeneration, teardownGeneration),
+    true,
+  );
+  assert.equal(barrier.isBlocked(), false);
+  assert.equal(
+    launchFocusedRuntime(refocusGeneration, "current-owner"),
+    true,
+  );
+  assert.deepEqual(effects, {
+    cameraGateActive: false,
+    cameraTransitions: 1,
+    guiding: true,
+    runtimeSafetyHold: false,
+    voiceOwner: "current-owner",
+    voiceRecoveryGateActive: false,
+  });
+
+  assert.equal(
+    lateOldOwnerCallback(() => {
+      effects.cameraGateActive = true;
+      effects.guiding = false;
+      effects.voiceOwner = "stale-owner";
+    }),
+    false,
+  );
+  assert.equal(effects.voiceOwner, "current-owner");
+  assert.equal(effects.cameraTransitions, 1);
+  assert.equal(effects.guiding, true);
+
+  barrier.endFocus(refocusGeneration);
+  const rejectedTeardownGeneration = barrier.beginTeardown();
+  const rejectedRefocusGeneration = barrier.beginFocus();
+  assert.equal(
+    barrier.waitForTeardown(
+      rejectedRefocusGeneration,
+      rejectedTeardownGeneration,
+    ),
+    true,
+  );
+  assert.equal(barrier.settleTeardown(rejectedTeardownGeneration), true);
+  assert.equal(
+    barrier.completeFocusSettlement(
+      rejectedRefocusGeneration,
+      rejectedTeardownGeneration,
+    ),
+    true,
+  );
+  persistentSafetyHold = true;
+  effects.runtimeSafetyHold = true;
+  effects.guiding = false;
+  assert.equal(
+    launchFocusedRuntime(rejectedRefocusGeneration, "unsafe-owner"),
+    false,
+  );
+  assert.equal(effects.voiceOwner, "current-owner");
+  assert.equal(effects.cameraTransitions, 1);
 });
 
 test("native startup deadline rejects into the fallback ownership path", { timeout: 2_000 }, async () => {
@@ -877,9 +1116,11 @@ test("never-settling or stale STOP confirmation stays bounded and cannot rearm l
 
 test("touch STOP leaves Navigation only after shutdown and spoken confirmation are both proven", () => {
   const {
+    planVoiceRecoveryCompletion,
     shouldLeaveNavigationAfterTouchStop,
     shouldRetainRuntimeSafetyHoldAfterVoiceRecovery,
     shouldRetryFailedStop,
+    shouldSuspendVoiceRecognitionForSpeech,
   } = loadTsModule(
     new URL("../src/lib/runtimeSafety.ts", import.meta.url),
   );
@@ -922,6 +1163,38 @@ test("touch STOP leaves Navigation only after shutdown and spoken confirmation a
     stopSafetyFailureHold: false,
     touchStopFailureHold: true,
   }), true);
+
+  const recoveredPlan = planVoiceRecoveryCompletion({
+    stopSafetyFailureHold: false,
+    touchStopFailureHold: false,
+  });
+  assert.equal(
+    recoveredPlan.detail,
+    "Voice control recovered. Say start guidance to resume.",
+  );
+  assert.equal(recoveredPlan.guidanceActive, false);
+  assert.equal(recoveredPlan.runtimeSafetyHold, false);
+  assert.equal(recoveredPlan.title, "Guidance paused");
+  assert.equal(planVoiceRecoveryCompletion({
+    stopSafetyFailureHold: true,
+    touchStopFailureHold: false,
+  }).guidanceActive, false);
+
+  assert.equal(shouldSuspendVoiceRecognitionForSpeech({
+    keepListeningDuringSpeech: false,
+    listening: true,
+    ownedSession: true,
+  }), true);
+  assert.equal(shouldSuspendVoiceRecognitionForSpeech({
+    keepListeningDuringSpeech: true,
+    listening: true,
+    ownedSession: true,
+  }), false);
+  assert.equal(shouldSuspendVoiceRecognitionForSpeech({
+    keepListeningDuringSpeech: false,
+    listening: false,
+    ownedSession: false,
+  }), false);
 
   assert.equal(shouldRetryFailedStop({
     guiding: false,
@@ -2029,6 +2302,356 @@ test("owned cleanup captures and clears its token before an async stop", async (
     },
   }), null);
   assert.equal(emptyStopCalls, 0);
+});
+
+test("superseded speech preserves one shared voice-recognition rearm debt", () => {
+  const {
+    beginVoiceRecognitionRearm,
+    cancelVoiceRecognitionRearm,
+    createVoiceRecognitionRearmState,
+    finishVoiceRecognitionRearm,
+    markVoiceRecognitionRearmNeeded,
+  } = loadTsModule(
+    new URL("../src/lib/ownedVoiceSession.ts", import.meta.url),
+  );
+  const stateRef = {
+    current: createVoiceRecognitionRearmState(),
+  };
+
+  markVoiceRecognitionRearmNeeded(stateRef);
+  const replacementResponseRearm = beginVoiceRecognitionRearm(stateRef);
+  assert.equal(typeof replacementResponseRearm, "number");
+  assert.equal(beginVoiceRecognitionRearm(stateRef), null);
+
+  assert.equal(
+    finishVoiceRecognitionRearm(
+      stateRef,
+      replacementResponseRearm,
+      false,
+    ),
+    true,
+  );
+  const retry = beginVoiceRecognitionRearm(stateRef);
+  assert.equal(typeof retry, "number");
+
+  cancelVoiceRecognitionRearm(stateRef);
+  assert.equal(
+    finishVoiceRecognitionRearm(stateRef, retry, false),
+    false,
+  );
+  assert.equal(beginVoiceRecognitionRearm(stateRef), null);
+});
+
+test("a keep-listening superseder drains the shared rearm debt exactly once", async () => {
+  const {
+    createVoiceRecognitionRearmState,
+    drainVoiceRecognitionRearm,
+    markVoiceRecognitionRearmNeeded,
+  } = loadTsModule(
+    new URL("../src/lib/ownedVoiceSession.ts", import.meta.url),
+  );
+  const stateRef = {
+    current: createVoiceRecognitionRearmState(),
+  };
+  const promiseRef = { current: null };
+  let releaseStart;
+  const startGate = new Promise((resolve) => {
+    releaseStart = resolve;
+  });
+  let startCalls = 0;
+
+  markVoiceRecognitionRearmNeeded(stateRef);
+  const interruptedResponseRearm = drainVoiceRecognitionRearm({
+    isListeningReady: () => false,
+    promiseRef,
+    start: async () => {
+      startCalls += 1;
+      await startGate;
+      return true;
+    },
+    stateRef,
+  });
+  const keepListeningSupersederRearm = drainVoiceRecognitionRearm({
+    isListeningReady: () => false,
+    promiseRef,
+    start: async () => {
+      startCalls += 1;
+      return true;
+    },
+    stateRef,
+  });
+
+  assert.equal(startCalls, 1);
+  assert.equal(stateRef.current.inFlight, true);
+  releaseStart();
+  assert.equal(await interruptedResponseRearm, true);
+  assert.equal(await keepListeningSupersederRearm, true);
+  assert.equal(startCalls, 1);
+  assert.equal(stateRef.current.inFlight, false);
+  assert.equal(stateRef.current.needed, false);
+  assert.equal(promiseRef.current, null);
+});
+
+test("failed shared rearm remains debt and cannot report STOP listening ready", async () => {
+  const {
+    createVoiceRecognitionRearmState,
+    drainVoiceRecognitionRearm,
+    markVoiceRecognitionRearmNeeded,
+  } = loadTsModule(
+    new URL("../src/lib/ownedVoiceSession.ts", import.meta.url),
+  );
+  const stateRef = {
+    current: createVoiceRecognitionRearmState(),
+  };
+  const promiseRef = { current: null };
+  markVoiceRecognitionRearmNeeded(stateRef);
+
+  assert.equal(await drainVoiceRecognitionRearm({
+    isListeningReady: () => false,
+    promiseRef,
+    start: async () => false,
+    stateRef,
+  }), false);
+  assert.equal(stateRef.current.inFlight, false);
+  assert.equal(stateRef.current.needed, true);
+});
+
+test("screen-reader speech invalidation drains shared rearm debt and stale speech cannot clear a newer guard", async () => {
+  const {
+    createVoiceRecognitionRearmState,
+    drainVoiceRecognitionRearm,
+    markVoiceRecognitionRearmNeeded,
+  } = loadTsModule(
+    new URL("../src/lib/ownedVoiceSession.ts", import.meta.url),
+  );
+  const { isSpeechTransitionCurrent } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const stateRef = {
+    current: createVoiceRecognitionRearmState(),
+  };
+  const promiseRef = { current: null };
+  let startCalls = 0;
+  let currentSpeechGeneration = 7;
+  const invalidatedSpeechGeneration = currentSpeechGeneration;
+
+  markVoiceRecognitionRearmNeeded(stateRef);
+  assert.equal(await drainVoiceRecognitionRearm({
+    isListeningReady: () => false,
+    promiseRef,
+    start: async () => {
+      startCalls += 1;
+      return true;
+    },
+    stateRef,
+  }), true);
+  assert.equal(startCalls, 1);
+  assert.equal(stateRef.current.needed, false);
+
+  currentSpeechGeneration += 1;
+  let newerSpeechGuardActive = true;
+  if (isSpeechTransitionCurrent({
+    currentGeneration: currentSpeechGeneration,
+    expectedGeneration: invalidatedSpeechGeneration,
+    focused: true,
+    ownerMatches: true,
+  })) {
+    newerSpeechGuardActive = false;
+  }
+  assert.equal(newerSpeechGuardActive, true);
+});
+
+test("recovery exhaustion surfaces once after an earlier event paused guidance", () => {
+  const { shouldSurfaceRecoveryTransition } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+
+  assert.equal(shouldSurfaceRecoveryTransition({
+    exhaustedAlreadyHandled: false,
+    focused: true,
+    guidanceActive: true,
+    recoveryGateActive: false,
+    recoveryState: "recovering",
+    transitionReady: true,
+  }), true);
+  assert.equal(shouldSurfaceRecoveryTransition({
+    exhaustedAlreadyHandled: false,
+    focused: true,
+    guidanceActive: false,
+    recoveryGateActive: true,
+    recoveryState: "exhausted",
+    transitionReady: false,
+  }), true);
+  assert.equal(shouldSurfaceRecoveryTransition({
+    exhaustedAlreadyHandled: true,
+    focused: true,
+    guidanceActive: false,
+    recoveryGateActive: true,
+    recoveryState: "exhausted",
+    transitionReady: false,
+  }), false);
+});
+
+test("recovery camera shutdown requires bounded stop completion and observed native inactivity", () => {
+  const { resolveRecoveryCameraShutdownTruth } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+
+  assert.equal(resolveRecoveryCameraShutdownTruth({
+    nativeSessionActive: false,
+    stateReadCompleted: true,
+    stopCompleted: true,
+  }), true);
+  for (const unsafeObservation of [
+    {
+      nativeSessionActive: true,
+      stateReadCompleted: true,
+      stopCompleted: true,
+    },
+    {
+      nativeSessionActive: false,
+      stateReadCompleted: false,
+      stopCompleted: true,
+    },
+    {
+      nativeSessionActive: false,
+      stateReadCompleted: true,
+      stopCompleted: false,
+    },
+  ]) {
+    assert.equal(resolveRecoveryCameraShutdownTruth(unsafeObservation), false);
+  }
+});
+
+test("rejected recovery shutdown still requires the critical spoken warning", async () => {
+  const {
+    resolveRecoveryCameraShutdownTruth,
+    settleCurrentAnnouncementDelivery,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  const effects = [];
+  const shutdownConfirmed = resolveRecoveryCameraShutdownTruth({
+    nativeSessionActive: true,
+    stateReadCompleted: true,
+    stopCompleted: false,
+  });
+  const message = shutdownConfirmed
+    ? "Camera recovery paused."
+    : "Stop. Guidance remains paused. Shutdown could not be confirmed. Close Guide Pup before moving.";
+
+  const outcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      effects.push(["spoken", message]);
+    },
+    interrupt: async () => {
+      effects.push(["interrupted"]);
+    },
+    isCurrent: () => true,
+  });
+
+  assert.equal(shutdownConfirmed, false);
+  assert.equal(outcome, "completed");
+  assert.deepEqual(effects, [["spoken", message]]);
+  assert.match(message, /^Stop\./);
+  assert.match(message, /Close Guide Pup before moving\./);
+});
+
+test("rejected route teardown records fail-closed truth and cannot authorize restart", () => {
+  const { resolveRouteTeardownShutdownTruth } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const teardownConfirmed = resolveRouteTeardownShutdownTruth({
+    announcementOwnerReleased: false,
+    cameraShutdownConfirmed: false,
+    voiceSessionStopped: false,
+  });
+  const routeState = {
+    cameraRecoveryGateActive: true,
+    focused: false,
+    runtimeSafetyHold: true,
+    voiceRecoveryGateActive: true,
+  };
+  const canRestartCamera =
+    teardownConfirmed
+    && routeState.focused
+    && !routeState.cameraRecoveryGateActive
+    && !routeState.runtimeSafetyHold;
+  const canRestartListener =
+    teardownConfirmed
+    && routeState.focused
+    && !routeState.voiceRecoveryGateActive
+    && !routeState.runtimeSafetyHold;
+
+  assert.equal(teardownConfirmed, false);
+  assert.equal(canRestartCamera, false);
+  assert.equal(canRestartListener, false);
+});
+
+test("failed prior-speech cancellation prevents replacement channel delivery", async () => {
+  const { settlePriorSpeechChannels } = loadTsModule(
+    new URL("../src/lib/runtimeSafety.ts", import.meta.url),
+  );
+  const effects = [];
+  const previousSpeechStopped = await settlePriorSpeechChannels({
+    isCurrent: () => true,
+    operations: [
+      {
+        name: "native speech stop",
+        stop: async () => {
+          effects.push("native-stop-attempt");
+          throw new Error("simulated native speech cancellation failure");
+        },
+      },
+      {
+        name: "VoiceOver announcement stop",
+        stop: async () => {
+          effects.push("voiceover-stop-attempt");
+        },
+      },
+    ],
+    timeoutMs: 100,
+  });
+  if (previousSpeechStopped) {
+    effects.push("replacement-delivery-started");
+  }
+
+  assert.equal(previousSpeechStopped, false);
+  assert.deepEqual(effects, [
+    "native-stop-attempt",
+    "voiceover-stop-attempt",
+  ]);
+});
+
+test("retained STOP hold recovery instructions remain paused and are announced", async () => {
+  const {
+    planVoiceRecoveryCompletion,
+    settleCurrentAnnouncementDelivery,
+    shouldSuspendVoiceRecognitionForSpeech,
+  } = loadTsModule(new URL("../src/lib/runtimeSafety.ts", import.meta.url));
+  const recoveryPlan = planVoiceRecoveryCompletion({
+    stopSafetyFailureHold: true,
+    touchStopFailureHold: false,
+  });
+  const announcements = [];
+
+  const outcome = await settleCurrentAnnouncementDelivery({
+    deliver: async () => {
+      announcements.push(recoveryPlan.detail);
+    },
+    interrupt: async () => undefined,
+    isCurrent: () => recoveryPlan.runtimeSafetyHold,
+  });
+
+  assert.equal(recoveryPlan.guidanceActive, false);
+  assert.equal(recoveryPlan.runtimeSafetyHold, true);
+  assert.equal(shouldSuspendVoiceRecognitionForSpeech({
+    keepListeningDuringSpeech: true,
+    listening: true,
+    ownedSession: true,
+  }), false);
+  assert.equal(outcome, "completed");
+  assert.deepEqual(announcements, [
+    "Voice control recovered, but STOP safety is still unconfirmed. Say stop guidance again or double tap Return Home to retry.",
+  ]);
 });
 
 test("a delayed announcement release cannot interrupt a newer route owner", async () => {

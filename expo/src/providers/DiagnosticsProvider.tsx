@@ -6,8 +6,9 @@ import { AppState } from "react-native";
 import { appConfig } from "@/src/lib/config";
 import {
   getDiagnosticsSnapshot,
-  recordNavigationLoopSnapshot,
   recordCameraPermissionSnapshot,
+  recordDistributionEvidenceSnapshot,
+  recordNavigationLoopSnapshot,
   recordSessionBootstrapState,
   recordVoiceSnapshot,
   setDiagnosticsRuntime,
@@ -17,8 +18,15 @@ import { GuidePupNavigationCore } from "@/src/native/GuidePupNavigationCore";
 import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
 
 async function refreshDiagnosticsSnapshots() {
-  const [cameraPermission, navigationCoreState, session, voiceState] = await Promise.all([
+  const [
+    cameraPermission,
+    distributionEvidence,
+    navigationCoreState,
+    session,
+    voiceState,
+  ] = await Promise.all([
     Camera.getCameraPermissionsAsync().catch(() => null),
+    GuidePupNavigationCore.getDistributionEvidence().catch(() => null),
     GuidePupNavigationCore.getState().catch(() => null),
     getStoredDeviceSession().catch(() => null),
     GuidePupVoiceControl.getState().catch(() => null),
@@ -31,6 +39,10 @@ async function refreshDiagnosticsSnapshots() {
       granted: cameraPermission.granted,
       status: cameraPermission.status,
     });
+  }
+
+  if (distributionEvidence) {
+    recordDistributionEvidenceSnapshot(distributionEvidence);
   }
 
   if (session) {
@@ -68,6 +80,15 @@ async function refreshDiagnosticsSnapshots() {
 
 function initializeRuntimeMetadata() {
   const expoConfig = Constants.expoConfig;
+  const candidateBinding = expoConfig?.extra?.guidePupCandidateBinding;
+  const candidateIdentifier =
+    typeof candidateBinding?.candidateIdentifier === "string"
+      ? candidateBinding.candidateIdentifier
+      : undefined;
+  const sourceRevision =
+    typeof candidateBinding?.sourceRevision === "string"
+      ? candidateBinding.sourceRevision
+      : undefined;
 
   setDiagnosticsRuntime({
     apiBaseUrl: appConfig.apiBaseUrl,
@@ -76,10 +97,12 @@ function initializeRuntimeMetadata() {
     appVersion: expoConfig?.version || undefined,
     buildVersion: expoConfig?.ios?.buildNumber || String(expoConfig?.android?.versionCode || ""),
     bundleIdentifier: expoConfig?.ios?.bundleIdentifier || expoConfig?.android?.package || undefined,
+    candidateIdentifier,
     emergencyDisclaimer: appConfig.emergencyDisclaimer,
     experimentalTabsEnabled: appConfig.enableExperimentalTabs,
     privacyPolicyUrl: appConfig.privacyPolicyUrl,
     releaseTrack: appConfig.releaseTrack,
+    sourceRevision,
     crashReportingEnabled: false,
     slug: expoConfig?.slug,
     supportEmail: appConfig.supportEmail,

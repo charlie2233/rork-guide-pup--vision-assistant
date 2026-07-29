@@ -23,7 +23,8 @@ function buildEnvelope(interactionMode) {
     },
     detail: "low",
     frameId: `smoke-${interactionMode}-frame`,
-    frameSummary: `Synthetic sampled ${interactionMode} frame summary.`,
+    frameSummary:
+      `Synthetic sampled js-fallback ${interactionMode} smoke frame, source 40x40, upload 40x40.`,
     hasImage: true,
     interactionMode,
     mimeType: "image/png",
@@ -168,7 +169,7 @@ test("smoke artifact rejects bootstrap session tokens", () => {
 test("smoke artifact rejects raw media snippets", () => {
   assertPrivacyInvalid(
     buildValidSmokeArtifact({ rawText: `data:image/png;base64,${"a".repeat(240)}` }),
-    "data:(?:image|audio)",
+    "data media base64 payload",
   );
 });
 

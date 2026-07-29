@@ -404,10 +404,10 @@ test("checked-in reviewer notes and screenshot plan remain launch-safe", () => {
 
   assert.match(qualityReport, /earlier provider smoke at `3cc852c` is superseded historical proof only/i);
   assert.match(qualityReport, /not current exact-revision evidence/i);
-  assert.match(qualityReport, /iOS runtime safety `85\/85`/i);
-  assert.doesNotMatch(qualityReport, /iOS runtime safety `(?:61|63|65|70|71|77|81)\/(?:61|63|65|70|71|77|81)`/i);
-  assert.match(runtimePhaseReport, /iOS runtime safety `85\/85`/i);
-  assert.doesNotMatch(runtimePhaseReport, /iOS runtime safety `(?:61|63|65|70|71|77|81)\/(?:61|63|65|70|71|77|81)`/i);
+  assert.match(qualityReport, /iOS runtime safety\s+(?:suite\s+)?passes\s+`103\/103`/i);
+  assert.doesNotMatch(qualityReport, /iOS runtime safety `(?:61|63|65|70|71|77|81|85)\/(?:61|63|65|70|71|77|81|85)`/i);
+  assert.match(runtimePhaseReport, /iOS runtime safety\s+(?:suite\s+)?passes\s+`103\/103`/i);
+  assert.doesNotMatch(runtimePhaseReport, /iOS runtime safety `(?:61|63|65|70|71|77|81|85)\/(?:61|63|65|70|71|77|81|85)`/i);
 });
 
 function loadNavigationCore({ manipulateAsync, deleteFile } = {}) {

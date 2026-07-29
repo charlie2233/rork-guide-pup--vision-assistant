@@ -1,71 +1,68 @@
 # No-Screen Smoke Evidence
 
-Use this packet for internal iPhone validation before TestFlight. The tester should be able to complete the sequence without reading the screen. Do not attach raw camera frames, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
+Use v3 evidence for physical iPhone launch validation. Every core action must work without reading the screen. Never include names, email addresses, phone numbers, raw images, raw audio, credentials, signed URLs, provider keys, or full device identifiers.
 
-The machine-readable evidence artifact for release preflight is `expo/release/no-screen-smoke.latest.json`. The expected shape is documented in `expo/docs/no-screen-smoke-evidence.example.json`; the example is not launch evidence.
+The historical v1 example at `expo/docs/no-screen-smoke-evidence.example.json` remains readable for reference but is launch-invalid.
 
-The Diagnostics screen can export a sanitized `Export no-screen JSON draft` payload after a device run. That draft intentionally does not pass release validation until the tester fills the real device-readiness and no-screen attestation fields.
+## Required Files
 
-## Required Setup
+- `expo/release/candidate-build.latest.json`: generated from the signed archive, the Store IPA intended for upload, and a separately signed validation IPA authorized for the evidence iPhone. Its structured Expo Constants binding proves the release track, API environment, API URL, public URLs, and shipping feature flags; `release.candidateBinding.candidateIdentifier` identifies the signed runtime configuration and `ipa.sha256` identifies the Store upload artifact. Fresh inspection requires archive, Store IPA, and validation IPA to have the same normalized unsigned app payload after removing signing-only material. The Store IPA must use App Store signing; the validation IPA must use development or ad hoc signing with at least one provisioned device.
+- `expo/release/ios-submission.latest.json`: a privacy-safe local upload-attempt record generated after the validated submit command reports success. It binds the candidate ID, source revision, Store IPA SHA-256, app/version/build, hashed App Store Connect app ID, and bounded attempt window without storing paths, CLI output, URLs, credentials, or tokens. It is not an Apple receipt and cannot prove which bytes Apple received.
+- `expo/release/no-screen-smoke.internal.latest.json`: pre-upload ad hoc run by an `internal-tester`.
+- `expo/release/no-screen-smoke.blind-participant.latest.json`: pre-upload ad hoc repeat by a separate `blind-participant`.
+- `expo/release/no-screen-smoke.testflight.latest.json`: post-processing repeat installed from TestFlight and completed by a `blind-participant`.
 
-- Physical iPhone model, iOS version, build profile, app version, build number, and bundle identifier.
-- Signed-candidate evidence from `expo/release/candidate-build.latest.json`; copy its `archive.binarySha256` into `provenance.candidateBinarySha256` before the run.
-- Backend environment and API base URL label: staging, production, or local.
-- Device state: paired/trusted, Developer Mode enabled, Xcode visibility, VoiceOver state, and the sanitized result from `npm --prefix expo run check:ios-device`.
-- Structured device-readiness JSON from `npm --prefix expo run check:ios-device -- --json`. This output is suffix-only and can be copied into the evidence packet when it reports both `deviceReadiness.result: "ready"` and `deviceReadiness.coreDeviceExecutionReady: true`. DDI, tunnel, and USB fields are informational snapshots because CoreDevice may establish them only while the bounded probe runs.
-- Diagnostics export from the app after the run.
-- Sanitized no-screen JSON draft from the Diagnostics screen after the run.
-- Backend smoke artifact request IDs for `/health`, `/v1/device/bootstrap`, and `/v1/vision/analyze`.
-- Machine-readable artifact fields for device readiness, assistive tech, diagnostics, backend request IDs, and every voice-sequence step.
+Both pre-upload run files are required by TestFlight preflight. They must come from the inspected validation IPA and set `installationEvidence.installedValidationIpaSha256` to candidate `validationIpa.sha256`; they must not claim an uploaded Store IPA. Store preflight requires all three run files. Each file needs a unique run ID and unique native/fallback execution, analyze request, and per-step event IDs. The two pre-upload files also need distinct pseudonymous operators and participant labels. Use `operator-*`, `internal-*`, and `blind-*` prefixes without real names or contact details. The TestFlight repeat must use an iOS 16-or-newer evidence device, begin after both pre-upload executions and App Store Connect's authenticated `uploadedAt` value, include the exact sanitized App Store Connect build record identifier, and report `installationEvidence.appTransactionVerified: true`, `appIdentityMatched: true`, `appStoreAppIdMatched: true`, `bundleVersionMatched: true`, `distributionEnvironment: "apple-sandbox"`, `storeKitEvidencePurpose: "apple-signed-app-identity-only"`, and `uploadedIpaSha256` equal to the candidate Store `ipa.sha256`. TestFlight evidence must not carry the validation IPA hash.
 
-## Voice Sequence
+The Diagnostics screen omits all free-form scene, guidance, and error content before it enters the visible or VoiceOver-accessible snapshot. The `Export no-screen JSON draft` action also privacy-scans before sharing and emits a deliberately failing v3 worksheet. It does not prove participant role, installation source, device readiness, sensory observations, interruptions, candidate binding, or backend provenance. A verified Apple sandbox app transaction proves signed app identity when its bundle/version match, but sandbox is also used outside TestFlight and does not prove the installation channel. TestFlight installation and blind-participant role therefore remain explicit sanitized human attestations corroborated by App Store Connect evidence.
 
-Run this exact sequence from a clean install or reset app state:
+Standalone evidence validation checks the local schema and attestations only. Store preflight additionally performs an authenticated App Store Connect API lookup and requires exactly one unexpired `VALID` iOS build matching the configured app ID, marketing version, and build number. Its authenticated `uploadedAt` value must fall inside the sanitized local attempt window. This time/app/version/build correlation corroborates the upload attempt but is not a cryptographic Apple receipt or Apple-provided IPA digest. Supply either a short-lived `APP_STORE_CONNECT_API_TOKEN` or the issuer ID, key ID, and private-key file path used to generate a ten-minute token. Never put the token or private key in evidence, logs, source control, or an `EXPO_PUBLIC_*` variable.
 
-1. Cold prompt: confirm Guide Pup speaks the start/help prompt.
-2. Say `start guidance`: confirm guidance starts, camera/session diagnostics become active, and no screen reading is required.
-3. Say `status`: confirm the response includes guidance state, camera readiness, speech rate, detail level, haptics, and scene-query availability.
-4. Say `help`: confirm the response speaks the bounded command list and does not change guidance state or settings.
-5. Say `slower speech`, then `faster speech`: confirm the setting changes persist and responses stay understandable.
-6. Say `more detail`, then `less detail`: confirm guidance detail changes persist.
-7. Say `haptics off`, then `haptics on`: confirm spoken confirmation and haptic behavior.
-8. Say `repeat`: confirm the last spoken guidance or command response is repeated.
-9. Say `what do you see`: confirm the conversation lane answers from a sampled frame without changing guidance state or settings.
-10. While speech is playing, say `stop guidance`: confirm STOP cuts through from partial recognition, guidance pauses, the stop audio cue and haptic path run, and no stale backend/camera failure speech plays afterward.
+## Each Run
 
-## Pass Criteria
+1. Start from a clean install or reset. Enable VoiceOver and use no visual screen inspection or visual prompting. Record `visualScreenUse: "none"` and `noScreen.voiceAndVoiceOverOnly: true`.
+2. Record only the bounded role, prefixed pseudonyms, visual-prompting and interaction-assistance flags, installation source/evidence, and explicit human attestation fields; never record a name or contact detail. Immediately before the command run, execute the CoreDevice `devicectl-process-info` probe against the same connected iPhone. Record its structured `type`, `outcome`, zero `exitStatus`, and fresh `checkedAt` timestamp. A paired/trusted transport snapshot without a successful executable process probe is not device evidence.
+3. Run the exact command sequence on `native-core`: Cold prompt, `start guidance`, `status`, `help`, `slower speech`, `faster speech`, `more detail`, `less detail`, `haptics off`, `haptics on`, `repeat`, `what do you see`, and `stop guidance`.
+4. Complete the native execution, then force `js-fallback` and repeat the complete sequence. Each path object must have its own execution ID, start/completion timestamps, analyze request ID, execution-path label, and ordered `steps`. The camera-path request ID must match that path's command-sequence analyze request ID. Every step needs a unique UUID-like `eventId` and strictly increasing ISO `observedAt` inside that path's execution window. Command steps use only the fields defined for that exact command: `id` must match its ordered command, outcome fields must be strict booleans, and command-inapplicable fields are rejected even when they are valid fields for another command. A `notes` field or any other free-form step field is rejected. No execution, analyze, or step event ID may be reused within a file or across internal, blind-participant, and TestFlight runs. A successful frame must be at most 2 seconds old, finish capture within 5 seconds, and upload dimensions from 32 through 768 pixels on each edge. Use only the fixed privacy-safe `frameSummary` values `Sanitized native-core sampled frame summary.` and `Sanitized js fallback sampled frame summary.`. Never write scene, address, person, or object prose into evidence.
+5. During active speech, use partial-result STOP on each camera-path run. Bind that path's `stopBargeIn.eventId` and `observedAt` to its `stop-guidance` step. Confirm same-event cue/haptic success within 1 second and confirmed inactive analysis, camera, speech, and listening with no stale speech within 3 seconds. Earlier global cue or haptic counters cannot satisfy this gate, and a merely ordered but slow STOP cannot pass.
+6. Background and foreground the app during guidance. Confirm conservative STOP, no continued guidance, bounded recovery within 10 seconds, and an explicit user restart.
+7. Cause a real audio-route interruption or route change. Confirm the same conservative STOP and explicit-restart behavior.
+8. Change speech rate, detail, and haptics by voice; relaunch; confirm persistence; then restore defaults.
+9. Bind the run to the candidate binary SHA-256, signed-config `candidateIdentifier`, source revision, app identity, production backend smoke provenance, and request IDs. Ad hoc runs require `installedValidationIpaSha256` equal to candidate `validationIpa.sha256`, `appTransactionVerified: false`, `appIdentityMatched: false`, `appStoreAppIdMatched: false`, `bundleVersionMatched: false`, and `distributionEnvironment: "none"`. TestFlight runs require iOS 16+, a verified identity-matched Apple sandbox app transaction with matching App Store app ID and embedded build number, an App Store Connect `uploadedAt` value before execution, and `uploadedIpaSha256` equal to the candidate Store `ipa.sha256`. Treat StoreKit as corroborating identity evidence, not proof of TestFlight installation.
 
-- Voice command lane only accepts the bounded command list; conversation prompts do not mutate guidance, settings, haptics, VoiceOver, or camera/session timing.
-- Help must be available by voice, speak the bounded command list, and avoid mutating settings or navigation state.
-- Diagnostics voice section shows `Speech/listening invariant: PASS` and `Unexpected speech/listening overlap count: 0`.
-- Intentional overlap, if present, is marked as `stop-barge-in`.
-- STOP barge-in evidence must show `recognizedCommand: stop-guidance-partial`, `recognizedPhase: partial`, and `recognizedDuringSpeech: true`; merely keeping the microphone open during speech is not enough.
-- Last analyze event includes request ID, provider, model, prompt version, structured-output fields including `walkability`, sampled-frame envelope, and native path: `native-core` or `js-fallback`.
-- Last analyze event includes sanitized frame summary and capture heuristics: image source, frame age, upload size, and resize flag. It must not include raw image data.
-- Camera path evidence must include the same uploaded dimensions at the path level and inside `captureHeuristics`, for both `native-core` and `js-fallback`.
-- Settings evidence must show a non-default voice-command change, prove the same values survived relaunch, and prove defaults were restored after validation.
-- Haptics diagnostics show the last attempted haptic type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm physical feedback.
-- Audio-cue diagnostics show the last attempted cue type, outcome, execution path, and success/failure counts; this proves the code path ran, while the tester still must confirm that a cue was audible and did not mask speech or STOP handling.
-- Camera fallback failures, if any, are labeled as camera-frame failures rather than backend failures.
-- VoiceOver, haptic, and audio-cue confirmations are usable without screen reading.
-- No raw images, raw audio, credentials, provider keys, or signed URLs are present in logs, screenshots, diagnostics, or notes.
+A sighted safety spotter may protect the walking area for the blind-participant run, but must not prompt app interaction. Record this as `interactionAssistance: "safety-spotter-only"`; otherwise use `"none"`.
 
-## Release Gate
+## Commands
 
-Before TestFlight or App Store submission, run:
+Before upload:
 
 ```bash
 npm --prefix expo run check:ios-device -- --json
 npm --prefix expo run check:no-screen-evidence
-npm --prefix expo run release:preflight:testflight
+npm --prefix expo run check:no-screen-evidence:blind
+npm --prefix expo run release:preflight:testflight -- --archive /path/to/GuidePup.xcarchive --ipa /path/to/GuidePup-store.ipa --validation-ipa /path/to/GuidePup-validation.ipa
+npm --prefix expo run submit:testflight:ios -- --archive /path/to/GuidePup.xcarchive --ipa /path/to/GuidePup-store.ipa --validation-ipa /path/to/GuidePup-validation.ipa
 ```
 
-The iPhone readiness JSON is launch evidence only when it reports `ready`; blocked JSON is useful for debugging but must not be copied as passing evidence. `check:no-screen-evidence` validates `expo/release/no-screen-smoke.latest.json` and fails if the artifact is missing, if provenance/device/backend fields do not agree, if the signed candidate binary SHA-256 does not match, if any required step lacks no-screen voice proof, if STOP barge-in is not confirmed, if haptics/audio cues/VoiceOver/settings/native camera/JS fallback are not proven, or if raw media, secrets, signed URLs, or full device identifiers are present.
+After Apple reports a matching processed build and that build is installed from TestFlight:
 
-## Fail Criteria
+```bash
+npm --prefix expo run check:no-screen-evidence:testflight
+npm --prefix expo run release:preflight:store -- --archive /path/to/GuidePup.xcarchive --ipa /path/to/GuidePup-store.ipa --validation-ipa /path/to/GuidePup-validation.ipa
+```
 
-- Any command in the sequence requires reading the screen.
-- STOP does not interrupt speech or stale speech plays after STOP.
-- Diagnostics shows unexpected speech/listening overlap.
-- Analyze is fallback-only when the target requires provider-backed staging or production evidence.
-- Diagnostics or logs contain raw media, secrets, credentials, signed URLs, or full device identifiers.
+Each preflight freshly reinspects the supplied archive, Store IPA, and validation IPA and rejects stale candidate JSON, normalized payload disagreement, wrong signing class, extra signed Store entitlements, or a changed artifact. The submit wrapper copies the proven Store IPA into a private `0700` directory, makes the copy read-only, reruns preflight against that copy and the validation IPA, gives only the private Store copy to EAS, verifies the local copy again after the CLI returns, removes it, and atomically writes a sanitized local-attempt record. This protects against accidental local path changes; it is not an Apple byte receipt and cannot defeat a malicious same-user process. `release:preflight:testflight` derives the required evidence profile from the validated structured candidate binding. A direct-Xcode `app-store` candidate truthfully uses `store` evidence even when uploaded for TestFlight processing. A `testflight` candidate uses `testflight` evidence. `release:preflight:store` accepts only an embedded `app-store` candidate normalized to `store`.
+
+## Fail Conditions
+
+- A required file is absent, reused for another role, stale, out of order, or bound to another candidate.
+- The CoreDevice process probe is missing, unsuccessful, nonzero, stale, predates the candidate, or is not bound close to the command execution.
+- The blind participant and internal tester share an operator, run ID, or participant label.
+- Either camera path lacks a distinct, timed, request-bound complete ordered voice sequence, any step lacks a unique in-window event ID/timestamp, or any path/event ID is reused across runs.
+- A sampled frame is older than 2 seconds, capture takes longer than 5 seconds, an uploaded edge is outside 32-768 pixels, or the camera-path and command-sequence request IDs differ.
+- Background/foreground or audio-route recovery lacks conservative STOP, no continued guidance, bounded recovery, or explicit restart.
+- STOP does not interrupt speech, speech/listening overlap is not bounded to `stop-barge-in`, the STOP event is not bound to the path's `stop-guidance` step, same-event cue/haptic success takes over 1 second, or confirmed runtime shutdown takes over 3 seconds.
+- Either pre-upload run does not bind to candidate `validationIpa.sha256`, claims the Store upload IPA, or the validation IPA does not freshly match the archive and Store IPA normalized payload.
+- The TestFlight repeat is not completed by a blind participant, starts before either pre-upload run completes or before App Store Connect's authenticated upload time, lacks the exact live build record, lacks verified app-ID/build-matched `apple-sandbox` evidence on iOS 16+, or lacks the exact uploaded IPA SHA-256 binding.
+- The local upload-attempt record is missing, privacy-unsafe, bound to another candidate, or its attempt window does not contain App Store Connect's authenticated build upload time.
+- Evidence contains identity/contact data, raw media, secrets, signed or tokenized URLs, full device identifiers, a command-step `notes` field, another unexpected free-form step field, or free-form frame-summary prose.

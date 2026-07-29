@@ -237,6 +237,28 @@ export async function settleCurrentAnnouncementDelivery(input: {
   return input.isCurrent() ? "completed" : "unsafe";
 }
 
+export async function settlePriorSpeechChannels(input: {
+  isCurrent: () => boolean;
+  operations: readonly {
+    name: string;
+    stop: () => Promise<unknown> | unknown;
+  }[];
+  timeoutMs: number;
+}) {
+  if (!input.isCurrent()) {
+    return false;
+  }
+
+  const outcomes = await Promise.allSettled(
+    input.operations.map((operation) =>
+      settlePromiseWithin(operation.stop, input.timeoutMs, operation.name)
+    ),
+  );
+
+  return input.isCurrent()
+    && outcomes.every((outcome) => outcome.status === "fulfilled");
+}
+
 export function shouldRearmVoiceAfterStopConfirmation(input: {
   confirmationDelivered: boolean;
   guidancePaused: boolean;
@@ -261,11 +283,179 @@ export function shouldLeaveNavigationAfterTouchStop(input: {
     && input.stopCurrent;
 }
 
+export function resolveRouteTeardownShutdownTruth(input: {
+  announcementOwnerReleased: boolean;
+  cameraShutdownConfirmed: boolean;
+  voiceSessionStopped: boolean;
+}) {
+  return input.announcementOwnerReleased
+    && input.cameraShutdownConfirmed
+    && input.voiceSessionStopped;
+}
+
+export function createRouteTeardownLaunchBarrier() {
+  let focusGeneration = 0;
+  let activeFocusGeneration: number | null = null;
+  let teardownGeneration = 0;
+  let pendingTeardownGeneration: number | null = null;
+  let settledTeardownGeneration: number | null = null;
+  let waitingFocus: {
+    focusGeneration: number;
+    teardownGeneration: number;
+  } | null = null;
+
+  return {
+    beginFocus() {
+      focusGeneration += 1;
+      activeFocusGeneration = focusGeneration;
+      return focusGeneration;
+    },
+    beginTeardown() {
+      teardownGeneration += 1;
+      pendingTeardownGeneration = teardownGeneration;
+      settledTeardownGeneration = null;
+      return teardownGeneration;
+    },
+    completeFocusSettlement(
+      expectedFocusGeneration: number,
+      expectedTeardownGeneration: number,
+    ) {
+      if (
+        activeFocusGeneration !== expectedFocusGeneration
+        || settledTeardownGeneration !== expectedTeardownGeneration
+        || waitingFocus?.focusGeneration !== expectedFocusGeneration
+        || waitingFocus.teardownGeneration !== expectedTeardownGeneration
+      ) {
+        return false;
+      }
+
+      waitingFocus = null;
+      settledTeardownGeneration = null;
+      return true;
+    },
+    currentPendingTeardown() {
+      return pendingTeardownGeneration;
+    },
+    endFocus(expectedFocusGeneration: number) {
+      if (activeFocusGeneration === expectedFocusGeneration) {
+        activeFocusGeneration = null;
+      }
+      if (waitingFocus?.focusGeneration === expectedFocusGeneration) {
+        waitingFocus = null;
+      }
+    },
+    isBlocked() {
+      return pendingTeardownGeneration !== null || waitingFocus !== null;
+    },
+    isFocusCurrent(expectedFocusGeneration: number) {
+      return activeFocusGeneration === expectedFocusGeneration;
+    },
+    settleTeardown(expectedTeardownGeneration: number) {
+      if (pendingTeardownGeneration !== expectedTeardownGeneration) {
+        return false;
+      }
+
+      pendingTeardownGeneration = null;
+      settledTeardownGeneration = expectedTeardownGeneration;
+      return true;
+    },
+    waitForTeardown(
+      expectedFocusGeneration: number,
+      expectedTeardownGeneration: number,
+    ) {
+      if (
+        activeFocusGeneration !== expectedFocusGeneration
+        || (
+          pendingTeardownGeneration !== expectedTeardownGeneration
+          && settledTeardownGeneration !== expectedTeardownGeneration
+        )
+      ) {
+        return false;
+      }
+
+      waitingFocus = {
+        focusGeneration: expectedFocusGeneration,
+        teardownGeneration: expectedTeardownGeneration,
+      };
+      return true;
+    },
+  };
+}
+
 export function shouldRetainRuntimeSafetyHoldAfterVoiceRecovery(input: {
   stopSafetyFailureHold: boolean;
   touchStopFailureHold: boolean;
 }) {
   return input.stopSafetyFailureHold || input.touchStopFailureHold;
+}
+
+export function planVoiceRecoveryCompletion(input: {
+  stopSafetyFailureHold: boolean;
+  touchStopFailureHold: boolean;
+}) {
+  const runtimeSafetyHold = shouldRetainRuntimeSafetyHoldAfterVoiceRecovery(input);
+  return runtimeSafetyHold
+    ? {
+        detail:
+          "Voice control recovered, but STOP safety is still unconfirmed. Say stop guidance again or double tap Return Home to retry.",
+        guidanceActive: false as const,
+        runtimeSafetyHold,
+        title: "STOP not confirmed",
+      }
+    : {
+        detail: "Voice control recovered. Say start guidance to resume.",
+        guidanceActive: false as const,
+        runtimeSafetyHold,
+        title: "Guidance paused",
+      };
+}
+
+export function shouldSuspendVoiceRecognitionForSpeech(input: {
+  keepListeningDuringSpeech: boolean;
+  listening: boolean;
+  ownedSession: boolean;
+}) {
+  return (
+    !input.keepListeningDuringSpeech
+    && (input.listening || input.ownedSession)
+  );
+}
+
+export function isSpeechTransitionCurrent(input: {
+  currentGeneration: number;
+  expectedGeneration: number;
+  focused: boolean;
+  ownerMatches: boolean;
+}) {
+  return (
+    input.focused
+    && input.ownerMatches
+    && input.currentGeneration === input.expectedGeneration
+  );
+}
+
+export function shouldSurfaceRecoveryTransition(input: {
+  exhaustedAlreadyHandled: boolean;
+  focused: boolean;
+  guidanceActive: boolean;
+  recoveryGateActive: boolean;
+  recoveryState: "background" | "exhausted" | "idle" | "interrupted" | "recovering";
+  transitionReady?: boolean;
+}) {
+  if (input.recoveryState === "idle" || !input.focused) {
+    return false;
+  }
+  if (input.recoveryState === "exhausted") {
+    return (
+      !input.exhaustedAlreadyHandled
+      && (input.recoveryGateActive || input.guidanceActive)
+    );
+  }
+  return (
+    input.guidanceActive
+    && !input.recoveryGateActive
+    && input.transitionReady !== false
+  );
 }
 
 export function shouldRetryFailedStop(input: {
@@ -282,6 +472,18 @@ export function resolveStopRuntimeShutdownTruth(input: {
   runtimeQuiescent: boolean;
 }) {
   return input.controlOperationsConfirmed && input.runtimeQuiescent;
+}
+
+export function resolveRecoveryCameraShutdownTruth(input: {
+  nativeSessionActive: boolean;
+  stateReadCompleted: boolean;
+  stopCompleted: boolean;
+}) {
+  return (
+    input.stopCompleted
+    && input.stateReadCompleted
+    && !input.nativeSessionActive
+  );
 }
 
 export function createAbortError() {
@@ -605,6 +807,7 @@ export function createCameraOwnershipTransitionCoordinator() {
         };
       }
 
+      const stoppedNativeOwnershipGeneration = nativeOwnershipGeneration;
       const generation = beginTransition();
       const stopRequest = {
         generation,
@@ -622,8 +825,10 @@ export function createCameraOwnershipTransitionCoordinator() {
               attemptTimeoutMs,
               "native camera stop",
             );
-            nativeOwnershipGeneration = null;
-            return isCurrent(generation);
+            if (nativeOwnershipGeneration === stoppedNativeOwnershipGeneration) {
+              nativeOwnershipGeneration = null;
+            }
+            return true;
           } catch (error) {
             lastError = error;
             if (!isCurrent(generation)) {

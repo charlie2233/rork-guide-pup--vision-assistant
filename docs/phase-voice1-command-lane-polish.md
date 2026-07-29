@@ -5,16 +5,30 @@ Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `f7eb562`
 Conversation-lane continuation start: `55622a1`
 
-## Current gate on 2026-07-24
+## Current gate on 2026-07-29
 
-- Source commit `87196ef75b322d0b6f2f535a3164d9c098511bef` is pushed and keeps explicit partial or final STOP deterministic while Guide Pup is speaking; the command parser does not reject a real STOP based on overlap with synthesized text.
+- The candidate voice/runtime source is being frozen. The pushed `80c6e7a...`
+  revision and older simulator or signed artifacts are not the launch
+  candidate.
+- Explicit partial or final STOP remains deterministic while Guide Pup is
+  speaking; the command parser does not reject a real STOP based on overlap
+  with synthesized text.
 - Native acoustic echo cancellation is required through `.voiceChat` and voice processing. Voice startup fails closed when that protection cannot be enabled, and diagnostics/no-screen evidence require the observed native `voiceProcessingEnabled` signal.
 - Home, Navigation, and the voice provider use owner-scoped native sessions. STOP and route cleanup invalidate pending attempts, while stale successful or rejected starts can stop only their own owner token.
-- Native announcement delivery now resolves only for an explicit completed/interrupted outcome, uses bounded deadlines, and rejects cancellation, owner transition, release, timeout, and unsafe outcomes. Voice recovery and failed STOP feedback keep the command lane in a persistent STOP-only safety hold until same-generation shutdown and spoken confirmation succeed.
-- Current iOS runtime safety tests passed `85/85`; privacy/launch contract passed `13/13`; release hardening passed `10/10`; typecheck, lint, voice/static no-screen contracts, and conversation-lane memory isolation passed.
-- The final official arm64 Release simulator build, install, and launch for build `4` exited `0`; artifact inspection confirmed the expected app identity, privacy manifest, production backend URL, and absence of shipping provider keys/direct OpenAI calls. Hardware voice and accessibility behavior remains unclaimed.
+- Native announcement delivery resolves only for an explicit completed or
+  interrupted outcome and uses bounded owner/generation checks. Independent
+  review found unspoken shutdown failure, route-teardown, and speech-overlap
+  paths; those P0 findings are closed. The current runtime safety suite passes
+  `103/103`, and the frozen complete Expo script matrix passes `295/295`.
 - Settings now provides an explicit VoiceOver-reachable backup-camera validation route. It changes no persisted setting, cannot be selected by a model, forces only `js-fallback` for that route, and speaks that the fallback check is active while preserving STOP, haptics, VoiceOver, and timing ownership on iOS.
-- Exact-source staging and production Workers passed distinct provider-backed guidance and scene-query smokes, but cloud evidence cannot replace the physical build `4` no-screen sequence. The latest device probe is blocked on the unavailable wired/same-LAN execution path; real self-echo resistance, STOP cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruptions, and settings persistence remain hardware gates.
+- The latest sanitized iPhone readiness probe is `blocked`: pairing and
+  Developer Mode remain present and `xctrace` sees the phone, but developer
+  services, tunnel, USB-or-same-LAN execution, Xcode destination discovery,
+  and the active CoreDevice probe do not pass. No exact validation IPA or
+  blind-participant evidence exists. Real self-echo resistance, STOP
+  cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruption
+  recovery, persistence, and both camera paths remain hardware gates.
+- Current Workers are superseded and have no launch-valid smoke for this source.
 
 Later dated sections retain phase history. The current owner-scoped listener and VoiceOver interruption behavior is described by the gate above and the latest bullets below.
 
@@ -283,3 +297,26 @@ Results: passed locally. Build iOS Apps `build_sim` also passed for the Release 
 - Full Expo scripted tests passed `42/42`; voice and static no-screen contracts passed; Expo typecheck, lint, and Expo Doctor `17/17` passed.
 - The Release simulator app exposed named accessibility targets for the full onboarding and Settings fallback. Speech rate, detail, and haptics changed and persisted across a process restart.
 - Hardware speech recognition, audible confirmations, STOP cut-through, haptics, earcons, VoiceOver, and settings persistence remain unproven until the iPhone readiness gate passes.
+
+## 2026-07-24 voice-ownership continuation
+
+Implemented:
+
+- Delayed speech-rate, detail, haptics, and status feedback now carries a command-feedback generation and is discarded after STOP, camera recovery, safety shutdown, focus loss, or newer feedback.
+- Recognition suspension now records one shared rearm obligation. The newest safe response may claim it exactly once; STOP and safety holds cancel it.
+- Native voice startup failure remains on the truthful `native-voice` path instead of being mislabeled as `js-fallback`.
+- The command lane remains bounded and deterministic. Conversation-lane `what do you see` can update repeat memory but cannot silently change settings, navigation, camera ownership, or safety state.
+
+Validation:
+
+```bash
+npm --prefix expo run check:voice-commands
+npm --prefix expo run check:no-screen-smoke
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+node --test expo/scripts/*.test.mjs
+```
+
+Results: voice and no-screen static contracts pass; typecheck and lint pass; the complete Expo suite passes `241/241`, including superseded-speech rearm, delayed post-STOP feedback, native/fallback truthfulness, VoiceOver completion ownership, STOP confirmation, interruption, and camera-session races.
+
+Remaining gate: the connected iPhone is transport-ready, but a blind participant has not yet validated the full spoken sequence, partial-result STOP during speech, audible cues, felt haptics, VoiceOver, interruptions, or both camera paths on the exact signed candidate.

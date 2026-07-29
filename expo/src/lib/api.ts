@@ -18,6 +18,12 @@ import {
 } from "./runtimeSafety";
 import { addBreadcrumb, setDiagnosticTag } from "./clientDiagnostics";
 
+const HEALTH_REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const HEALTH_GIT_REVISION_PATTERN = /^[0-9a-f]{40,64}$/;
+const HEALTH_WORKER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const HEALTH_PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+
 export const VisionAnalyzeResponseSchema = z.object({
   confidence: z.number().min(0).max(1),
   direction: z.enum(["turn-left", "turn-right", "forward", "stop"]),
@@ -45,14 +51,66 @@ const AnalyzeVisionErrorSchema = z.object({
 });
 
 const HealthCheckResponseSchema = z.object({
-  benchmarkProviders: z.array(z.string().min(1)).optional(),
-  defaultModel: z.string().min(1),
-  defaultProvider: z.string().min(1),
-  environment: z.string().min(1),
+  analyzeDeviceRateLimitPerMinute: z.number().int().min(1).max(60),
+  analyzeIpRateLimitPerMinute: z.number().int().min(10).max(300),
+  benchmarkProviders: z.array(z.string().regex(HEALTH_PROVIDER_NAME_PATTERN))
+    .max(4)
+    .refine((providers) => new Set(providers).size === providers.length)
+    .optional(),
+  bootstrapIpRateLimitPerMinute: z.number().int().min(1).max(60),
+  defaultMaxCompletionTokens: z.number().int().min(128).max(1200),
+  defaultModel: z.string().trim().min(1).max(64),
+  defaultProvider: z.string().regex(HEALTH_PROVIDER_NAME_PATTERN),
+  defaultReasoningEffort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh"]).optional(),
+  defaultRequestTimeoutMs: z.number().int().min(3000).max(30000),
+  defaultRetryCount: z.number().int().min(0).max(2),
+  defaultRetryDelayMs: z.number().int().min(0).max(2000),
+  deploymentIdentityValid: z.boolean(),
+  environment: z.enum(["development", "staging", "production"]),
   ok: z.boolean(),
-  promptVersion: z.string().min(1),
-  requestId: z.string().min(1),
-  service: z.string().min(1),
+  promptVersion: z.string().trim().min(1).max(40),
+  providerGlobalCallLimitPerMinute: z.number().int().min(20).max(600),
+  requestId: z.string().regex(HEALTH_REQUEST_ID_PATTERN),
+  service: z.literal("guidepup-api"),
+  sessionTtlSeconds: z.number().int().min(5 * 60).max(7 * 24 * 60 * 60),
+  sourceRevision: z.union([
+    z.string().regex(HEALTH_GIT_REVISION_PATTERN),
+    z.literal("development"),
+  ]),
+  structuredOutputMode: z.literal("json_schema_strict"),
+  workerIdentity: z.string().regex(HEALTH_WORKER_ID_PATTERN),
+  workerVersionId: z.union([
+    z.string().regex(HEALTH_REQUEST_ID_PATTERN),
+    z.literal("development"),
+  ]),
+}).superRefine((value, context) => {
+  if (value.ok !== value.deploymentIdentityValid) {
+    context.addIssue({
+      code: "custom",
+      message: "Health status must match deployment identity validity.",
+      path: ["deploymentIdentityValid"],
+    });
+  }
+  if (
+    value.environment !== "development"
+    && !HEALTH_GIT_REVISION_PATTERN.test(value.sourceRevision)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Deployed health requires a source revision.",
+      path: ["sourceRevision"],
+    });
+  }
+  if (
+    value.environment !== "development"
+    && !HEALTH_REQUEST_ID_PATTERN.test(value.workerVersionId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Deployed health requires a Worker version.",
+      path: ["workerVersionId"],
+    });
+  }
 });
 
 export type VisionAnalyzeResponse = z.infer<typeof VisionAnalyzeResponseSchema>;
@@ -170,6 +228,7 @@ function buildAnalyzeTelemetryEnvelope(payload: AnalyzeVisionPayload) {
     frameSummary: payload.frameSummary,
     frameTimestampMs: payload.timestampMs,
     hasImage: payload.hasImage ?? Boolean(payload.imageBase64),
+    interactionMode: payload.interactionMode,
     nativePath: payload.nativePath,
     platform: getPlatform(),
     priorGuidanceSummary: payload.priorGuidance,
@@ -199,6 +258,7 @@ function recordAnalyzeTelemetry(
     frameTimestampMs?: number;
     hazardLevel?: VisionAnalyzeResponse["hazardLevel"];
     hasImage?: boolean;
+    interactionMode?: VisionInteractionMode;
     fallbackReason?: string | null;
     latencyMs?: number;
     lighting?: VisionAnalyzeResponse["lighting"];
@@ -238,7 +298,7 @@ function recordAnalyzeTelemetry(
     platform: input.platform,
     priorGuidanceSummary: sanitizeMessage(input.priorGuidanceSummary, 120),
     promptVersion: sanitizeMessage(input.promptVersion, 40),
-    requestId: sanitizeMessage(input.requestId, 80),
+    requestId: input.requestId,
     provider: sanitizeMessage(input.provider, 64),
     fallbackReason: sanitizeMessage(input.fallbackReason ?? undefined, 120),
     sampledFrame: input.sampledFrame,
@@ -321,12 +381,27 @@ export async function fetchHealthCheck(): Promise<HealthCheckResponse> {
     recordHealthCheckSnapshot({
       benchmarkProviders: result.benchmarkProviders,
       defaultModel: result.defaultModel,
+      defaultMaxCompletionTokens: result.defaultMaxCompletionTokens,
       defaultProvider: result.defaultProvider,
+      defaultReasoningEffort: result.defaultReasoningEffort,
+      defaultRequestTimeoutMs: result.defaultRequestTimeoutMs,
+      defaultRetryCount: result.defaultRetryCount,
+      defaultRetryDelayMs: result.defaultRetryDelayMs,
+      deploymentIdentityValid: result.deploymentIdentityValid,
       environment: result.environment,
       ok: result.ok,
       promptVersion: result.promptVersion,
+      providerGlobalCallLimitPerMinute: result.providerGlobalCallLimitPerMinute,
       requestId: result.requestId,
       latencyMs: result.latencyMs,
+      sessionTtlSeconds: result.sessionTtlSeconds,
+      sourceRevision: result.sourceRevision,
+      structuredOutputMode: result.structuredOutputMode,
+      workerIdentity: result.workerIdentity,
+      workerVersionId: result.workerVersionId,
+      analyzeDeviceRateLimitPerMinute: result.analyzeDeviceRateLimitPerMinute,
+      analyzeIpRateLimitPerMinute: result.analyzeIpRateLimitPerMinute,
+      bootstrapIpRateLimitPerMinute: result.bootstrapIpRateLimitPerMinute,
     });
     healthTelemetryRecorded = true;
 

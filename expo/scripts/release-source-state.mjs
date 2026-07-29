@@ -7,8 +7,11 @@ export const ALLOWED_GENERATED_EVIDENCE_PATHS = new Set([
   "backend/guidepup-api/eval/smoke-results-staging.latest.md",
   "backend/guidepup-api/eval/smoke-results-production.latest.json",
   "backend/guidepup-api/eval/smoke-results-production.latest.md",
-  "expo/release/no-screen-smoke.latest.json",
+  "expo/release/no-screen-smoke.internal.latest.json",
+  "expo/release/no-screen-smoke.blind-participant.latest.json",
+  "expo/release/no-screen-smoke.testflight.latest.json",
   "expo/release/candidate-build.latest.json",
+  "expo/release/ios-submission.latest.json",
 ]);
 
 const SCREENSHOT_PATH_PATTERN =

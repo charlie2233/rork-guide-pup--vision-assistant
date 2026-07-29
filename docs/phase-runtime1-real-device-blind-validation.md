@@ -5,16 +5,41 @@ Branch: `codex/guidepup-credentialed-launch`
 Continuation start: `efa5e34`
 Latest continuation start: `b5c1c5e`
 
-## Current gate on 2026-07-24
+## Current gate on 2026-07-29
 
-- The pending launch source serializes native-camera and JS-fallback ownership. A fallback `CameraView` cannot mount or analyze until native shutdown resolves, stale native/fallback generations cannot reclaim ownership, and simultaneous STOP/lifecycle shutdown callers share one bounded two-attempt native-stop sequence.
-- The required voice path remains deterministic: cold prompt -> start guidance -> status -> help -> slower/faster speech -> more/less detail -> haptics off/on -> repeat -> what do you see -> STOP during speech. The conversation answer remains separate from command parsing and cannot mutate navigation or settings.
-- The launch client now vendors no crash-reporting SDK. Sentry dependency/plugin/pods/native phases/runtime configuration and the orphaned native properties file are removed; release gates reject their return.
-- Current local validation passed: all Expo Node contracts `153/153`, including iOS runtime safety `85/85`, privacy, no-screen schema, release configuration/evidence, conversation-lane isolation, and STOP behavior; Expo typecheck, lint, and Expo Doctor `17/17` also pass.
-- These checks are source/static proof only. They do not prove that speech input is recognized, confirmations and earcons are audible, haptics are felt, VoiceOver announces correctly, STOP cuts through physical playback, settings survive a real relaunch, or either camera path captures on an iPhone.
-- A prior sanitized readiness check reached `ready`, and the superseded `87196ef` Ad Hoc candidate installed and launched. The latest check at `2026-07-25T03:52:10Z` is transport-blocked: the phone remains paired/trusted, in Developer Mode, and visible to `xctrace`, but the CoreDevice process probe fails and USB/same-LAN, DDI/tunnel, and Xcode destination checks are unavailable.
-- The prior `87196ef` archive/install is superseded by the no-Sentry launch source. A new exact-revision App Store archive and one-device Ad Hoc export must be built, inspected, installed, and launched before physical validation.
-- No current `expo/release/no-screen-smoke.latest.json` exists. Physical speech input, audible confirmations/earcons, felt haptics, VoiceOver delivery, STOP barge-in, settings persistence, native camera capture, and explicit JS fallback remain pending tester confirmation.
+- The candidate source is being frozen on
+  `codex/guidepup-credentialed-launch`; the pushed revision
+  `80c6e7a10f03b8358fd34a19501ce8838f87fbde` and all older signed artifacts
+  are superseded for launch evidence.
+- The latest suffix-only iPhone readiness probe is `blocked`. The phone remains
+  paired, Developer Mode is enabled, and `xctrace` can see it, but developer
+  services and the CoreDevice tunnel are unavailable, no USB or connected
+  same-LAN path is present, Xcode has no runnable destination, and the bounded
+  active CoreDevice process probe fails. No current install or sensory
+  validation can be claimed.
+- The required no-screen flow remains deterministic: cold prompt -> start
+  guidance -> status -> help -> slower/faster speech -> more/less detail ->
+  haptics off/on -> repeat -> what do you see -> STOP during speech. The
+  conversation lane cannot mutate navigation or settings.
+- Evidence v3 requires per-step event IDs and timestamps, same-event STOP
+  cue/haptic/shutdown outcomes, fresh sampled frames, bounded capture and STOP
+  latency, matching analyze request IDs, separate native and forced JavaScript
+  fallback paths, and separate internal-tester and blind-participant records.
+- Candidate evidence requires a Store IPA and device-authorized validation IPA
+  with the same normalized unsigned payload. A valid profile or transport probe
+  does not prove that the validation IPA was installed or exercised.
+- Independent runtime review found and closed additional shutdown and
+  speech-overlap and quick blur/refocus failures. The current iOS runtime safety
+  suite passes `103/103`, including critical spoken shutdown warnings,
+  fail-closed route teardown, replacement-speech ownership, and retained
+  STOP-hold instructions.
+- The complete Expo script matrix passes `295/295`; the no-screen, diagnostics,
+  evidence-privacy, and launch-privacy subset passes `97/97`; release evidence
+  passes `62/62`; Expo typecheck, lint, and Expo Doctor `17/17` also pass.
+  Independent no-screen and candidate-evidence reviews report no open
+  P0/P1/P2 findings. These are code and schema results only.
+  No exact validation IPA is installed, and no internal, blind-participant, or
+  TestFlight no-screen v3 artifact exists.
 
 Commands:
 
@@ -30,7 +55,11 @@ xcrun devicectl list devices --timeout 30 --json-output '<private-temporary-file
 system_profiler SPUSBDataType -json
 ```
 
-Current blocker: rebuild the exact no-Sentry candidate, restore the phone execution path, then complete both native-core and explicit JS-fallback no-screen runs and validate the sanitized evidence artifact. Prior transport and install/launch evidence does not replace current-binary or sensory validation.
+Current blocker: commit the reviewed exact source, build and inspect the
+normalized Store/validation twins, install the validation IPA, and complete both
+native-core and explicit JavaScript-fallback runs with separate internal and
+blind participants. Prior transport, simulator, install, or schema evidence does
+not replace current-binary sensory validation.
 
 ## Current gate on 2026-07-20
 
@@ -249,3 +278,23 @@ Results:
 - `release/no-screen-smoke.latest.json` is absent, so no physical speech, confirmation, haptic, earcon, VoiceOver, interruption, settings-persistence, native-camera, or JS-fallback claim is made.
 - The required real sequence remains the launch blocker. Simulator or prior install/process-liveness evidence does not satisfy it.
 - The Release simulator artifact installed and launched, and Settings values survived a process restart. That narrows the remaining work but does not replace the hardware checks above.
+
+## 2026-07-24 credentialed launch continuation
+
+Current device command:
+
+```bash
+npm --prefix expo run check:ios-device -- --json
+```
+
+Current result:
+
+- The wired iPhone now reports `ready`. A live `devicectl-process-info` CoreDevice probe succeeded with exit status `0`; pairing, trust, Developer Mode, DDI, tunnel, USB-or-same-LAN transport, `xctrace`, and the Xcode destination all pass. The report contains identifier suffixes only.
+- The no-screen schema now requires that structured executable probe to be fresh, successful, after candidate creation, and close to each command execution. A transport snapshot alone cannot pass.
+- The command lane suppresses delayed setting confirmations, haptics, and cues after STOP or a safety hold. Superseded speech shares one explicit recognition-rearm debt instead of stranding listening off, and native speech startup failures are no longer labeled as JavaScript fallback.
+- `npm run check:voice-commands`, `npm run check:no-screen-smoke`, Expo typecheck/lint, and the complete `241/241` Expo test suite pass.
+
+Remaining physical gate:
+
+- No current inspected validation IPA is installed on this iPhone, and the internal-tester and blind-participant v3 artifacts do not exist. Audible speech, partial-result STOP cut-through, felt haptics/earcons, VoiceOver, interruption recovery, persistence after relaunch, native camera capture, and forced JS fallback remain unproven on hardware.
+- The latest Release simulator build intentionally stopped at the new clean-source guard because the reviewed changes are not committed yet. Rebuild and installation must use the exact clean commit; prior simulator or archive artifacts are superseded.

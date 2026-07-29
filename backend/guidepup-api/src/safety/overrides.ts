@@ -4,6 +4,7 @@ import { getSafetyStopReason } from "../../eval/safety-policy.mjs";
 type SafetyContext = {
   confidence: number;
   hasCloseObstacle: boolean;
+  hasPathBlockingObstacle: boolean;
   lighting?: "dark" | "dim" | "normal" | "bright" | "unknown";
   pathClear?: boolean;
   safetyTags: string[];
@@ -28,6 +29,7 @@ export function applySafetyOverrides(response: VisionAnalyzeResponse, context: S
     direction: response.direction,
     fallbackReason: response.fallbackReason,
     hasCloseObstacle: context.hasCloseObstacle,
+    hasPathBlockingObstacle: context.hasPathBlockingObstacle,
     hazardLevel: response.hazardLevel,
     lighting: context.lighting,
     obstacle: response.obstacle,
@@ -40,6 +42,8 @@ export function applySafetyOverrides(response: VisionAnalyzeResponse, context: S
     case "close-obstacle":
     case "obstacle":
       return stopWithMessage(response, "Stop. Obstacle is very close.", stopReason);
+    case "path-blocking-obstacle":
+      return stopWithMessage(response, "Stop. Obstacle blocks the path.", stopReason);
     case "path-not-clear":
       return stopWithMessage(response, "Stop. Path is not clear.", stopReason);
     case "high-hazard":

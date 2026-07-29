@@ -375,6 +375,79 @@ export async function runAnalyzeLanes({
   return lanes;
 }
 
+export function buildSmokeArtifact({
+  apiUrl,
+  bootstrap,
+  deviceId,
+  environment,
+  generatedAt = new Date().toISOString(),
+  health,
+  lanes,
+  operator,
+  provenance,
+}) {
+  const healthSnapshot = {
+    analyzeDeviceRateLimitPerMinute: health.json?.analyzeDeviceRateLimitPerMinute,
+    analyzeIpRateLimitPerMinute: health.json?.analyzeIpRateLimitPerMinute,
+    apiUrl: health.json?.apiUrl,
+    bootstrapIpRateLimitPerMinute: health.json?.bootstrapIpRateLimitPerMinute,
+    defaultMaxCompletionTokens: health.json?.defaultMaxCompletionTokens,
+    defaultModel: health.json?.defaultModel,
+    defaultProvider: health.json?.defaultProvider,
+    defaultReasoningEffort: health.json?.defaultReasoningEffort,
+    defaultRequestTimeoutMs: health.json?.defaultRequestTimeoutMs,
+    defaultRetryCount: health.json?.defaultRetryCount,
+    defaultRetryDelayMs: health.json?.defaultRetryDelayMs,
+    deploymentIdentityValid: health.json?.deploymentIdentityValid,
+    environment: health.json?.environment,
+    expectedApiUrl: health.json?.expectedApiUrl,
+    promptVersion: health.json?.promptVersion,
+    providerGlobalCallLimitPerMinute: health.json?.providerGlobalCallLimitPerMinute,
+    requestId: health.requestId,
+    roundTripLatencyMs: health.roundTripLatencyMs,
+    sessionTtlSeconds: health.json?.sessionTtlSeconds,
+    sourceRevision: health.json?.sourceRevision,
+    statusCode: health.response.status,
+    statusText: health.response.statusText || "",
+    structuredOutputMode: health.json?.structuredOutputMode,
+    workerIdentity: health.json?.workerIdentity,
+    workerVersionId: health.json?.workerVersionId,
+  };
+  if (health.json?.benchmarkProviders !== undefined) {
+    healthSnapshot.benchmarkProviders = health.json.benchmarkProviders;
+  }
+
+  const artifact = {
+    apiUrl,
+    artifactVersion: SMOKE_ARTIFACT_VERSION,
+    bootstrap: {
+      deviceIdSuffix: getDeviceIdSuffix(deviceId),
+      expiresAt: bootstrap.json?.expiresAt,
+      promptVersion: bootstrap.json?.promptVersion,
+      rateLimitPerMinute: bootstrap.json?.rateLimitPerMinute,
+      requestId: bootstrap.requestId,
+      roundTripLatencyMs: bootstrap.roundTripLatencyMs,
+      statusCode: bootstrap.response.status,
+      statusText: bootstrap.response.statusText || "",
+    },
+    environment,
+    freshness: {
+      expiresAt: new Date(Date.parse(generatedAt) + SMOKE_EVIDENCE_MAX_AGE_SECONDS * 1000).toISOString(),
+      maxAgeSeconds: SMOKE_EVIDENCE_MAX_AGE_SECONDS,
+    },
+    generatedAt,
+    health: healthSnapshot,
+    lanes,
+    operator,
+    provenance,
+    providerBacked: SMOKE_INTERACTION_MODES.every(
+      (mode) => lanes[mode].analyze.executionPath === "provider-backed",
+    ),
+  };
+  artifact.launchContract = buildLaunchContract({ artifact });
+  return artifact;
+}
+
 export function validateLaunchReadinessArtifact(artifact, options) {
   const result = validateSmokeArtifactContract(artifact, options);
   const privacy = validateEvidencePrivacy(artifact);
@@ -605,62 +678,16 @@ async function main() {
     `${args.env} Worker deployment changed during the smoke run; discard this evidence and retry.`,
   );
 
-  const generatedAt = new Date().toISOString();
-  const artifact = {
+  const artifact = buildSmokeArtifact({
     apiUrl,
-    artifactVersion: SMOKE_ARTIFACT_VERSION,
-    bootstrap: {
-      deviceIdSuffix: getDeviceIdSuffix(deviceId),
-      expiresAt: bootstrap.json?.expiresAt,
-      promptVersion: bootstrap.json?.promptVersion,
-      rateLimitPerMinute: bootstrap.json?.rateLimitPerMinute,
-      requestId: bootstrap.requestId,
-      roundTripLatencyMs: bootstrap.roundTripLatencyMs,
-      statusCode: bootstrap.response.status,
-      statusText: bootstrap.response.statusText || "",
-    },
+    bootstrap,
+    deviceId,
     environment: args.env,
-    freshness: {
-      expiresAt: new Date(Date.parse(generatedAt) + SMOKE_EVIDENCE_MAX_AGE_SECONDS * 1000).toISOString(),
-      maxAgeSeconds: SMOKE_EVIDENCE_MAX_AGE_SECONDS,
-    },
-    generatedAt,
-    health: {
-      analyzeDeviceRateLimitPerMinute: health.json?.analyzeDeviceRateLimitPerMinute,
-      analyzeIpRateLimitPerMinute: health.json?.analyzeIpRateLimitPerMinute,
-      apiUrl: health.json?.apiUrl,
-      benchmarkProviders: health.json?.benchmarkProviders,
-      bootstrapIpRateLimitPerMinute: health.json?.bootstrapIpRateLimitPerMinute,
-      defaultMaxCompletionTokens: health.json?.defaultMaxCompletionTokens,
-      defaultModel: health.json?.defaultModel,
-      defaultProvider: health.json?.defaultProvider,
-      defaultReasoningEffort: health.json?.defaultReasoningEffort,
-      defaultRequestTimeoutMs: health.json?.defaultRequestTimeoutMs,
-      defaultRetryCount: health.json?.defaultRetryCount,
-      defaultRetryDelayMs: health.json?.defaultRetryDelayMs,
-      deploymentIdentityValid: health.json?.deploymentIdentityValid,
-      environment: health.json?.environment,
-      expectedApiUrl: health.json?.expectedApiUrl,
-      promptVersion: health.json?.promptVersion,
-      providerGlobalCallLimitPerMinute: health.json?.providerGlobalCallLimitPerMinute,
-      requestId: health.requestId,
-      roundTripLatencyMs: health.roundTripLatencyMs,
-      statusCode: health.response.status,
-      statusText: health.response.statusText || "",
-      sessionTtlSeconds: health.json?.sessionTtlSeconds,
-      sourceRevision: health.json?.sourceRevision,
-      structuredOutputMode: health.json?.structuredOutputMode,
-      workerIdentity: health.json?.workerIdentity,
-      workerVersionId: health.json?.workerVersionId,
-    },
+    health,
     lanes,
     operator: args.operator,
     provenance: initialProvenance,
-    providerBacked: SMOKE_INTERACTION_MODES.every(
-      (mode) => lanes[mode].analyze.executionPath === "provider-backed",
-    ),
-  };
-  artifact.launchContract = buildLaunchContract({ artifact });
+  });
 
   const outputJsonPath = getOutputPath(args.outputJson);
   const outputMdPath = getOutputPath(args.outputMd);

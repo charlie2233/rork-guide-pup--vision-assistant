@@ -4,17 +4,47 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `c2b8781`
 
-## Current gate on 2026-07-24
+## Current gate on 2026-07-29
 
 - Apple identifiers are confirmed: App Store Connect app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, target build `4`, team `K99RADPB9G`, SKU `EX1766553072106`, and copyright `2026 XIANMIN CHEN`. Support email is `charliehan112@gmail.com`.
-- App Store Connect version `1.0.0` remains Prepare for Submission. No current build is selected, and App Privacy and accessibility declarations are unpublished. Current review metadata is saved. App Store Connect accepted all four truthful direct-capture iPhone screenshots at `1284 x 2778` in the 6.5-inch slot; the accepted order is `01-welcome.png`, `02-how-to-use.png`, `03-voice-settings.png`, `04-safe-stop-fallback.png`. The fourth is the real simulator conservative STOP state when the backup camera is unavailable.
-- Support URL, marketing URL, and privacy URL were authenticated in App Store Connect as `https://guidepup-site.pages.dev/support`, `https://guidepup-site.pages.dev`, and `https://guidepup-site.pages.dev/privacy`.
-- Cloudflare OAuth is authenticated to the intended account. Staging and production each expose `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY`; secret values were neither read nor logged. Both authenticated Worker dry runs pass with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, bounded retries/cost controls, and experimental MiniCPM disabled.
+- App Store Connect version `1.0.0` was last authenticated as Prepare for Submission. App Store Connect accepted all four truthful direct-capture iPhone screenshots at `1284 x 2778`: `01-welcome.png`, `02-how-to-use.png`, `03-voice-settings.png`, `04-safe-stop-fallback.png`. No current build is selected.
+- Current review metadata uses `charliehan112@gmail.com`, does not require
+  account login, and uses manual release. The later TestFlight page did not
+  finish loading before the Apple session expired, so no current TestFlight
+  build state is claimed.
+- The live public privacy, support, and safety pages are reachable and match the
+  repository. They disclose sampled frames, Apple Speech behavior, bounded
+  Cloudflare diagnostics, OpenAI default retention limits, and
+  `charliehan112@gmail.com`.
+- Cloudflare OAuth is authenticated. Staging and production expose
+  `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY` without revealing values, but
+  the uncommitted source is not deployed and has no launch-valid dual-lane smoke.
 - The pending launch source removes the Sentry client dependency, Expo plugin, CocoaPods, native wrapper/upload phase, DSN configuration, and orphaned `sentry.properties`. Shipping diagnostics remain sanitized and local. Release preflight rejects the return of any SDK, pod, plugin, native phase, DSN variable, or properties file; archive verification separately rejects embedded Sentry payloads, a configured DSN, and Crash Data privacy-manifest declarations.
-- The prior `87196ef` Worker deployments, Pages deployment, signed App Store archive/IPA, Ad Hoc export, and physical install/launch are now superseded. They remain historical evidence only and cannot satisfy the final source, backend, binary, privacy, or device gates.
-- Current local validation passes: Expo typecheck, lint, Expo Doctor `17/17`, all Expo Node contracts `153/153`, backend typecheck, backend privacy/safety `50/50`, backend smoke/evidence `23/23`, staging and production required-secret checks, both Worker dry runs, and `git diff --check`.
-- The unused direct `axios` dependency was removed. `bun audit` remains nonzero with `50` advisories (`1` critical, `27` high, `17` moderate, `5` low) through Expo, React Native, Metro, Babel, ESLint, and React DevTools dependency chains. No broad transitive override or framework upgrade was applied to the release candidate; this remains explicit dependency-maintenance risk rather than proof of a shipped exploit.
-- The latest sanitized iPhone check at `2026-07-25T03:52:10Z` is transport-blocked: paired/trusted, Developer Mode enabled, and visible to `xctrace`, but no CoreDevice execution path, USB/same-LAN route, DDI/tunnel service, or runnable Xcode destination is currently available. No sensory result is inferred.
+- The latest suffix-only iPhone readiness probe is `blocked`. Pairing,
+  Developer Mode, and `xctrace` visibility remain, but developer services and
+  the CoreDevice tunnel are unavailable, no USB or connected same-LAN path is
+  present, Xcode has no runnable destination, and the active CoreDevice process
+  probe fails.
+- Runtime and backend P0/P1 review is closed. The complete Expo script matrix
+  passes `295/295`; the no-screen/privacy integration passes `97/97`; release
+  evidence passes `62/62`; backend privacy/runtime passes `58/58`; backend
+  smoke/provenance passes `32/32`; both typechecks, Expo lint, Expo Doctor
+  `17/17`, Worker dry-runs, and `git diff --check` pass. Independent no-screen
+  and candidate-evidence spec/code-quality reviews report no open P0/P1/P2
+  findings. Focused dependency exploitability review is also closed with the
+  documented build-host and final-bundle residual checks below.
+- EAS still reports unauthenticated and no `EXPO_TOKEN` is present. App Store
+  Connect authentication and live build state must be reverified before any
+  metadata or build mutation.
+- No exact Store and validation IPA twins, physical no-screen v3 evidence,
+  upload attempt, processed TestFlight build, or TestFlight blind repeat
+  exists.
+- `bun audit` remains nonzero at `50` advisories. Focused exploitability review
+  found no P0/P1 production-iOS path: React Native gates
+  `react-devtools-core` behind `__DEV__`, and the critical `shell-quote`
+  `quote()` API has no current caller. Build-host parser risk remains, and
+  `@babel/runtime` exclusion still needs final release-bundle inspection. No
+  broad transitive override is applied.
 
 Commands:
 
@@ -28,12 +58,19 @@ npm --prefix expo run check:ios-device -- --json
 npm --prefix expo run typecheck
 npm --prefix expo run lint
 (cd expo && npx expo-doctor)
+(cd expo && npx --yes bun@1.3.8 audit)
 npm --prefix backend/guidepup-api run check:staging
 npm --prefix backend/guidepup-api run check
 git diff --check
 ```
 
-Submission decision: do not upload or submit yet. Required remaining order is commit the no-Sentry candidate -> deploy and strictly smoke that exact revision -> rebuild and inspect its signed archive -> restore the phone transport -> install and complete native plus JS-fallback no-screen evidence -> upload/process/install the same build through TestFlight -> repeat no-screen validation -> publish truthful privacy/accessibility answers -> final authenticated review -> submit.
+Submission decision: do not upload or submit yet. Required remaining order is
+close candidate-evidence and dependency review -> commit/push -> deploy and
+strictly smoke the exact revision -> build and inspect normalized
+Store/validation twins -> install the validation IPA and complete internal plus
+blind no-screen v3 evidence -> upload/process/install through TestFlight ->
+complete the blind TestFlight repeat -> publish truthful
+privacy/accessibility answers -> final authenticated review -> submit.
 
 ## Current gate on 2026-07-20
 
@@ -738,3 +775,67 @@ Current local evidence:
 - This simulator evidence is not a signed distribution archive, TestFlight install, real camera/haptic/audio/VoiceOver validation, or App Store screenshot set.
 
 No App Store submission, TestFlight upload, or `main` launch-ready merge is claimed in this section.
+
+## 2026-07-24 current submission decision
+
+Decision: **not ready to upload or submit yet**.
+
+Verified local/account state:
+
+- Branch: `codex/guidepup-credentialed-launch`; pre-commit HEAD remains `80c6e7a10f03b8358fd34a19501ce8838f87fbde`.
+- Configured Apple identity is app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`, version/build `1.0.0 (4)`, and support email `charliehan112@gmail.com`.
+- Cloudflare authentication and required secret-name checks pass for staging and production. The wired iPhone transport/readiness probe passes.
+- Expo tests pass `241/241`; release-evidence tests pass `48/48`; backend privacy/runtime/safety tests pass `50/50`; backend smoke/provenance tests pass `20/20`; both typechecks, Expo lint, Expo Doctor `17/17`, voice/no-screen contracts, and `git diff --check` pass.
+
+Release-integrity changes:
+
+- EAS requires a commit and validated build scripts require the same completely clean revision before and after each iOS build.
+- Candidate evidence freshly inspects the archive, Store IPA, and device-authorized validation IPA; it requires one normalized unsigned payload and signed runtime binding while allowing only the signing differences required by each distribution method.
+- The submit wrapper gives EAS only a read-only private copy of the Store IPA, verifies that local copy before and after the CLI returns, deletes it, and writes a closed privacy-safe local attempt record. This is not an Apple receipt or Apple-provided IPA digest.
+- Store preflight authenticates to App Store Connect, requires one unexpired `VALID` matching iOS build, and corroborates the local attempt using Apple's independent app/version/build and `uploadedAt` record without claiming cryptographic byte identity.
+
+Current blockers:
+
+- Independent final reviews must close, then the changes must be committed/pushed and the exact Release simulator/device build rerun. The uncommitted Release build correctly failed the new clean-source guard.
+- Deploy exact-revision staging/production Workers and capture current dual-lane provider-backed request IDs.
+- Export a normalized-payload-equivalent validation IPA and Store IPA from the exact clean revision, produce separate physical-iPhone internal and blind-participant v3 artifacts from the validation IPA, upload the Store IPA, install the matching processed build from TestFlight, and complete a later blind-participant repeat.
+- The controllable App Store Connect tab currently redirects to `authResult=FAILED`; live metadata, screenshots, build attachment, agreements/compliance, and submission cannot be claimed until sign-in is restored.
+
+No TestFlight upload, App Review submission, or `main` merge is claimed.
+
+## 2026-07-24 live App Store Connect and remediation update
+
+Decision: **still not ready to upload or submit**.
+
+Authenticated, read-only App Store Connect browser evidence now confirms:
+
+- App `Guide Pup: Vision Assistant`, Apple ID `6756947790`, bundle ID `app.rork.guide-pup-vision-assist`, SKU `EX1766553072106`, primary category `Navigation`, and age rating `4+`.
+- iOS version `1.0.0` remains `Prepare for Submission`.
+- Four 6.5-inch iPhone screenshots are already present.
+- App Review email is `charliehan112@gmail.com`; sign-in is not required.
+- Manual release is selected.
+- No build is attached to version `1.0.0`; the version page still presents `Add Build`.
+
+The TestFlight page later returned to Apple sign-in before its build list loaded, so no TestFlight build availability or processing state is claimed.
+
+Runtime remediation completed in this continuation:
+
+- Native speech cancellation, supersession, and immediate stop reject the exact pending utterance instead of reporting delivery success.
+- Shared recognition rearm debt is drained by a superseding keep-listening response; rearm failure pauses guidance and stops the camera.
+- Every camera interruption pauses guidance and requires an explicit `start guidance`; recovery no longer schedules analysis automatically.
+- VoiceOver can inspect a separate current-guidance summary while the STOP/Return Home control remains independently actionable.
+- No-screen evidence v3 requires unique per-step event IDs/timestamps and per-camera-path STOP evidence. STOP cue and haptic success must come from the same bound STOP event, not earlier global counters.
+
+Fresh focused validation:
+
+```bash
+npm --prefix expo run typecheck
+npm --prefix expo run lint
+node --test expo/scripts/native-speech-delivery-contract.test.mjs
+node --test expo/scripts/ios-runtime-safety-behavior.test.mjs expo/scripts/ios-runtime-safety-contract.test.mjs
+node --test expo/scripts/no-screen-smoke-evidence.test.mjs expo/scripts/no-screen-diagnostics-draft.test.mjs
+npm --prefix expo run check:no-screen-smoke
+git diff --check
+```
+
+These checks pass. They are source/simulator contracts only and do not replace an installed physical-iPhone blind run, audible/felt feedback confirmation, TestFlight processing, or the later blind-participant TestFlight repeat.

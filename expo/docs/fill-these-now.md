@@ -1,71 +1,89 @@
-# Guide Pup Fill These Now
+# Guide Pup Launch Handoff
 
-## Current hard blockers on 2026-07-19
+## Current Decision
 
-- Complete Wrangler OAuth, deploy this exact committed source to staging and production, verify required secret names without exposing values, and produce fresh strict provider-backed smoke artifacts for `gpt-5.6-sol` / `2026-07-18.v1`.
-- Restore a runnable iPhone connection and complete the real no-screen sequence, including STOP barge-in, VoiceOver, physical haptics/earcons, settings persistence, native camera capture, and forced JS fallback. The sanitized evidence file does not exist yet.
-- Produce and inspect version `1.0.0` build `4`, upload it to TestFlight, and validate that exact build before attaching it to the App Store version record.
-- In App Store Connect, attach the validated build, add real app screenshots, publish matching App Privacy answers, and reverify App Review contact/no-sign-in/review-note fields.
-- Authenticate Expo/EAS only if EAS is chosen for build or submission. A direct Xcode archive and Apple upload path does not require `EXPO_TOKEN`.
+Guide Pup is not ready to upload to TestFlight or submit to App Review yet.
+Account identity and transport are mostly resolved, but the exact candidate has
+not cleared the cloud, binary, physical no-screen, and TestFlight repeat gates.
 
-## Optional or post-beta inputs
+Do not attach a build, submit for review, or merge this branch to `main` until
+every required item below has real evidence.
 
-- Website custom-domain override; the current Pages URL and derived privacy/support/safety URLs are already configured.
-- A future crash-reporting SDK. The launch client deliberately vendors none; adding one later requires a new binary and updated privacy answers.
-- Final Android package name for a later Android release.
+## Required Next
 
-## Resolved locally and in Apple portals by 2026-07-19
+1. Finish review, run the complete validation matrix, commit, and push the exact
+   source on `codex/guidepup-credentialed-launch`.
+2. Deploy that commit to staging and production. Run strict provider-backed
+   guidance and scene-query smokes against both environments, and retain the
+   sanitized request IDs and exact source revision.
+3. Produce one Store IPA and one device-authorized validation IPA from the same
+   frozen source and normalized unsigned payload. Inspect both artifacts and
+   bind them to the candidate evidence.
+4. Install the validation IPA on the connected iPhone. Complete separate
+   internal-tester and blind-participant no-screen v3 runs covering the full
+   voice sequence, STOP during speech, VoiceOver, audible cues, felt haptics,
+   interruption recovery, persisted settings, native capture, and forced
+   JavaScript fallback.
+5. Upload only the validated Store IPA. After Apple processes it, corroborate
+   app ID, version, build, state, and upload time through authenticated App Store
+   Connect evidence. The local upload record is not an Apple receipt or digest.
+6. Install the processed build through TestFlight and repeat the blind-participant
+   no-screen v3 run. The TestFlight evidence must bind to the processed build and
+   candidate Store IPA hash.
+7. Publish App Privacy and accessibility answers that match the inspected
+   archive and deployed provider behavior. Recheck agreements, export
+   compliance, review notes, contact fields, screenshots, release controls, and
+   selected build before submission.
 
-- iOS bundle identifier: `app.rork.guide-pup-vision-assist`
-  - Evidence: App Store Connect App Information, `expo/app.config.ts`, `expo/app.json`, and `expo/ios/GuidePupVisionAssistant.xcodeproj/project.pbxproj`.
-- Apple Team ID: `K99RADPB9G`
-  - Evidence: the authenticated Apple Developer portal showed active team `K99RADPB9G` on 2026-07-17. The prior `SBSJ3MX9GZ` identity is historical evidence, not current configuration.
-- App Store Connect App ID: `6756947790`
-  - Evidence: App Store Connect app list and App Information page for `Guide Pup: Vision Assistant`.
-- App Store version and next distribution candidate: version `1.0.0`, build `4`
-  - Evidence: the authenticated App Store Connect version remains `Prepare for Submission`; its only TestFlight build is expired build `2`. Build `4` is explicit in Expo, Xcode, and release inputs. No build `4` upload or submission has occurred.
-- Distribution signing identity and profile: resolved for team `K99RADPB9G`
-  - Evidence: Keychain has a valid `Apple Distribution: XIANMIN CHEN (K99RADPB9G)` identity. The App Store profile for `app.rork.guide-pup-vision-assist` was renewed against that certificate, installed as UUID `808b8553-e7b4-495f-83cd-4eae9f8420db`, expires 2027-07-19, has `get-task-allow=false`, and matches the installed certificate fingerprint.
-- Corrected-team signing, install, and launch baseline: resolved for version `1.0.0` build `3`
-  - Evidence: a clean signed device build succeeded with the checked-in Sentry-disabled Xcode default and no one-off shell override. Signature/provisioning reported `TeamIdentifier` `K99RADPB9G`, application-identifier prefix `K99RADPB9G`, and bundle `app.rork.guide-pup-vision-assist`; the app installed, launched, and remained running.
-  - Limit: no physical voice, haptic, earcon, VoiceOver, interruption, settings-persistence, native-camera, JS-fallback, or no-screen behavior has been validated.
-- App Review sign-in requirement: `false`
-  - Evidence: Guide Pup has no account sign-in flow; `expo/store.config.js` now sets `apple.review.demoRequired` from `expo/release/launch-inputs.js`.
-- Copyright and App Review contact: resolved from authenticated Apple records on 2026-07-17
-  - Evidence: Apple Developer shows an Individual membership under `XIANMIN CHEN` and the membership phone used in release inputs; the user-provided support email is the review email. App Store Connect retained `2026 XIANMIN CHEN` as copyright and manual release after reload.
-  - Live evidence: before a build was attached, App Store Connect retained copyright and manual release after reload. The no-sign-in selection, contact fields, and review notes reverted, so they must be re-entered and rechecked after a build is attached.
-- Sentry mode: `disabled`, SDK absent
-  - Evidence: `expo/release/launch-inputs.js` carries `sentryMode: "disabled"` and `productionSentryDsn: ""`; release preflight rejects the dependency, Expo plugin, CocoaPods entries, native upload phases/bundles, DSN variables, and archive Crash Data/Sentry markers.
-- Support email: `charliehan112@gmail.com`
-  - Evidence: provided by Charlie on 2026-07-17 and mirrored into `expo/release/launch-inputs.js`, `expo/eas.json`, and `site/support/index.html`.
-- Emergency / safety disclaimer: resolved on 2026-07-17
-  - Evidence: final copy is derived from the existing app fallback, public safety page, and App Review notes, then mirrored into `expo/release/launch-inputs.js` and `expo/eas.json`.
+## Resolved Identity
 
-## Authenticated App Store Connect state on 2026-07-19
+- App: `Guide Pup: Vision Assistant`
+- Apple ID: `6756947790`
+- Bundle ID: `app.rork.guide-pup-vision-assist`
+- SKU: `EX1766553072106`
+- Team ID: `K99RADPB9G`
+- Version and target build: `1.0.0 (4)`
+- Category and age rating: `Navigation`, `4+`
+- Copyright: `2026 XIANMIN CHEN`
+- Support and App Review email: `charliehan112@gmail.com`
+- Review sign-in required: `false`
+- Release control: manual
 
-- App: `Guide Pup: Vision Assistant`; Apple ID `6756947790`; bundle `app.rork.guide-pup-vision-assist`; SKU `EX1766553072106`; category `Navigation`.
-- Version `1.0.0` is `Prepare for Submission`, has no selected build and no uploaded screenshots. The screenshot manager currently reports `0 of 10 Screenshots`.
-- App Privacy is `Get Started`; no answers were published before archive/provider verification.
-- The version Support URL is blank. Use `https://guidepup-site.pages.dev/support` only after the current public site is deployed and rechecked.
-- Copyright `2026 XIANMIN CHEN`, manual release, App Review contact, no-sign-in state, and review notes were saved. They still require a final reload check after the candidate build is attached.
+## Current External State
 
-## Historical backend evidence by environment
+- Cloudflare OAuth is active.
+- Staging and production expose the required secret names
+  `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; values were not read or
+  recorded.
+- The live Workers still represent a superseded revision. No launch-valid
+  request IDs are claimed for the pending source.
+- The wired iPhone transport probe is ready: pairing, trust, Developer Mode,
+  developer services, tunnel, runnable Xcode destination, and a live CoreDevice
+  process probe pass. This is transport evidence only.
+- The public privacy, support, and safety pages are reachable and disclose
+  sampled frames, Apple Speech behavior, Cloudflare diagnostics, OpenAI's
+  default abuse-monitoring retention limit, and the support email.
+- App Store Connect previously showed version `1.0.0` as Prepare for
+  Submission, four 6.5-inch screenshots, no selected build, the correct review
+  email, no login requirement, and manual release. The later TestFlight view did
+  not finish loading before the Apple session expired, so no current TestFlight
+  build state is claimed.
+- Expo/EAS authentication is still pending direct Apple passkey approval.
 
-- Staging Worker, last provider-backed evidence before the current launch contract
-  - Live URL: `https://guidepup-api-staging.charliehan-lifepage.workers.dev`
-  - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
-  - `OPENAI_API_KEY`: configured remotely; live smoke on `2026-05-22` returned provider-backed analyze
-  - Latest analyze request ID: `372a702d-de22-4df9-ad74-19ef7d8b7de3`
-- Production Worker, last provider-backed evidence before the current launch contract
-  - Live URL: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
-  - `BOOTSTRAP_SIGNING_SECRET`: configured on `2026-04-01`
-  - `OPENAI_API_KEY`: configured remotely; live smoke on `2026-05-22` returned provider-backed analyze
-  - Latest analyze request ID: `09ff3bf0-1ab7-4fdd-a525-4007328cc731`
+## Privacy And Release Boundaries
 
-## Current local auth status
+- Shipping iOS contains no provider key or direct model call.
+- MiniCPM remains experimental and is not a launch provider.
+- The launch client intentionally contains no Sentry SDK or DSN. Crash Data can
+  be answered `No` only after the submitted archive confirms that state.
+- Camera frames are sampled rather than continuous video. They may be processed
+  by OpenAI through the Guide Pup backend.
+- `store: false` is requested for provider calls, but Guide Pup does not claim
+  zero retention. OpenAI default abuse-monitoring retention may still apply
+  unless the account has separately approved retention controls.
+- Do not record secrets, raw images, raw audio, credentials, signed URLs, full
+  device identifiers, or private contact data in smoke or release artifacts.
 
-- `CLOUDFLARE_API_TOKEN` is not set locally and Wrangler is not yet authenticated. OAuth reached GitHub sign-in in the in-app Browser; deployment and secret-name verification remain blocked until that login/authorization completes.
-- `EXPO_TOKEN` is not set locally and EAS is not authenticated. This blocks the EAS path, not direct Xcode/App Store upload.
-- The launch client contains no Sentry SDK; missing Sentry credentials are not a blocker.
-
-After updating them, rerun the matching iOS track gate from `expo/`, for example `npm run release:preflight:testflight`.
+After each gate, rerun the matching preflight from `expo/`. The Store gate is
+authoritative only after the exact candidate, authenticated Apple build record,
+and blind-participant TestFlight evidence all agree.

@@ -92,7 +92,7 @@ Override the individual URLs only if they live somewhere else.
 
 - Camera frames are sent to the backend and may be processed by third-party AI providers.
 - Optional voice commands request microphone and iOS speech-recognition access for a bounded command set.
-- Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
+- Raw voice audio is not intentionally logged or sent to the OpenAI vision provider by Guide Pup; Apple speech-service processing may occur when on-device recognition is unavailable.
 - An installation-scoped identifier and session bootstrap are used for authenticated vision requests.
 - The launch iOS client contains no crash-reporting SDK. Adding one later requires a new binary and App Privacy review.
 - The app degrades to `STOP` on invalid or unavailable vision responses.

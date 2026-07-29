@@ -13,6 +13,139 @@ const WALKABILITY_VALUES = new Set(["clear", "caution", "uncertain"]);
 const REQUEST_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WORKER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const GIT_REVISION_PATTERN = /^[0-9a-f]{40,64}$/;
+const PROVIDER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const CAPTURE_HEURISTICS_SHAPE = {
+  frameAgeMs: true,
+  imageSource: true,
+  resizedForUpload: true,
+  uploadedHeight: true,
+  uploadedWidth: true,
+};
+const REQUEST_ENVELOPE_SHAPE = {
+  appVersion: true,
+  captureHeuristics: CAPTURE_HEURISTICS_SHAPE,
+  detail: true,
+  frameId: true,
+  frameSummary: true,
+  hasImage: true,
+  interactionMode: true,
+  mimeType: true,
+  nativePath: true,
+  platform: true,
+  priorGuidance: true,
+  sampledFrame: true,
+  sessionId: true,
+  sourceHeight: true,
+  sourceWidth: true,
+  timestampMs: true,
+};
+const ANALYZE_SUMMARY_SHAPE = {
+  confidence: true,
+  direction: true,
+  errorCode: true,
+  executionPath: true,
+  fallbackReason: true,
+  hazardLevel: true,
+  interactionMode: true,
+  latencyMs: true,
+  lighting: true,
+  message: true,
+  model: true,
+  obstacle: true,
+  promptVersion: true,
+  provider: true,
+  requestId: true,
+  roundTripLatencyMs: true,
+  sceneDescription: true,
+  statusCode: true,
+  statusText: true,
+  structuredOutputInvalidFields: [],
+  structuredOutputMissingFields: [],
+  structuredOutputValid: true,
+  surfaceType: true,
+  walkability: true,
+};
+const SMOKE_LANE_SHAPE = {
+  analyze: ANALYZE_SUMMARY_SHAPE,
+  interactionMode: true,
+  requestEnvelope: REQUEST_ENVELOPE_SHAPE,
+};
+const SMOKE_ARTIFACT_SHAPE = {
+  apiUrl: true,
+  artifactVersion: true,
+  bootstrap: {
+    deviceIdSuffix: true,
+    expiresAt: true,
+    promptVersion: true,
+    rateLimitPerMinute: true,
+    requestId: true,
+    roundTripLatencyMs: true,
+    statusCode: true,
+    statusText: true,
+  },
+  environment: true,
+  freshness: {
+    expiresAt: true,
+    maxAgeSeconds: true,
+  },
+  generatedAt: true,
+  health: {
+    analyzeDeviceRateLimitPerMinute: true,
+    analyzeIpRateLimitPerMinute: true,
+    apiUrl: true,
+    benchmarkProviders: [],
+    bootstrapIpRateLimitPerMinute: true,
+    defaultMaxCompletionTokens: true,
+    defaultModel: true,
+    defaultProvider: true,
+    defaultReasoningEffort: true,
+    defaultRequestTimeoutMs: true,
+    defaultRetryCount: true,
+    defaultRetryDelayMs: true,
+    deploymentIdentityValid: true,
+    environment: true,
+    expectedApiUrl: true,
+    promptVersion: true,
+    providerGlobalCallLimitPerMinute: true,
+    requestId: true,
+    roundTripLatencyMs: true,
+    sessionTtlSeconds: true,
+    sourceRevision: true,
+    statusCode: true,
+    statusText: true,
+    structuredOutputMode: true,
+    workerIdentity: true,
+    workerVersionId: true,
+  },
+  lanes: {
+    guidance: SMOKE_LANE_SHAPE,
+    "scene-query": SMOKE_LANE_SHAPE,
+  },
+  launchContract: {
+    aggregateControlsPresent: true,
+    distinctAnalyzeRequestIds: true,
+    dualLaneEvidencePresent: true,
+    explicitInteractionModesValid: true,
+    freshnessBounded: true,
+    provenanceValid: true,
+    runtimeControlsPresent: true,
+    runtimeIdentityBound: true,
+    safetyContractsValid: true,
+    sampledFrameEnvelopesValid: true,
+    strictStructuredOutputsPresent: true,
+    structuredOutputsValid: true,
+    valid: true,
+  },
+  operator: true,
+  provenance: {
+    sourceRevision: true,
+    workerDeploymentId: true,
+    workerIdentity: true,
+    workerVersionCreatedAt: true,
+    workerVersionId: true,
+  },
+  providerBacked: true,
+};
 
 export function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -30,6 +163,16 @@ export function isWorkerIdentifier(value) {
   return typeof value === "string" && WORKER_ID_PATTERN.test(value);
 }
 
+export function isBoundedBenchmarkProviderList(value) {
+  return (
+    Array.isArray(value)
+    && value.length <= 4
+    && value.every((provider) =>
+      typeof provider === "string" && PROVIDER_NAME_PATTERN.test(provider))
+    && new Set(value).size === value.length
+  );
+}
+
 export function modelMatchesExpected(value, expected) {
   return typeof value === "string" && (value === expected || value.startsWith(`${expected}-`));
 }
@@ -40,6 +183,34 @@ function isIsoTimestamp(value) {
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function findUnexpectedArtifactFields(value, shape, prefix = "") {
+  if (shape === true || value === null || value === undefined) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    if (!Array.isArray(shape) || shape.length === 0) {
+      return [];
+    }
+    return value.flatMap((item, index) =>
+      findUnexpectedArtifactFields(item, shape[0], `${prefix || "$"}[${index}]`),
+    );
+  }
+  if (!isObject(value) || !isObject(shape)) {
+    return [];
+  }
+
+  const unexpected = [];
+  for (const [key, child] of Object.entries(value)) {
+    const fieldPath = prefix ? `${prefix}.${key}` : key;
+    if (!Object.prototype.hasOwnProperty.call(shape, key)) {
+      unexpected.push(fieldPath);
+      continue;
+    }
+    unexpected.push(...findUnexpectedArtifactFields(child, shape[key], fieldPath));
+  }
+  return unexpected;
 }
 
 export function validateStructuredAnalyzeOutput(responseBody) {
@@ -339,6 +510,9 @@ export function validateSmokeArtifactContract(
   if (!isObject(artifact)) {
     return { invalid: ["artifact"], missing, valid: false };
   }
+  for (const fieldPath of findUnexpectedArtifactFields(artifact, SMOKE_ARTIFACT_SHAPE)) {
+    invalid.push(`unexpectedField:${fieldPath}`);
+  }
 
   addRequiredField({
     container: artifact,
@@ -461,6 +635,13 @@ export function validateSmokeArtifactContract(
   }
   if (!hasBoundedRuntimeControls(artifact.health)) {
     invalid.push("health.runtime-controls");
+  }
+  if (
+    isObject(artifact.health)
+    && "benchmarkProviders" in artifact.health
+    && !isBoundedBenchmarkProviderList(artifact.health.benchmarkProviders)
+  ) {
+    invalid.push("health.benchmarkProviders");
   }
   if (requireAggregateControls && !hasBoundedAggregateControls(artifact.health)) {
     invalid.push("health.aggregate-controls");

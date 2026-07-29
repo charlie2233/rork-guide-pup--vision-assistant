@@ -25,8 +25,11 @@ test("allows only enumerated evidence and final screenshot files", () => {
     "backend/guidepup-api/eval/smoke-results-staging.latest.md",
     "backend/guidepup-api/eval/smoke-results-production.latest.json",
     "backend/guidepup-api/eval/smoke-results-production.latest.md",
-    "expo/release/no-screen-smoke.latest.json",
+    "expo/release/no-screen-smoke.internal.latest.json",
+    "expo/release/no-screen-smoke.blind-participant.latest.json",
+    "expo/release/no-screen-smoke.testflight.latest.json",
     "expo/release/candidate-build.latest.json",
+    "expo/release/ios-submission.latest.json",
     "expo/store-assets/screenshots/en-US/01-home.png",
     "expo/store-assets/screenshots/en-US/02-navigation.jpeg",
   ];

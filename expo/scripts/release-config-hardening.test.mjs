@@ -87,6 +87,33 @@ function createPreflightFixture(prefix) {
   return { fixtureExpo, fixtureRoot };
 }
 
+test("Store and installable validation twin use one pinned remote toolchain and runtime", () => {
+  const eas = JSON.parse(readFileSync(path.join(projectDir, "eas.json"), "utf8"));
+  const packageJson = JSON.parse(
+    readFileSync(path.join(projectDir, "package.json"), "utf8"),
+  );
+  const store = eas.build.store;
+  const validation = eas.build["store-validation"];
+
+  assert.equal(eas.cli.version, "21.2.0");
+  assert.equal(store.distribution, "store");
+  assert.equal(validation.distribution, "internal");
+  assert.equal(store.bun, "1.3.8");
+  assert.equal(validation.bun, store.bun);
+  assert.deepEqual(validation.ios, store.ios);
+  assert.equal(validation.channel, store.channel);
+  assert.equal(validation.autoIncrement, store.autoIncrement);
+  assert.deepEqual(validation.env, store.env);
+  assert.equal(
+    packageJson.scripts["build:store-validation:ios"],
+    "node scripts/build-validated-ios.mjs --profile store-validation",
+  );
+  assert.equal(
+    packageJson.scripts["metadata:push:ios"],
+    "npx --yes eas-cli@21.2.0 metadata:push --profile store",
+  );
+});
+
 test("preview preflight is order-independent and rejects unsafe release mutations", () => {
   const { fixtureExpo, fixtureRoot } = createPreflightFixture("guidepup-release-config-");
 

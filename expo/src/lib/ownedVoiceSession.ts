@@ -33,6 +33,111 @@ export async function stopOwnedVoiceSession<T>(input: {
   return input.stop(ownerToken);
 }
 
+export interface VoiceRecognitionRearmState {
+  generation: number;
+  inFlight: boolean;
+  needed: boolean;
+}
+
+export function createVoiceRecognitionRearmState(): VoiceRecognitionRearmState {
+  return {
+    generation: 0,
+    inFlight: false,
+    needed: false,
+  };
+}
+
+export function markVoiceRecognitionRearmNeeded(input: {
+  current: VoiceRecognitionRearmState;
+}) {
+  input.current.needed = true;
+}
+
+export function cancelVoiceRecognitionRearm(input: {
+  current: VoiceRecognitionRearmState;
+}) {
+  input.current = {
+    generation: input.current.generation + 1,
+    inFlight: false,
+    needed: false,
+  };
+}
+
+export function beginVoiceRecognitionRearm(input: {
+  current: VoiceRecognitionRearmState;
+}) {
+  if (!input.current.needed || input.current.inFlight) {
+    return null;
+  }
+
+  const generation = input.current.generation + 1;
+  input.current = {
+    generation,
+    inFlight: true,
+    needed: false,
+  };
+  return generation;
+}
+
+export function finishVoiceRecognitionRearm(
+  input: { current: VoiceRecognitionRearmState },
+  generation: number,
+  started: boolean,
+) {
+  if (
+    input.current.generation !== generation
+    || !input.current.inFlight
+  ) {
+    return false;
+  }
+
+  input.current = {
+    generation,
+    inFlight: false,
+    needed: !started,
+  };
+  return true;
+}
+
+export async function drainVoiceRecognitionRearm(input: {
+  isListeningReady: () => boolean;
+  promiseRef: { current: Promise<boolean> | null };
+  start: () => Promise<boolean>;
+  stateRef: { current: VoiceRecognitionRearmState };
+}) {
+  if (input.promiseRef.current) {
+    return input.promiseRef.current;
+  }
+
+  if (!input.stateRef.current.needed && !input.stateRef.current.inFlight) {
+    return input.isListeningReady();
+  }
+
+  const generation = beginVoiceRecognitionRearm(input.stateRef);
+  if (generation === null) {
+    return false;
+  }
+
+  const rearmPromise = input.start().then(
+    (started) => (
+      finishVoiceRecognitionRearm(input.stateRef, generation, started)
+      && started
+    ),
+    () => {
+      finishVoiceRecognitionRearm(input.stateRef, generation, false);
+      return false;
+    },
+  );
+  input.promiseRef.current = rearmPromise;
+  try {
+    return await rearmPromise;
+  } finally {
+    if (input.promiseRef.current === rearmPromise) {
+      input.promiseRef.current = null;
+    }
+  }
+}
+
 export async function releaseOwnedAnnouncementOwner<T>(input: {
   ownerRef: { current: string | null };
   release: (ownerToken: string) => Promise<T>;

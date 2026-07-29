@@ -178,11 +178,21 @@ test("voice command startup and cleanup are scoped to an owner token", () => {
   assert.match(navigation, /subscribeToStableVoiceRoute\(\{/);
   assert.match(
     navigation,
-    /const unsubscribe = subscribeToStableVoiceRoute\(\{[\s\S]*return \(\) => \{\s*unsubscribe\(\);[\s\S]*\}, \[\]\)\);/,
+    /const subscriptionFocusGeneration = voiceRouteFocusGenerationRef\.current;[\s\S]*const subscriptionIsCurrent = \(\) =>[\s\S]*voiceRouteFocusGenerationRef\.current === subscriptionFocusGeneration[\s\S]*voiceSessionOwnerTokenRef\.current !== null[\s\S]*!isRouteTeardownLaunchBlocked\(\)[\s\S]*const unsubscribe = subscribeToStableVoiceRoute\(\{[\s\S]*recognitionHandlerRef: scopedRecognitionHandlerRef[\s\S]*stateHandlerRef: scopedStateHandlerRef[\s\S]*unsubscribe\(\)/,
+    "Route voice callbacks must remain bound to the focus and owned session that subscribed.",
   );
-  const stableSubscriptionEffect = navigation.match(
-    /useFocusEffect\(useCallback\(\(\) => \{\s*const unsubscribe = subscribeToStableVoiceRoute\(\{[\s\S]*?\}, \[\]\)\);/,
-  )?.[0] ?? "";
+  const stableSubscriptionEffect = navigation
+    .split("const subscriptionFocusGeneration = voiceRouteFocusGenerationRef.current;")[1]
+    .split("const handleStop = useCallback")[0];
+  assert.match(
+    navigation,
+    /useEffect\(\(\) => \{\s*if \([\s\S]*!isScreenFocused[\s\S]*routeTeardownWaitHoldActive[\s\S]*isRouteTeardownLaunchBlocked\(\)[\s\S]*const subscriptionFocusGeneration/,
+    "Voice listeners must not attach while the route teardown launch barrier is active.",
+  );
+  assert.match(
+    stableSubscriptionEffect,
+    /scopedRecognitionHandlerRef[\s\S]*scopedStateHandlerRef/,
+  );
   assert.doesNotMatch(stableSubscriptionEffect, /startCommandSession|stopCommandSession|stopOwnedVoiceSession/);
   assert.doesNotMatch(
     navigation,
@@ -237,6 +247,11 @@ test("STOP invalidates queued speech before native work can resume", () => {
   assert.match(
     voiceProvider,
     /const voiceState = await GuidePupVoiceControl\.getState\(\)[\s\S]*if \(sessionRef\.current !== sessionId\) \{\s*return;/,
+  );
+  assert.match(
+    voiceProvider,
+    /speechOptions\?\.keepListeningDuringSpeech === true[\s\S]*Boolean\(voiceState\?\.listening\)[\s\S]*canKeepListeningForStopBargeInDuringSpeech/,
+    "Speech/listening overlap must require an explicit STOP barge-in option.",
   );
   assert.match(
     voiceProvider,
@@ -311,6 +326,11 @@ test("native frames expire and camera ownership is released before JS fallback",
     /const boundedAttempts = Math\.max\(1, Math\.min\(3, Math\.floor\(maxAttempts\)\)\)[\s\S]*attempt < boundedAttempts[\s\S]*settlePromiseWithin\(\s*stopSession,\s*attemptTimeoutMs,\s*"native camera stop"/,
   );
   assert.match(
+    runtimeSafety,
+    /const stoppedNativeOwnershipGeneration = nativeOwnershipGeneration;[\s\S]*nativeOwnershipGeneration === stoppedNativeOwnershipGeneration[\s\S]*return true;/,
+    "Physical STOP completion must remain truthful without authorizing stale ownership mutation.",
+  );
+  assert.match(
     navigation,
     /grantFallbackCameraAfterNativeRelease[\s\S]*cameraTransitionReadyRef\.current = false/,
     "Fallback ownership alone must not make analysis ready.",
@@ -359,7 +379,7 @@ test("native frames expire and camera ownership is released before JS fallback",
   );
   assert.match(
     navigation,
-    /if \(!isScreenFocused \|\| !permission\?\.granted \|\| !isGuiding \|\| runtimeSafetyHold\) \{[\s\S]*cameraStopError: unknown = null[\s\S]*await cameraStopRequest\.promise\.catch/,
+    /if \([\s\S]*!isScreenFocused[\s\S]*!permission\?\.granted[\s\S]*!isGuiding[\s\S]*runtimeSafetyHold[\s\S]*runtimeSafetyHoldRef\.current[\s\S]*\) \{[\s\S]*cameraStopError: unknown = null[\s\S]*await cameraStopRequest\.promise\.catch/,
   );
   assert.doesNotMatch(navigation, /stopNativeCameraForTransition/);
   assert.match(navigation, /fallbackCameraActiveRef\.current = fallbackCameraActive/);
@@ -457,7 +477,7 @@ test("speech delivery uses one VoiceOver-aware channel and stop control is expli
   assert.match(navigation, /speechListeningOverlapReason: keepListeningDuringSpeech \? "stop-barge-in"/);
   assert.match(
     navigation,
-    /const voiceState = await GuidePupVoiceControl\.getState\(\)[\s\S]*announcementOwnerTokenRef\.current !== announcementOwnerToken[\s\S]*voiceOverSpeechGenerationRef\.current !== speechGeneration[\s\S]*listening: voiceState\?\.listening[\s\S]*GuidePupNavigationCore\.announce\(message, announcementOwnerToken\)/,
+    /const voiceState = await GuidePupVoiceControl\.getState\(\)[\s\S]*if \(!responseIsCurrent\(\)\)[\s\S]*listening: shouldSuspendListening \? false : voiceState\?\.listening[\s\S]*GuidePupNavigationCore\.announce\(message, announcementOwnerToken\)/,
   );
   assert.doesNotMatch(navigation, /shouldPauseListening/);
   assert.doesNotMatch(navigation, /cameraMessage[\s\S]{0,180}keepListeningDuringSpeech:\s*false/);
@@ -703,8 +723,13 @@ test("speech delivery uses one VoiceOver-aware channel and stop control is expli
   );
   assert.match(
     navigation,
-    /<Text style=\{styles\.hintText\}>\s*\{permission\?\.granted\s*\?\s*primaryControlAccessibility\.visibleHint\s*:\s*"Grant camera access to start guidance"\}\s*<\/Text>/,
+    /testID="navigation-stop-guidance"[\s\S]*<Text style=\{styles\.hintText\}>\s*\{primaryControlAccessibility\.visibleHint\}\s*<\/Text>/,
     "The visible Navigation hint must use the same guiding state as the primary accessibility control.",
+  );
+  assert.match(
+    navigation,
+    /accessible=\{false\}[\s\S]*testID="navigation-guidance-surface"[\s\S]*accessibilityRole="summary"[\s\S]*testID="navigation-current-guidance"/,
+    "VoiceOver must be able to inspect current guidance separately from the STOP control.",
   );
   assert.doesNotMatch(
     navigation,
@@ -778,6 +803,7 @@ test("camera and speech recovery events fail closed and remain bounded", () => {
   const navigationWrapper = read("../src/native/GuidePupNavigationCore.ts");
   const nativeVoice = read("../modules/guidepup-voice-control/ios/GuidePupVoiceControlController.swift");
   const navigation = read("../src/screens/NavigationScreen.tsx");
+  const runtimeSafety = read("../src/lib/runtimeSafety.ts");
 
   assert.match(cameraController, /maximumRecoveryAttempts = 3/);
   assert.match(cameraController, /case exhausted/);
@@ -785,8 +811,27 @@ test("camera and speech recovery events fail closed and remain bounded", () => {
   assert.match(navigationModule, /Events\("onStateChanged"\)/);
   assert.match(navigationWrapper, /addStateListener\(listener:/);
   assert.match(navigation, /GuidePupNavigationCore\.addStateListener/);
-  assert.match(navigation, /Stop\. Camera was interrupted\. Waiting to recover\./);
+  assert.match(navigation, /Stop\. Camera was interrupted\. Guidance is paused\./);
   assert.match(navigation, /Camera could not recover\. Guidance is paused\./);
+  const cameraRecoveryBlock = navigation
+    .split("GuidePupNavigationCore.addStateListener")[1]
+    .split("return () => {")[0];
+  assert.match(
+    cameraRecoveryBlock,
+    /requestNativeCameraStop\(\)[\s\S]*guidingRef\.current = false;[\s\S]*setIsGuiding\(false\);[\s\S]*verifyRecoveryCameraShutdown\([\s\S]*if \(!cameraStopped\) \{[\s\S]*speakCommandResponse\(UNCONFIRMED_SHUTDOWN_MESSAGE, undefined, \{[\s\S]*keepListeningDuringSpeech: true,[\s\S]*speakCommandResponse\(verifiedMessage/,
+    "Every camera interruption must verify bounded shutdown before announcing the paused state.",
+  );
+  assert.doesNotMatch(cameraRecoveryBlock, /cameraStopRequest\.promise\.catch/);
+  assert.match(
+    cameraRecoveryBlock,
+    /shouldSurfaceRecoveryTransition\(\{[\s\S]*cameraRecoveryExhaustedHandledRef\.current[\s\S]*cameraRecoveryGateActiveRef\.current/,
+    "A later camera exhaustion must bypass the already-paused guidance guard exactly once.",
+  );
+  assert.doesNotMatch(
+    cameraRecoveryBlock,
+    /setTimeout\([\s\S]*analyzeCurrentFrame/,
+    "Camera recovery must not silently resume analysis.",
+  );
 
   assert.match(nativeVoice, /maximumRecoveryAttempts = 3/);
   assert.match(nativeVoice, /recoveryStabilityDelay: TimeInterval = 10/);
@@ -797,7 +842,11 @@ test("camera and speech recovery events fail closed and remain bounded", () => {
   assert.match(nativeVoice, /"recoveryState": currentRecoveryState\.rawValue/);
   assert.doesNotMatch(nativeVoice, /private func markRecognitionHealthy\(\) \{[\s\S]{0,120}recoveryAttemptCount = 0/);
   assert.match(navigation, /enterVoiceRecoveryHold\(recoveryState\)/);
-  assert.match(navigation, /recoveryState === "idle" && state\.listening[\s\S]*clearVoiceRecoveryHold\(\)/);
+  assert.match(
+    navigation,
+    /if \(recoveryState === "idle"\) \{\s*if \(state\.listening\) \{[\s\S]*clearVoiceRecoveryHold\(\);[\s\S]*\}\s*return;/,
+    "Idle recovery events may clear the hold only after listening is observed restored.",
+  );
   assert.match(navigation, /runtimeSafetyHoldRef\.current = true/);
   assert.match(navigation, /recoveryFreshFrameAfterMsRef\.current/);
   assert.match(navigation, /Voice control could not recover\. Guidance is paused\./);
@@ -806,17 +855,22 @@ test("camera and speech recovery events fail closed and remain bounded", () => {
     .split("const clearVoiceRecoveryHold = useCallback")[0];
   assert.match(
     voiceRecoveryBlock,
+    /guidingRef\.current = false;[\s\S]*setIsGuiding\(false\);[\s\S]*invalidateAndAbortAnalysis\(\);/,
+    "Every interruption hold must deactivate guidance and abort in-flight analysis.",
+  );
+  assert.match(
+    voiceRecoveryBlock,
     /voiceOverAnnouncementActiveRef\.current = true;[\s\S]*isSpeakingRef\.current = true;/,
     "Voice recovery must enter a STOP-only speech guard before asynchronous cleanup.",
   );
   assert.match(
     voiceRecoveryBlock,
-    /const previousSpeechStopped = await settlePromiseWithin\([\s\S]*GuidePupVoiceControl\.stopSpeaking\(\)[\s\S]*const announcementOutcome = await settleCurrentAnnouncementDelivery\(\{[\s\S]*GuidePupNavigationCore\.supersedeAnnouncement\(message, announcementOwnerToken\)[\s\S]*GuidePupNavigationCore\.cancelAnnouncement\(announcementOwnerToken\)/,
+    /const \[cameraStopped, voiceOverState\] = await Promise\.all\([\s\S]*verifyRecoveryCameraShutdown\([\s\S]*const previousSpeechStopped = await settlePriorSpeechChannels\(\{[\s\S]*GuidePupVoiceControl\.stopSpeaking\(\)[\s\S]*GuidePupNavigationCore\.cancelAnnouncement\(announcementOwnerToken\)[\s\S]*if \(!previousSpeechStopped\) \{[\s\S]*return;[\s\S]*const announcementOutcome = await settleCurrentAnnouncementDelivery\(\{[\s\S]*GuidePupNavigationCore\.supersedeAnnouncement\(spokenMessage, announcementOwnerToken\)/,
     "Recovery speech replacement and interruption must be observed rather than fire-and-forget.",
   );
   assert.match(
     voiceRecoveryBlock,
-    /if \(!previousSpeechStopped \|\| announcementOutcome === "unsafe"\) \{[\s\S]*speaking: true,[\s\S]*return;[\s\S]*voiceOverAnnouncementActiveRef\.current = false;[\s\S]*isSpeakingRef\.current = false;/,
+    /if \(!previousSpeechStopped\) \{[\s\S]*speaking: true,[\s\S]*return;[\s\S]*if \(announcementOutcome === "unsafe"\) \{[\s\S]*speaking: true,[\s\S]*return;[\s\S]*voiceOverAnnouncementActiveRef\.current = false;[\s\S]*isSpeakingRef\.current = false;/,
     "An unsafe recovery announcement must retain the STOP-only guard.",
   );
   const recoveryAnnouncementCurrentBlock = voiceRecoveryBlock
@@ -834,10 +888,179 @@ test("camera and speech recovery events fail closed and remain bounded", () => {
     voiceRecoveryBlock,
     /supersedeAnnouncement\([^)]*\)\.catch\(\(\) => undefined\)/,
   );
+  const clearRecoveryBlock = navigation
+    .split("const clearVoiceRecoveryHold = useCallback")[1]
+    .split("const reportStopConfirmationFailure = useCallback")[0];
+  assert.match(
+    clearRecoveryBlock,
+    /isRouteTeardownLaunchBlocked\(\)[\s\S]*routeTeardownFailureRef\.current[\s\S]*routeTeardownPreservedSafetyHoldRef\.current[\s\S]*return;/,
+    "Ordinary voice recovery must not clear temporary or persistent route teardown holds.",
+  );
+  assert.match(clearRecoveryBlock, /planVoiceRecoveryCompletion\(\{/);
+  assert.match(clearRecoveryBlock, /setIsGuiding\(recoveryPlan\.guidanceActive\)/);
+  assert.match(
+    clearRecoveryBlock,
+    /if \(recoveryPlan\.runtimeSafetyHold\) \{[\s\S]*speakCommandResponse\(recoveryPlan\.detail, undefined, \{[\s\S]*keepListeningDuringSpeech: true,[\s\S]*return;[\s\S]*speakCommandResponse\(recoveryPlan\.detail\)/,
+    "Voice recovery must announce retained STOP-hold retry instructions before returning.",
+  );
+  assert.doesNotMatch(clearRecoveryBlock, /setIsGuiding\(true\)|resumeGuidanceForVoice/);
+  const navigationResponseBlock = navigation
+    .split("const speakCommandResponse = useCallback")[1]
+    .split("const pauseGuidanceForVoice = useCallback")[0];
+  assert.match(
+    navigationResponseBlock,
+    /shouldSuspendVoiceRecognitionForSpeech\(\{[\s\S]*stopOwnedVoiceSession\(\{[\s\S]*GuidePupVoiceControl\.stopCommandSession\(\{ ownerToken \}\)[\s\S]*const rearmOutcome = await drainRecognitionRearmWhenSafe\([\s\S]*enterVoiceInputUnavailableHold/,
+    "Speech must drain shared rearm debt and pause guidance when listening cannot be restored.",
+  );
+  assert.match(
+    navigationResponseBlock,
+    /const previousSpeechStopped = await settlePriorSpeechChannels\(\{[\s\S]*GuidePupVoiceControl\.stopSpeaking\(\)[\s\S]*GuidePupNavigationCore\.cancelAnnouncement\(announcementOwnerToken\)[\s\S]*if \(!previousSpeechStopped\) \{[\s\S]*reportUnconfirmedShutdown\("speakCommandResponse\.priorSpeechStop"\);[\s\S]*return;[\s\S]*GuidePupNavigationCore\.announce\(message, announcementOwnerToken\)/,
+    "Ordinary VoiceOver delivery must never start after prior-channel cancellation fails.",
+  );
+  assert.match(
+    navigationResponseBlock,
+    /const existingStopOnlyListenerReady =[\s\S]*runtimeSafetyHoldRef\.current[\s\S]*voiceState\?\.listening === true[\s\S]*voiceSessionOwnerTokenRef\.current !== null;[\s\S]*if \(existingStopOnlyListenerReady\) \{[\s\S]*keepListeningDuringSpeech: true,[\s\S]*return;[\s\S]*drainRecognitionRearmWhenSafe/,
+    "A critical hold may preserve an already-confirmed STOP listener but must not rearm a new listener.",
+  );
+  const routeOwnershipBlock = navigation
+    .split('createGuidePupAnnouncementOwnerToken("navigation-announcement")')[1]
+    .split("const speakCommandResponse = useCallback")[0];
+  const routeBeforeRestoreBlock = routeOwnershipBlock
+    .split("const restoreFocusedRuntime =")[0];
+  const routeRestoreBlock = routeOwnershipBlock
+    .split("const restoreFocusedRuntime =")[1]
+    .split("if (pendingTeardown &&")[0];
+  assert.doesNotMatch(
+    routeBeforeRestoreBlock,
+    /beginCameraTransition\(\)|claimAnnouncementOwner/,
+    "Refocus must not claim camera or announcement ownership before pending teardown settles.",
+  );
+  assert.match(
+    routeRestoreBlock,
+    /completeFocusSettlement\([\s\S]*routeTeardownWaitHoldRef\.current = false;[\s\S]*isRouteTeardownLaunchBlocked\(\)[\s\S]*beginCameraTransition\(\);[\s\S]*claimAnnouncementOwner\(announcementOwnerToken\)/,
+    "A current focus may create its new owners only from the settled teardown restore path.",
+  );
+  assert.match(
+    routeOwnershipBlock,
+    /const pendingTeardown = routeTeardownPendingRef\.current;[\s\S]*routeTeardownLaunchBarrier\.waitForTeardown\([\s\S]*runtimeSafetyHoldRef\.current = true;[\s\S]*pendingTeardown\.then\(\s*restoreFocusedRuntime/,
+    "A refocused route must remain held until the prior teardown result settles.",
+  );
+  assert.match(
+    routeOwnershipBlock,
+    /announcementOwnerTokenRef\.current = null;[\s\S]*voiceSessionOwnerTokenRef\.current = null;[\s\S]*invalidateOwnedVoiceSessionAttempts[\s\S]*cameraRecoveryGateActiveRef\.current = true;[\s\S]*voiceRecoveryGateActiveRef\.current = true/,
+    "Route teardown must synchronously invalidate every restart owner and gate.",
+  );
+  assert.match(
+    routeOwnershipBlock,
+    /verifyRecoveryCameraShutdown\([\s\S]*false,[\s\S]*GuidePupVoiceControl\.stopCommandSession[\s\S]*GuidePupNavigationCore\.releaseAnnouncementOwner[\s\S]*resolveRouteTeardownShutdownTruth[\s\S]*recordNavigationLoopSnapshot[\s\S]*recordVoiceSnapshot/,
+    "Rejected route teardown must be bounded and recorded without fabricating inactivity.",
+  );
+  assert.match(
+    routeOwnershipBlock,
+    /const wasWaitingForTeardown = routeTeardownWaitHoldRef\.current;[\s\S]*runtimeSafetyHoldRef\.current && !wasWaitingForTeardown/,
+    "A repeated focus cycle must not preserve its temporary teardown wait hold as a recovery failure.",
+  );
+  assert.match(
+    routeOwnershipBlock,
+    /beginTeardown\(\);[\s\S]*requestNativeCameraStop\(\)[\s\S]*routeTeardownPendingRef\.current = teardownPromise;[\s\S]*settleTeardown\(teardownGeneration\)/,
+    "Blur must register the barrier before native stop work and clear it only from exact settlement.",
+  );
+  assert.doesNotMatch(
+    routeOwnershipBlock,
+    /cameraStopRequest\.promise\.catch\(\(\) => undefined\)|void stopOwnedVoiceSession/,
+    "Route teardown failures must not be silently discarded.",
+  );
+  const voiceStateBlock = navigation
+    .split("const handleVoiceStateEvent = useCallback")[1]
+    .split("useLayoutEffect")[0];
+  assert.match(
+    voiceStateBlock,
+    /if \(isRouteTeardownLaunchBlocked\(\)\) \{\s*return;[\s\S]*shouldSurfaceRecoveryTransition\(\{/,
+    "Late voice-state callbacks must remain inert while teardown is pending.",
+  );
+  assert.match(
+    voiceStateBlock,
+    /shouldSurfaceRecoveryTransition\(\{[\s\S]*voiceRecoveryExhaustedHandledRef\.current[\s\S]*voiceRecoveryGateActiveRef\.current/,
+    "A later voice exhaustion must bypass the already-paused guidance guard exactly once.",
+  );
+  const voiceRecognitionBlock = navigation
+    .split("const handleVoiceRecognitionEvent = useCallback")[1]
+    .split("const handleVoiceStateEvent = useCallback")[0];
+  assert.match(
+    voiceRecognitionBlock,
+    /!isScreenFocusedRef\.current[\s\S]*isRouteTeardownLaunchBlocked\(\)[\s\S]*case "start-guidance":\s*if \(resumeGuidanceForVoice\(\)/,
+    "Queued ordinary transcripts must be rejected before command dispatch while teardown is pending.",
+  );
+  const resumeGuidanceBlock = navigation
+    .split("const resumeGuidanceForVoice = useCallback")[1]
+    .split("useEffect(() => {")[0];
+  assert.match(
+    resumeGuidanceBlock,
+    /if \(isRouteTeardownLaunchBlocked\(\)\) \{\s*return false;[\s\S]*cameraRecoveryGateActiveRef\.current = false/,
+    "Voice resume must not clear camera recovery ownership before route settlement.",
+  );
+  assert.match(
+    runtimeSafety,
+    /createRouteTeardownLaunchBarrier[\s\S]*completeFocusSettlement[\s\S]*isBlocked\(\)[\s\S]*settleTeardown[\s\S]*waitForTeardown/,
+    "The executable barrier must separate pending settlement from current-focus consumption.",
+  );
   assert.match(
     navigation,
     /runtimeSafetyHoldRef\.current[\s\S]*voiceRecoveryGateActiveRef\.current[\s\S]*stopSafetyFailureHoldRef\.current[\s\S]*touchStopFailureHoldRef\.current[\s\S]*intent !== "stop-guidance"[\s\S]*return;/,
     "Every safety hold must block non-STOP voice commands.",
+  );
+});
+
+test("screen-reader speech invalidation rearms deterministically and recovery shutdown is observed", () => {
+  const navigation = read("../src/screens/NavigationScreen.tsx");
+  const runtimeSafety = read("../src/lib/runtimeSafety.ts");
+  const screenReaderBlock = navigation
+    .split('AccessibilityInfo.addEventListener("screenReaderChanged"')[1]
+    .split("return () => {")[0];
+
+  assert.match(
+    screenReaderBlock,
+    /voiceOverSpeechGenerationRef\.current = speechGeneration;[\s\S]*voiceOverAnnouncementActiveRef\.current = false;[\s\S]*isSpeakingRef\.current = false;/,
+    "The transition must synchronously clear only the speech guard it invalidated.",
+  );
+  assert.match(
+    screenReaderBlock,
+    /isSpeechTransitionCurrent\(\{[\s\S]*currentGeneration: voiceOverSpeechGenerationRef\.current[\s\S]*expectedGeneration: speechGeneration/,
+    "Async cleanup must remain bound to the invalidated speech generation.",
+  );
+  assert.match(
+    screenReaderBlock,
+    /settlePromiseWithin\([\s\S]*GuidePupVoiceControl\.stopSpeaking\(\)[\s\S]*settlePromiseWithin\([\s\S]*GuidePupNavigationCore\.cancelAnnouncement/,
+    "Screen-reader transition cleanup must be bounded and completion-aware.",
+  );
+  assert.match(
+    screenReaderBlock,
+    /drainRecognitionRearmWhenSafe\(transitionIsCurrent\)[\s\S]*rearmOutcome !== "failed"[\s\S]*enterVoiceInputUnavailableHold/,
+    "An invalidated listener must be rearmed or enter the truthful fail-closed hold.",
+  );
+
+  const recoveryShutdownBlock = navigation
+    .split("const verifyRecoveryCameraShutdown = useCallback")[1]
+    .split("const grantFallbackCameraAfterNativeRelease")[0];
+  assert.match(
+    recoveryShutdownBlock,
+    /settlePromiseWithin\([\s\S]*cameraStopRequest\.promise[\s\S]*GuidePupNavigationCore\.getState\(\)[\s\S]*resolveRecoveryCameraShutdownTruth\(\{/,
+  );
+  assert.match(
+    recoveryShutdownBlock,
+    /if \(!shutdownConfirmed && reportFailure\) \{[\s\S]*reportUnconfirmedShutdown\(stage\)/,
+  );
+  assert.match(
+    runtimeSafety,
+    /export function resolveRecoveryCameraShutdownTruth[\s\S]*input\.stopCompleted[\s\S]*input\.stateReadCompleted[\s\S]*!input\.nativeSessionActive/,
+  );
+  assert.match(
+    runtimeSafety,
+    /export function isSpeechTransitionCurrent[\s\S]*input\.currentGeneration === input\.expectedGeneration/,
+  );
+  assert.match(
+    runtimeSafety,
+    /export function shouldSurfaceRecoveryTransition[\s\S]*input\.recoveryState === "exhausted"[\s\S]*!input\.exhaustedAlreadyHandled[\s\S]*input\.recoveryGateActive \|\| input\.guidanceActive/,
   );
 });
 
@@ -849,6 +1072,15 @@ test("STOP evidence stays unknown until camera, listening, speech, and analysis 
   assert.match(navigation, /cutThrough: null/);
   assert.match(navigation, /cameraInactiveAfterStop: null/);
   assert.match(navigation, /listeningStoppedAfterStop: null/);
+  assert.match(navigation, /const stopEventId = createDiagnosticsEventId\(\)/);
+  assert.match(
+    navigation,
+    /playHapticWithOutcome\("stop"\)[\s\S]*playAudioCueWithOutcome\("stop"\)[\s\S]*hapticOutcome,[\s\S]*audioCueOutcome,/,
+    "STOP evidence must record outcomes from the same bounded sensory attempts.",
+  );
+  assert.match(diagnostics, /stopEventId\?: string/);
+  assert.match(diagnostics, /audioCueOutcome: "failure" \| "not-attempted" \| "pending" \| "success"/);
+  assert.match(diagnostics, /hapticOutcome: "failure" \| "not-attempted" \| "pending" \| "success"/);
   assert.match(navigation, /STOP_OBSERVATION_QUIET_WINDOW_MS/);
   assert.match(navigation, /await stopRuntimeAndObserve\(\)/);
   assert.match(navigation, /GuidePupNavigationCore\.stopSession\(\)/);
@@ -966,7 +1198,7 @@ test("STOP evidence stays unknown until camera, listening, speech, and analysis 
   );
   assert.match(
     navigation,
-    /const observation = await stopRuntimeAndObserve\(\);\s*if \(!stopOperationIsCurrent\(\)\) \{\s*return;\s*\}\s*if \(!observation\.shutdownConfirmed\) \{\s*reportUnconfirmedShutdown\("handleVoiceStopCommand"\);/,
+    /const shutdownObservation = stopRuntimeAndObserve\(\);[\s\S]*const \[observation, \[hapticOutcome, audioCueOutcome\]\] = await Promise\.all\([\s\S]*if \(!stopOperationIsCurrent\(\)\) \{\s*return;\s*\}\s*if \(!observation\.shutdownConfirmed\) \{\s*reportUnconfirmedShutdown\("handleVoiceStopCommand"\);/,
     "Voice STOP may report shutdown failure only after proving operation currency.",
   );
   assert.match(
@@ -1023,8 +1255,8 @@ test("STOP evidence stays unknown until camera, listening, speech, and analysis 
   );
   assert.match(
     navigation,
-    /const retainRuntimeSafetyHold = shouldRetainRuntimeSafetyHoldAfterVoiceRecovery[\s\S]*if \(retainRuntimeSafetyHold\) \{[\s\S]*title: "STOP not confirmed"[\s\S]*return;[\s\S]*title: "Checking a fresh frame"/,
-    "Voice recovery must not replace an unresolved STOP failure with a normal fresh-frame status.",
+    /const recoveryPlan = planVoiceRecoveryCompletion[\s\S]*runtimeSafetyHoldRef\.current = recoveryPlan\.runtimeSafetyHold[\s\S]*if \(recoveryPlan\.runtimeSafetyHold\) \{[\s\S]*title: recoveryPlan\.title[\s\S]*return;[\s\S]*speakCommandResponse\(recoveryPlan\.detail\)/,
+    "Voice recovery must retain unresolved STOP failures and otherwise require an explicit start command.",
   );
   assert.match(
     navigation,
@@ -1074,4 +1306,48 @@ test("settings report persistence success before confirmation", () => {
   assert.match(provider, /return false;/);
   assert.match(home, /I could not save the speech rate\. The setting was not changed\./);
   assert.match(navigation, /I could not save the haptics setting\. The setting was not changed\./);
+});
+
+test("delayed command feedback is invalidated by STOP and safety holds", () => {
+  const navigation = read("../src/screens/NavigationScreen.tsx");
+
+  assert.match(
+    navigation,
+    /const commandFeedbackGenerationRef = useRef\(0\);[\s\S]*const invalidatePendingCommandFeedback = useCallback\(\(\) => \{[\s\S]*commandFeedbackGenerationRef\.current \+= 1;/,
+  );
+  assert.match(
+    navigation,
+    /const beginCommandFeedback = useCallback\(\(\) => \{[\s\S]*commandFeedbackGenerationRef\.current === generation[\s\S]*!stopOperationInFlightRef\.current[\s\S]*!runtimeSafetyHoldRef\.current/,
+  );
+  for (const settingCall of [
+    "updateSpeechRate",
+    "updateDescriptionMode",
+    "updateHapticsEnabled",
+  ]) {
+    assert.match(
+      navigation,
+      new RegExp(
+        `${settingCall}[^;]+then\\(\\(saved\\) => \\{[\\s\\S]*?if \\(!feedbackIsCurrent\\(\\)\\) \\{[\\s\\S]*?return;`,
+      ),
+      `${settingCall} feedback must be generation-gated before speech, haptics, or cues.`,
+    );
+  }
+  const stopRuntimeBlock = navigation
+    .split("const stopRuntimeAndObserve = useCallback")[1]
+    .split("const speakStopConfirmation = useCallback")[0];
+  assert.match(
+    stopRuntimeBlock,
+    /invalidatePendingCommandFeedback\(\);[\s\S]*cancelVoiceRecognitionRearm\(voiceRecognitionRearmStateRef\);[\s\S]*await Promise\.allSettled/,
+  );
+});
+
+test("native voice startup failure is not mislabeled as a JS recognition fallback", () => {
+  const navigation = read("../src/screens/NavigationScreen.tsx");
+  const startVoiceBlock = navigation
+    .split("const startVoiceSession = useCallback")[1]
+    .split("useFocusEffect")[0];
+  const catchBlock = startVoiceBlock.slice(startVoiceBlock.lastIndexOf("catch (error)"));
+
+  assert.match(catchBlock, /available: true,[\s\S]*executionPath: "native-voice"/);
+  assert.doesNotMatch(catchBlock, /executionPath: "js-fallback"/);
 });

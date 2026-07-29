@@ -71,6 +71,25 @@ test("configured staging sessions issue and verify normally", async () => {
   assert.equal(Date.parse(session.expiresAt) - Date.parse(session.issuedAt), 3_600_000);
 });
 
+test("malformed session tokens are bounded authentication failures", async () => {
+  const { verifySessionToken } = loadSessionModule();
+  const env = {
+    BOOTSTRAP_SIGNING_SECRET: "staging-test-signing-secret",
+    ENVIRONMENT: "staging",
+  };
+  const deviceId = "11111111-1111-4111-8111-111111111111";
+
+  for (const token of [
+    "",
+    "v1.only-two-parts",
+    "v1.too.many.parts",
+    "v1.payload.%%%",
+    `v1.${"a".repeat(2050)}.signature`,
+  ]) {
+    assert.equal(await verifySessionToken(token, deviceId, env), false, token.slice(0, 40));
+  }
+});
+
 test("the client refreshes an expired session once before surfacing failure", () => {
   const unauthorizedCheck = clientApiSource.indexOf("response.status === 401 && allowRetry");
   const unauthorizedBlock = clientApiSource.slice(

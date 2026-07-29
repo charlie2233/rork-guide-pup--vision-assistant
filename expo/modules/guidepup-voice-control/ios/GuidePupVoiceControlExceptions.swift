@@ -18,6 +18,12 @@ internal final class GuidePupMicrophonePermissionDeniedException: Exception {
   }
 }
 
+internal final class GuidePupSpeechDeliveryCancelledException: Exception {
+  override var reason: String {
+    "Guide Pup speech delivery was cancelled before completion."
+  }
+}
+
 internal final class GuidePupVoiceSessionStartException: GenericException<String> {
   override var reason: String {
     param

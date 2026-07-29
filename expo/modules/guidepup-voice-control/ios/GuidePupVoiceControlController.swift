@@ -6,6 +6,11 @@ typealias GuidePupVoiceRecognitionHandler = ([String: Any]) -> Void
 typealias GuidePupVoiceStateHandler = ([String: Any]) -> Void
 
 final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegate {
+  private struct PendingSpeech {
+    let continuation: CheckedContinuation<Void, Error>
+    let utterance: AVSpeechUtterance
+  }
+
   private enum RecoveryState: String {
     case background
     case exhausted
@@ -30,7 +35,6 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
 
   private var activeLocaleIdentifier: String?
   private var activePartialResults = false
-  private var activeSpeechUtterance: AVSpeechUtterance?
   private var appActive = true
   private var audioSessionInterrupted = false
   private var audioTapInstalled = false
@@ -49,7 +53,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   private var recoveryStabilityWorkItem: DispatchWorkItem?
   private var recoveryWorkItem: DispatchWorkItem?
   private var restartingAfterFinal = false
-  private var speechContinuation: CheckedContinuation<Void, Error>?
+  private var pendingSpeech: PendingSpeech?
   private var speechRecognizer: SFSpeechRecognizer?
   private var speaking = false
   private var voiceProcessingEnabled = false
@@ -222,11 +226,7 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
 
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.main.async {
-        if let pendingContinuation = self.speechContinuation {
-          self.speechContinuation = nil
-          self.activeSpeechUtterance = nil
-          pendingContinuation.resume(returning: ())
-        }
+        self.rejectPendingSpeech()
 
         if interrupt && self.speechSynthesizer.isSpeaking {
           self.speechSynthesizer.stopSpeaking(at: .immediate)
@@ -241,8 +241,10 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
           utterance.rate = Float(normalizedRate) * AVSpeechUtteranceDefaultSpeechRate
         }
 
-        self.speechContinuation = continuation
-        self.activeSpeechUtterance = utterance
+        self.pendingSpeech = PendingSpeech(
+          continuation: continuation,
+          utterance: utterance
+        )
         self.setSpeaking(true)
         self.sendStateChanged()
         self.speechSynthesizer.speak(utterance)
@@ -253,12 +255,9 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   func stopSpeaking() async {
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async {
+        self.rejectPendingSpeech()
         if self.speechSynthesizer.isSpeaking {
           self.speechSynthesizer.stopSpeaking(at: .immediate)
-        } else if let pendingContinuation = self.speechContinuation {
-          self.speechContinuation = nil
-          self.activeSpeechUtterance = nil
-          pendingContinuation.resume(returning: ())
         }
         self.setSpeaking(false)
         self.sendStateChanged()
@@ -289,11 +288,11 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   }
 
   func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-    completeSpeech(for: utterance)
+    completeSpeech(for: utterance, delivered: false)
   }
 
   func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-    completeSpeech(for: utterance)
+    completeSpeech(for: utterance, delivered: true)
   }
 
   private func startListeningSession() throws {
@@ -700,30 +699,40 @@ final class GuidePupVoiceControlController: NSObject, AVSpeechSynthesizerDelegat
   }
 
   private func stopSpeakingImmediately() {
+    rejectPendingSpeech()
     if speechSynthesizer.isSpeaking {
       speechSynthesizer.stopSpeaking(at: .immediate)
-    } else if let pendingContinuation = speechContinuation {
-      speechContinuation = nil
-      activeSpeechUtterance = nil
-      pendingContinuation.resume(returning: ())
     }
     setSpeaking(false)
   }
 
-  private func completeSpeech(for utterance: AVSpeechUtterance) {
-    guard activeSpeechUtterance === utterance else {
+  private func rejectPendingSpeech() {
+    guard let pendingSpeech else {
       return
     }
 
-    activeSpeechUtterance = nil
+    self.pendingSpeech = nil
+    pendingSpeech.continuation.resume(
+      throwing: GuidePupSpeechDeliveryCancelledException()
+    )
+  }
+
+  private func completeSpeech(for utterance: AVSpeechUtterance, delivered: Bool) {
+    guard let pendingSpeech, pendingSpeech.utterance === utterance else {
+      return
+    }
+
+    self.pendingSpeech = nil
     setSpeaking(false)
     sendStateChanged()
 
-    guard let continuation = speechContinuation else {
-      return
+    if delivered {
+      pendingSpeech.continuation.resume(returning: ())
+    } else {
+      pendingSpeech.continuation.resume(
+        throwing: GuidePupSpeechDeliveryCancelledException()
+      )
     }
-    speechContinuation = nil
-    continuation.resume(returning: ())
   }
 
   private func clearError() {

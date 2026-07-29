@@ -148,9 +148,12 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
   const direction = deriveDirection(raw, hazardLevel);
   const hasCloseObstacle = raw.obstacles.some((obstacle) =>
     obstacle.distance === "very-close" || obstacle.distance === "close");
+  const hasPathBlockingObstacle = raw.obstacles.some((obstacle) =>
+    obstacle.position === "center" && obstacle.distance !== "far");
   const obstacle =
     direction === "stop"
     || hasCloseObstacle
+    || hasPathBlockingObstacle
     || hazardLevel === "medium"
     || hazardLevel === "high";
 
@@ -178,6 +181,7 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
   return applySafetyOverrides(normalized, {
     confidence,
     hasCloseObstacle,
+    hasPathBlockingObstacle,
     lighting: raw.lighting,
     pathClear: raw.pathClear,
     safetyTags,

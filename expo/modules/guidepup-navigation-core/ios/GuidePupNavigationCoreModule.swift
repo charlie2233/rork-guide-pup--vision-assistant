@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import AudioToolbox
+import StoreKit
 import UIKit
 
 private final class GuidePupAccessibilityAnnouncementController {
@@ -417,6 +418,83 @@ public final class GuidePupNavigationCoreModule: Module {
       AudioServicesPlaySystemSound(soundId)
     }
     .runOnQueue(.main)
+
+    AsyncFunction("getDistributionEvidence") { () async -> [String: Any] in
+      guard #available(iOS 16.0, *) else {
+        return [
+          "appStoreAppIdMatched": false,
+          "bundleVersionMatched": false,
+          "transactionVerified": false,
+          "identityMatched": false,
+          "environment": "none",
+        ]
+      }
+
+      do {
+        switch try await AppTransaction.shared {
+        case .verified(let appTransaction):
+          let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+          let appVersion =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? ""
+          let bundleVersion =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+            ?? ""
+          let expectedBuildNumber =
+            Bundle.main.object(forInfoDictionaryKey: "GuidePupExpectedBuildNumber") as? String
+            ?? ""
+          let expectedAppStoreAppId =
+            Bundle.main.object(forInfoDictionaryKey: "GuidePupAppStoreConnectAppID") as? String
+            ?? ""
+          let appStoreAppIdMatched =
+            appTransaction.appID.map(String.init) == expectedAppStoreAppId
+            && !expectedAppStoreAppId.isEmpty
+          let bundleVersionMatched =
+            bundleVersion == expectedBuildNumber
+            && !expectedBuildNumber.isEmpty
+          let identityMatched =
+            !bundleIdentifier.isEmpty
+            && !appVersion.isEmpty
+            && appTransaction.bundleID == bundleIdentifier
+            && appTransaction.appVersion == appVersion
+            && appStoreAppIdMatched
+          let environment: String
+          switch appTransaction.environment {
+          case .sandbox:
+            environment = "apple-sandbox"
+          case .production:
+            environment = "app-store-production"
+          case .xcode:
+            environment = "xcode"
+          default:
+            environment = "unknown"
+          }
+          return [
+            "appStoreAppIdMatched": appStoreAppIdMatched,
+            "bundleVersionMatched": bundleVersionMatched,
+            "transactionVerified": true,
+            "identityMatched": identityMatched,
+            "environment": environment,
+          ]
+        case .unverified:
+          return [
+            "appStoreAppIdMatched": false,
+            "bundleVersionMatched": false,
+            "transactionVerified": false,
+            "identityMatched": false,
+            "environment": "none",
+          ]
+        }
+      } catch {
+        return [
+          "appStoreAppIdMatched": false,
+          "bundleVersionMatched": false,
+          "transactionVerified": false,
+          "identityMatched": false,
+          "environment": "none",
+        ]
+      }
+    }
 
     AsyncFunction("getState") {
       cameraController.stateDictionary()

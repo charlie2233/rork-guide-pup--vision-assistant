@@ -7,6 +7,7 @@ import test from "node:test";
 import { assertBackendSourceIsClean, buildWranglerDeployArgs } from "./deploy-with-provenance.mjs";
 import {
   buildAnalyzeRequestPayload,
+  buildSmokeArtifact,
   formatSmokeArtifactStdout,
   parseWorkerDeploymentStatus,
   parseWorkerVersionProvenance,
@@ -139,6 +140,99 @@ function validate(artifact, overrides = {}) {
 
 test("dual-lane provider-backed artifact satisfies the release contract", () => {
   assert.deepEqual(validate(buildValidSmokeArtifact()), { invalid: [], missing: [], valid: true });
+});
+
+test("actual runner artifact construction accepts bounded benchmark providers", () => {
+  const artifact = buildSmokeArtifact({
+    apiUrl: "https://guidepup-api-production.example.test",
+    bootstrap: {
+      json: {
+        expiresAt: "2026-07-18T21:00:00.000Z",
+        promptVersion: "2026-07-18.v1",
+        rateLimitPerMinute: 20,
+      },
+      requestId: "22222222-2222-4222-8222-222222222222",
+      response: { status: 200, statusText: "OK" },
+      roundTripLatencyMs: 100,
+    },
+    deviceId: "smoke-device-abcdef12",
+    environment: "production",
+    generatedAt: new Date(NOW_MS - 1000).toISOString(),
+    health: {
+      json: {
+        analyzeDeviceRateLimitPerMinute: 20,
+        analyzeIpRateLimitPerMinute: 60,
+        apiUrl: "https://guidepup-api-production.example.test",
+        benchmarkProviders: ["openai-compatible"],
+        bootstrapIpRateLimitPerMinute: 10,
+        defaultMaxCompletionTokens: 700,
+        defaultModel: "gpt-5.6-sol",
+        defaultProvider: "openai-compatible",
+        defaultReasoningEffort: "low",
+        defaultRequestTimeoutMs: 8500,
+        defaultRetryCount: 1,
+        defaultRetryDelayMs: 250,
+        deploymentIdentityValid: true,
+        environment: "production",
+        expectedApiUrl: "https://guidepup-api-production.example.test",
+        promptVersion: "2026-07-18.v1",
+        providerGlobalCallLimitPerMinute: 120,
+        sessionTtlSeconds: 3600,
+        sourceRevision: SOURCE_REVISION,
+        structuredOutputMode: "json_schema_strict",
+        workerIdentity: WORKER_IDENTITY,
+        workerVersionId: WORKER_VERSION_ID,
+      },
+      requestId: "11111111-1111-4111-8111-111111111111",
+      response: { status: 200, statusText: "OK" },
+      roundTripLatencyMs: 80,
+    },
+    lanes: {
+      guidance: buildLane("guidance", "33333333-3333-4333-8333-333333333333"),
+      "scene-query": buildLane("scene-query", "44444444-4444-4444-8444-444444444444"),
+    },
+    operator: "Runner contract test",
+    provenance: {
+      sourceRevision: SOURCE_REVISION,
+      workerDeploymentId: "55555555-5555-4555-8555-555555555555",
+      workerIdentity: WORKER_IDENTITY,
+      workerVersionCreatedAt: "2026-07-18T19:55:00.000Z",
+      workerVersionId: WORKER_VERSION_ID,
+    },
+  });
+
+  assert.deepEqual(artifact.health.benchmarkProviders, ["openai-compatible"]);
+  assert.deepEqual(validate(artifact), { invalid: [], missing: [], valid: true });
+});
+
+test("smoke contract rejects unbounded or duplicate benchmark provider metadata", () => {
+  for (const benchmarkProviders of [
+    ["openai-compatible", "openai-compatible"],
+    ["a", "b", "c", "d", "e"],
+    ["provider with spaces"],
+  ]) {
+    const artifact = buildValidSmokeArtifact();
+    artifact.health.benchmarkProviders = benchmarkProviders;
+    artifact.launchContract = buildLaunchContract({ artifact });
+    const result = validate(artifact);
+
+    assert.equal(result.valid, false);
+    assert.ok(result.invalid.includes("health.benchmarkProviders"));
+  }
+});
+
+test("smoke contract rejects unexpected fields recursively", () => {
+  const artifact = buildValidSmokeArtifact();
+  artifact.lanes.guidance.analyze.opaqueEvidence = "synthetic";
+  artifact.launchContract = buildLaunchContract({ artifact });
+
+  const result = validate(artifact);
+
+  assert.equal(result.valid, false);
+  assert.match(
+    result.invalid.join(","),
+    /unexpectedField:lanes\.guidance\.analyze\.opaqueEvidence/,
+  );
 });
 
 test("runner sends explicit interaction modes and strips image bytes from evidence", () => {

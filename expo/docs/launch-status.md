@@ -1,15 +1,19 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-07-24
+Last updated: 2026-07-29
 
 ## Current decision
 
-Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, distribution signing, and the current active iPhone transport probe are verified, but the pending source is not yet committed or deployed. Submission remains intentionally blocked on exact-revision backend and binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
+Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, and distribution signing are verified, but the candidate is not yet exact-revision deployed or built and the current iPhone execution path is blocked. Submission remains intentionally blocked on exact-revision backend and binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
 
 Current hard blockers:
 
 - Rebuild the exact post-fix revision, install it on the wired iPhone, and complete the no-screen sequence with spoken input/output, VoiceOver, audible earcons, felt haptics, interruption recovery, settings persistence, native camera capture, explicit JS fallback capture, and partial STOP cut-through. No sensory pass is inferred from process liveness.
-- Restore and keep the iPhone unlocked on a wired or same-LAN execution path for the exact-candidate run. A same-day sanitized probe previously passed, but the latest `2026-07-25T03:52:10Z` check is blocked: paired/trusted and Developer Mode enabled, yet CoreDevice unavailable, no active process probe, no USB/LAN path, and no Xcode runnable destination. Neither transport snapshot is sensory validation.
+- Restore the iPhone execution path for the exact-candidate run. The latest
+  suffix-only readiness check is `blocked`: pairing, Developer Mode, and
+  `xctrace` visibility remain, but developer services, the CoreDevice tunnel,
+  USB-or-connected-same-LAN execution, Xcode destination discovery, and the
+  active CoreDevice process probe do not pass.
 - Redeploy and strictly smoke staging/production after the final tracked commit, then bind the sanitized request IDs and signed binary hash into candidate and no-screen evidence.
 - Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, App Accessibility, build selection, agreements, App Review metadata, and a final authenticated URL recheck in App Store Connect.
 
@@ -22,8 +26,28 @@ Current local evidence:
 - Apple's Environment Scanning category is declared as linked, for App Functionality and Analytics, with no tracking. Derived confidence, direction, and hazard-level results support bounded service-quality analysis; Photos or Videos remains App Functionality only.
 - The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. No current build is selected; App Privacy and App Accessibility are not published. Four truthful `1284 x 2778` screenshots are saved in the live 6.5-inch slot, and support, marketing, and privacy URLs are present.
 - Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Secret values were not read or logged.
-- Current validation passes Expo typecheck, lint, Expo Doctor `17/17`, all Expo Node contracts `153/153`, backend typecheck, backend privacy/safety `50/50`, backend smoke/evidence `23/23`, both Cloudflare required-secret checks, both Worker dry runs, and `git diff --check`. Native Release validation is tracked separately and is not physical accessibility or camera evidence.
-- The unused direct `axios` dependency is removed. `bun audit` still reports `50` advisories (`1` critical, `27` high, `17` moderate, `5` low) in Expo, React Native, Metro, Babel, ESLint, and React DevTools dependency chains. The release candidate does not apply unproven blanket overrides or a framework migration; the nonzero audit remains documented dependency-maintenance risk.
+- Current validation passes Expo typecheck, lint, Expo Doctor `17/17`, all Expo
+  Node contracts `295/295`, no-screen/privacy integration `97/97`, release
+  evidence `62/62`, backend typecheck, backend privacy/safety `58/58`, backend
+  smoke/evidence `32/32`, both Cloudflare required-secret checks, both Worker
+  dry-runs, and `git diff --check`. Native Release correctly rejects the dirty
+  source through the clean-revision guard; a clean exact-revision build is
+  still required and is not physical accessibility or camera evidence.
+- EAS is not authenticated and no `EXPO_TOKEN` is present. App Store Connect
+  authentication and live build state must be reverified before live build or
+  metadata changes.
+- Runtime/backend, no-screen, and candidate-evidence reviews are closed with no
+  open P0/P1/P2 findings. Focused dependency exploitability review found no
+  P0/P1 production-iOS path; build-host parser exposure and final bundle
+  exclusion of DevTools/Babel `wrapRegExp` remain documented residual checks.
+- The unused direct `axios` dependency is removed. `bun audit` still reports
+  `50` advisories (`1` critical, `27` high, `17` moderate, `5` low) in Expo,
+  React Native, Metro, Babel, ESLint, and React DevTools dependency chains.
+  Focused review found the critical `shell-quote` path limited to standalone
+  DevTools and no P0/P1 remotely controlled production path. The release
+  candidate does not apply unproven blanket overrides or a framework
+  migration; the nonzero audit remains documented dependency-maintenance and
+  build-host risk, with final Release-bundle inspection still required.
 
 All detailed backend and release sections below are retained as phase history. The decision and evidence above are authoritative for the current candidate.
 

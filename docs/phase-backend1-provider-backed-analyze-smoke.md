@@ -4,17 +4,35 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
 
-## Current gate on 2026-07-24
+## Current gate on 2026-07-29
 
-- Wrangler OAuth is authenticated to the intended Cloudflare account. Staging and production each expose the required secret names `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; secret values were not read, printed, or written to the repository.
-- Exact source commit `87196ef75b322d0b6f2f535a3164d9c098511bef` was deployed to staging Worker version `b5a53893-f108-4e54-9fc9-681b540a9b5f` and production Worker version `5f48006b-4b0a-400c-96a1-1c701b09b46a`. Both strict dual-lane smokes passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, compact sampled-frame context, bounded retries/cost controls, deterministic STOP overrides, and runtime identity bound to the active deployment.
-- Staging request IDs: health `551482b3-d811-4315-8a07-41e5485fc591`, bootstrap `2ed503ee-747f-40e3-bcbb-d4f2e07109dc`, guidance `99416589-7b47-46b7-8279-bd82965d9cfc`, and scene query `bda49849-9fdd-4821-84b9-ca3e722859e4`.
-- Production request IDs: health `ec738267-0fff-40c6-b2c3-675deb8e659d`, bootstrap `238122f6-9e6b-434b-b37b-9bf802225846`, guidance `11f66d6b-7bf4-4509-9f8a-be244dade670`, and scene query `b12859ee-bd84-4a66-b3bf-baf0ef3a003c`.
-- Backend privacy/runtime tests passed `50/50`; backend smoke and release-evidence tests passed `23/23`; typecheck and staging/production Wrangler dry-runs passed.
-- Any later tracked source commit must be redeployed and re-smoked before its signed candidate is accepted. The generated `smoke-results-*.latest` artifacts are the machine-readable authority for that exact revision and intentionally contain no raw media, credentials, tokens, signed URLs, or full device identifiers.
-- The backend launch gate is passing for this exact source. This proves provider routing, schema, safety normalization, provenance, and privacy-safe evidence; it does not prove physical camera/audio behavior or real-scene guidance quality.
+- Wrangler OAuth is authenticated to the intended Cloudflare account. Staging
+  and production each expose `OPENAI_API_KEY` and
+  `BOOTSTRAP_SIGNING_SECRET`; values were not read, printed, or written to the
+  repository.
+- The candidate source represented by this gate has not been deployed. Current
+  live Workers still identify the pushed `80c6e7a...` revision, which is
+  superseded by the candidate backend and iOS changes.
+- The latest live smoke attempts correctly rejected themselves because the
+  runner emitted `health.benchmarkProviders` while its strict evidence schema
+  omitted that field. Older provider-backed request IDs therefore remain
+  historical and are not launch-valid for the pending candidate.
+- Reviewed local remediation covers the closed health schema, bounded analyze bodies,
+  malformed session tokens, centered medium-distance obstacle normalization,
+  client diagnostics provenance, and `store: false` on OpenAI-compatible
+  requests. Backend typecheck passes, backend privacy/runtime tests pass
+  `58/58`, and the complete smoke/provenance/release-preflight suite passes
+  `32/32`.
+- Both required-secret checks and both Wrangler staging/production dry-runs
+  pass. The dry-runs truthfully stamp `SOURCE_REVISION="development"` and are
+  bundle proof only; they are not deployments or provider-backed smoke.
+- No current staging or production guidance or scene-query request ID is
+  claimed. Commit and push the exact source, deploy both environments with that
+  revision stamp, then require strict provider-backed dual-lane smoke before
+  building the release candidate.
 
-All later dated sections are retained as phase history. Their older model, authentication, device, request-ID, and blocker statements are not current launch claims; the gate above is authoritative for this candidate.
+All later dated sections are retained as phase history. Older deployment,
+model, request-ID, and blocker statements do not override this gate.
 
 ## Scope
 
@@ -320,3 +338,28 @@ Results:
 - Development, staging, and production Worker dry-run bundles passed with `gpt-5.5`, prompt `2026-05-22.v1`, `json_schema_strict`, bounded runtime controls, and MiniCPM disabled.
 - Preview preflight passes with stale-smoke warnings. TestFlight/store remain blocked by the stale production smoke contract and missing real-iPhone no-screen evidence.
 - No current deployment or request IDs exist for this source yet. `npx wrangler whoami` reports `Not logged in`, the OAuth attempt timed out without a grant, and this shell has no `CLOUDFLARE_API_TOKEN`; remote secret names therefore remain unverified. Historical GPT-4.1 request IDs are not launch proof.
+
+## 2026-07-24 credentialed cloud continuation
+
+Commands:
+
+```bash
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+node --test backend/guidepup-api/eval/*.test.mjs expo/scripts/smoke-evidence-validation.test.mjs
+npm --prefix backend/guidepup-api run verify:secrets:staging
+npm --prefix backend/guidepup-api run verify:secrets:production
+npx --prefix backend/guidepup-api wrangler deploy --dry-run --env staging
+npx --prefix backend/guidepup-api wrangler deploy --dry-run --env production
+```
+
+Results:
+
+- Cloudflare OAuth is active. Required secret names are present in both staging and production: `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. No values were read or recorded.
+- Backend typecheck passes; privacy/runtime/safety/provider tests pass `50/50`; smoke/provenance tests pass `20/20`.
+- Staging and production dry-run bundles pass with provider `openai-compatible`, model `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, bounded retries/timeouts/call limits, and MiniCPM disabled.
+- The dry runs truthfully show `SOURCE_REVISION="development"` because the source is still uncommitted. They are bundle proof only.
+
+Remaining cloud gate:
+
+- Commit and push the exact source, deploy staging and production with that exact revision stamp, then run live dual-lane provider-backed smoke. No current guidance or scene-query request IDs are claimed yet, and no dirty-source deployment will be performed.

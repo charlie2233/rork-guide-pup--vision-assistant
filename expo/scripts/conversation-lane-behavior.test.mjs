@@ -81,6 +81,95 @@ function analysis(overrides = {}) {
   };
 }
 
+test("health check preserves bounded Worker provenance without retaining endpoint URLs", async () => {
+  const healthSnapshots = [];
+  const originalFetch = globalThis.fetch;
+  let healthResponse = {
+    analyzeDeviceRateLimitPerMinute: 20,
+    analyzeIpRateLimitPerMinute: 60,
+    apiUrl: "https://api.example.test/?token=must-not-survive",
+    benchmarkProviders: ["openai-compatible"],
+    bootstrapIpRateLimitPerMinute: 10,
+    defaultMaxCompletionTokens: 700,
+    defaultModel: "gpt-5.6-sol",
+    defaultProvider: "openai-compatible",
+    defaultReasoningEffort: "low",
+    defaultRequestTimeoutMs: 8500,
+    defaultRetryCount: 1,
+    defaultRetryDelayMs: 250,
+    deploymentIdentityValid: true,
+    environment: "staging",
+    expectedApiUrl: "https://api.example.test/?sig=must-not-survive",
+    ok: true,
+    promptVersion: "guidepup-vision-v1",
+    providerGlobalCallLimitPerMinute: 120,
+    requestId: "11111111-1111-4111-8111-111111111111",
+    service: "guidepup-api",
+    sessionTtlSeconds: 3600,
+    sourceRevision: "a".repeat(40),
+    structuredOutputMode: "json_schema_strict",
+    workerIdentity: "guidepup-api-staging",
+    workerVersionId: "22222222-2222-4222-8222-222222222222",
+  };
+  globalThis.fetch = async () => Response.json(healthResponse);
+
+  try {
+    const apiMocks = new Map([
+      ["expo-constants", { default: { expoConfig: { version: "1.0.0" } } }],
+      ["react-native", { Platform: { OS: "ios" } }],
+      ["./config", {
+        appConfig: {
+          apiBaseUrl: "https://api.example.test",
+          apiTimeoutMs: 1000,
+          appEnv: "preview",
+        },
+        requireApiBaseUrl: () => "https://api.example.test",
+      }],
+      ["./device", {
+        clearDeviceSession: async () => undefined,
+        ensureDeviceSession: async () => ({ deviceId: "device-test", sessionToken: "session-test" }),
+      }],
+      ["./diagnostics", {
+        classifyAnalyzeError: () => "failure",
+        recordAnalyzeEvent: () => undefined,
+        recordHealthCheckSnapshot: (snapshot) => healthSnapshots.push(snapshot),
+        sanitizeMessage: (value) => value,
+      }],
+      ["./clientDiagnostics", { addBreadcrumb: () => undefined, setDiagnosticTag: () => undefined }],
+    ]);
+    const api = loadTsModule(new URL("../src/lib/api.ts", import.meta.url), apiMocks);
+    const result = await api.fetchHealthCheck();
+
+    assert.equal(result.sourceRevision, "a".repeat(40));
+    assert.equal(result.workerIdentity, "guidepup-api-staging");
+    assert.equal(result.workerVersionId, "22222222-2222-4222-8222-222222222222");
+    assert.equal(result.deploymentIdentityValid, true);
+    assert.equal(result.structuredOutputMode, "json_schema_strict");
+    assert.equal(result.defaultRequestTimeoutMs, 8500);
+    assert.equal("apiUrl" in result, false);
+    assert.equal("expectedApiUrl" in result, false);
+    assert.equal(healthSnapshots.length, 1);
+    assert.equal(healthSnapshots[0].sourceRevision, "a".repeat(40));
+    assert.equal(healthSnapshots[0].workerIdentity, "guidepup-api-staging");
+    assert.equal("apiUrl" in healthSnapshots[0], false);
+    assert.doesNotMatch(JSON.stringify(healthSnapshots[0]), /must-not-survive/);
+
+    healthResponse = {
+      ...healthResponse,
+      sourceRevision: "development",
+      workerVersionId: "development",
+    };
+    await assert.rejects(
+      () => api.fetchHealthCheck(),
+      /invalid health response/,
+    );
+    assert.equal(healthSnapshots.at(-1).ok, false);
+    assert.equal("sourceRevision" in healthSnapshots.at(-1), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("scene-query crosses VisionAI and analyzeVision with the bounded JSON mode", async () => {
   const requests = [];
   const originalFetch = globalThis.fetch;

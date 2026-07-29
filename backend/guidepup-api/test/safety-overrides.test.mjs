@@ -200,6 +200,27 @@ test("scene-query facts survive normalization while contradictory safety fields 
   assert.notEqual(normalized.message, "Continue forward.");
 });
 
+test("centered medium-distance obstacles cannot be normalized to forward", () => {
+  for (const type of ["vehicle", "person", "unknown obstacle"]) {
+    const normalized = normalizeProviderVision(clearPath({
+      confidence: 0.98,
+      hazardLevel: "none",
+      obstacles: [{ confidence: 0.97, distance: "medium", position: "center", type }],
+      pathClear: true,
+      recommendedDirection: "forward",
+      shortMessage: "Continue forward.",
+      walkability: "clear",
+    }), metadata);
+
+    assert.equal(normalized.direction, "stop", type);
+    assert.equal(normalized.fallbackReason, "path-blocking-obstacle", type);
+    assert.equal(normalized.hazardLevel, "high", type);
+    assert.equal(normalized.message, "Stop. Obstacle blocks the path.", type);
+    assert.equal(normalized.obstacle, true, type);
+    assert.ok(normalized.confidence <= 0.45, type);
+  }
+});
+
 test("clear normally lit provider guidance can remain forward", () => {
   const normalized = normalizeProviderVision(clearPath(), metadata);
 
@@ -231,6 +252,7 @@ test("shared safety policy deterministically covers every runtime STOP cause", (
     direction: "forward",
     fallbackReason: null,
     hasCloseObstacle: false,
+    hasPathBlockingObstacle: false,
     hazardLevel: "none",
     lighting: "normal",
     obstacle: false,
@@ -241,6 +263,7 @@ test("shared safety policy deterministically covers every runtime STOP cause", (
   const cases = [
     ["fallback", { fallbackReason: "provider-error" }],
     ["close-obstacle", { hasCloseObstacle: true }],
+    ["path-blocking-obstacle", { hasPathBlockingObstacle: true }],
     ["path-not-clear", { pathClear: false }],
     ["high-hazard", { hazardLevel: "high" }],
     ["medium-hazard", { hazardLevel: "medium" }],

@@ -233,6 +233,7 @@ async function analyzeWithAttempt(
         },
         body: JSON.stringify({
           model: runtimeConfig.model,
+          store: false,
           response_format: buildOpenAIResponseFormat(),
           max_completion_tokens: runtimeConfig.maxCompletionTokens,
           ...(runtimeConfig.reasoningEffort ? { reasoning_effort: runtimeConfig.reasoningEffort } : {}),

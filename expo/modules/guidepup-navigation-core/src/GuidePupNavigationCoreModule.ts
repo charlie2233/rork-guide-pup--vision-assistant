@@ -1,6 +1,7 @@
 import { NativeModule, requireNativeModule } from "expo";
 
 import type {
+  GuidePupDistributionEvidence,
   GuidePupNavigationCoreCaptureOptions,
   GuidePupNavigationCoreCaptureResult,
   GuidePupNavigationCoreAudioCueType,
@@ -15,6 +16,7 @@ declare class GuidePupNavigationCoreModule extends NativeModule<GuidePupNavigati
   cancelAnnouncement(ownerToken: string): Promise<void>;
   claimAnnouncementOwner(ownerToken: string): Promise<void>;
   captureFrame(options?: GuidePupNavigationCoreCaptureOptions): Promise<GuidePupNavigationCoreCaptureResult>;
+  getDistributionEvidence(): Promise<GuidePupDistributionEvidence>;
   getState(): Promise<GuidePupNavigationCoreState>;
   interruptAllAnnouncements(): Promise<void>;
   isAvailable(): Promise<boolean>;

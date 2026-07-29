@@ -19,6 +19,7 @@ import { fetchHealthCheck } from "@/src/lib/api";
 import {
   buildDiagnosticsReport,
   buildNoScreenSmokeEvidenceDraftJson,
+  findDiagnosticsExportPrivacyIssues,
   formatDiagnosticsEventSummary,
   getAnalyzeExecutionPath,
   useDiagnostics,
@@ -109,6 +110,17 @@ export default function DiagnosticsScreen() {
   const shareText = useCallback(async (message: string, title: string, successMessage: string) => {
     try {
       setShareError(null);
+      const privacyIssues = findDiagnosticsExportPrivacyIssues(message);
+      if (privacyIssues.length > 0) {
+        const errorMessage = `Export blocked because it may contain private data: ${privacyIssues.join(", ")}.`;
+        setShareError(errorMessage);
+        Alert.alert("Export blocked", errorMessage);
+        if (Platform.OS === "ios") {
+          AccessibilityInfo.announceForAccessibility("Export blocked because private data was detected.");
+        }
+        return;
+      }
+
       if (Platform.OS === "web" && globalThis.navigator?.clipboard?.writeText) {
         await globalThis.navigator.clipboard.writeText(message);
         setHealthMessage(successMessage);
@@ -166,6 +178,26 @@ export default function DiagnosticsScreen() {
           <KeyValue label="Build" value={diagnostics.runtime.buildVersion || "Not found in repo"} />
           <KeyValue label="Environment" value={diagnostics.runtime.appEnv} />
           <KeyValue label="Release track" value={diagnostics.runtime.releaseTrack} />
+          <KeyValue
+            label="Candidate identifier"
+            value={diagnostics.runtime.candidateIdentifier || "Not found in repo"}
+          />
+          <KeyValue
+            label="Source revision"
+            value={diagnostics.runtime.sourceRevision || "Not found in repo"}
+          />
+          <KeyValue
+            label="App transaction verified"
+            value={diagnostics.distribution.transactionVerified ? "yes" : "no"}
+          />
+          <KeyValue
+            label="App identity matched"
+            value={diagnostics.distribution.identityMatched ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Distribution environment"
+            value={diagnostics.distribution.environment}
+          />
           <KeyValue label="API base URL" value={diagnostics.runtime.apiBaseUrl || "Not configured"} />
           <KeyValue
             label="Crash reporting"

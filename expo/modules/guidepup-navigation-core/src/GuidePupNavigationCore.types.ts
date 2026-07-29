@@ -15,6 +15,20 @@ export type GuidePupNavigationCoreHapticType =
   | "success";
 
 export type GuidePupNavigationCoreAudioCueType = GuidePupNavigationCoreHapticType;
+export type GuidePupDistributionEnvironment =
+  | "apple-sandbox"
+  | "app-store-production"
+  | "xcode"
+  | "unknown"
+  | "none";
+
+export interface GuidePupDistributionEvidence {
+  appStoreAppIdMatched: boolean;
+  bundleVersionMatched: boolean;
+  transactionVerified: boolean;
+  identityMatched: boolean;
+  environment: GuidePupDistributionEnvironment;
+}
 
 export interface GuidePupNavigationCoreStartOptions {
   preferredCamera?: "back";

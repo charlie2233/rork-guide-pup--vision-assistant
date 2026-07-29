@@ -13,7 +13,7 @@ Guide Pup is an assistive vision and navigation aid for blind and low-vision use
 - Spoken commands are parsed into a bounded command lane for actions such as start, stop, repeat, status, and settings changes.
 - Camera frames are compressed and sent to the Guide Pup backend.
 - The Cloudflare backend routes sampled compressed camera frames to an OpenAI vision provider for structured scene analysis.
-- Raw voice audio is not intentionally logged or sent to model providers by Guide Pup.
+- Raw voice audio is not intentionally logged or sent to the OpenAI vision provider by Guide Pup; Apple speech-service processing may occur as described above.
 - Sanitized Cloudflare request, performance, and quality logs may persist for up to 7 days. OpenAI default abuse-monitoring retention may be up to 30 days unless approved retention controls apply.
 - The app uses an installation-scoped identifier and session bootstrap instead of user sign-in.
 - App Review sign-in / demo account required should be set to `No` / `false`.

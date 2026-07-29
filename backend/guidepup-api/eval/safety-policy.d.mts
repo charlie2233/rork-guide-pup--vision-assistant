@@ -5,6 +5,7 @@ export type SafetyStopInput = {
   direction?: "turn-left" | "turn-right" | "forward" | "stop";
   fallbackReason?: string | null;
   hasCloseObstacle?: boolean;
+  hasPathBlockingObstacle?: boolean;
   hazardLevel?: "none" | "low" | "medium" | "high";
   lighting?: "dark" | "dim" | "normal" | "bright" | "unknown";
   obstacle?: boolean;
@@ -16,6 +17,7 @@ export type SafetyStopInput = {
 export type SafetyStopReason =
   | "fallback"
   | "close-obstacle"
+  | "path-blocking-obstacle"
   | "path-not-clear"
   | "high-hazard"
   | "medium-hazard"

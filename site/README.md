@@ -20,7 +20,7 @@ Current live Pages URL:
 - Anonymous device and session bootstrap state is used.
 - The launch iOS client does not vendor a crash-reporting SDK.
 - Optional voice commands use microphone and speech-recognition permissions for a bounded command set.
-- Raw voice audio is not intentionally logged or sent to AI providers by Guide Pup.
+- Raw voice audio is not intentionally logged or sent to the OpenAI vision provider by Guide Pup; Apple speech-service processing may occur when on-device recognition is unavailable.
 - Guide Pup provides assistive guidance only and does not guarantee hazard detection or emergency response.
 
 ## Cloudflare Pages deployment

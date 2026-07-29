@@ -1,4 +1,5 @@
 import type {
+  GuidePupDistributionEvidence,
   GuidePupNavigationCoreCaptureOptions,
   GuidePupNavigationCoreCaptureResult,
   GuidePupNavigationCoreAudioCueType,
@@ -16,12 +17,23 @@ const unavailableState: GuidePupNavigationCoreState = {
   voiceOverRunning: false,
 };
 
+const unavailableDistributionEvidence: GuidePupDistributionEvidence = {
+  appStoreAppIdMatched: false,
+  bundleVersionMatched: false,
+  transactionVerified: false,
+  identityMatched: false,
+  environment: "none",
+};
+
 export default {
   announce() {
     return Promise.resolve();
   },
   captureFrame(_options?: GuidePupNavigationCoreCaptureOptions): Promise<GuidePupNavigationCoreCaptureResult> {
     return Promise.reject(new Error("GuidePupNavigationCore capture is unavailable on web."));
+  },
+  getDistributionEvidence() {
+    return Promise.resolve(unavailableDistributionEvidence);
   },
   getState() {
     return Promise.resolve(unavailableState);

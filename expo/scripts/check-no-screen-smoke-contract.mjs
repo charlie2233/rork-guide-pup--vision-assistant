@@ -187,9 +187,46 @@ mustInclude(diagnostics, "DiagnosticsHapticSnapshot", "Haptic diagnostic snapsho
 mustInclude(diagnostics, "recordHapticSnapshot", "Haptic diagnostic recorder");
 mustInclude(diagnostics, "buildNoScreenSmokeEvidenceDraftJson", "No-screen evidence JSON draft exporter");
 mustInclude(diagnostics, "requestIds", "No-screen evidence backend request ID draft");
+mustInclude(diagnostics, "artifactVersion: 3", "No-screen evidence v3 draft");
+mustInclude(diagnostics, "participantRole: \"unverified\"", "No-screen participant role stays unverified in draft");
+mustInclude(diagnostics, "installationSource: \"unverified\"", "No-screen installation source stays unverified in draft");
+mustInclude(diagnostics, "commandSequences", "No-screen path-specific sequence drafts");
+mustInclude(diagnostics, "humanAttestation", "No-screen human attestation draft");
+mustInclude(diagnostics, "installationEvidence", "No-screen installation evidence draft");
+mustInclude(diagnostics, "interruptionRecovery", "No-screen interruption recovery draft");
+mustInclude(diagnostics, "containsIdentityContactData: false", "No-screen draft excludes identity/contact data");
+mustInclude(diagnostics, "OMITTED_DIAGNOSTIC_TEXT", "Free-form diagnostic content omission");
+mustInclude(diagnostics, "omitFreeFormDiagnosticText", "Free-form diagnostic ingestion guard");
+mustInclude(diagnostics, "sanitizeRecognizedCommand", "Voice diagnostics command allowlist");
+
+const appConfig = read("../app.config.ts");
+mustInclude(appConfig, "guidePupReleaseBinding", "Structured signed release binding");
+mustInclude(appConfig, "experimentalTabsEnabled", "Shipping flag release binding");
+mustInclude(appConfig, "apiBaseUrl", "API URL release binding");
+
+const candidateEvidence = read("./release-candidate-evidence.mjs");
+mustInclude(candidateEvidence, "EXConstants.bundle", "Exact Expo Constants candidate inspection");
+mustInclude(candidateEvidence, "runtimeConfig", "Structured candidate runtime evidence");
+mustInclude(candidateEvidence, "buildExpectedReleaseRuntimeConfigs", "EAS profile candidate binding");
+mustInclude(candidateEvidence, "extractIpaAppBundle", "Exported IPA payload inspection");
+mustInclude(candidateEvidence, "payloadInspected: true", "Exported IPA payload evidence");
+mustInclude(candidateEvidence, "\"unzip\"", "Exported IPA archive extraction");
+
+const standaloneNoScreenValidator = read("./validate-no-screen-smoke-evidence.mjs");
+mustInclude(
+  standaloneNoScreenValidator,
+  "resolveWorkerProvenance(\"production\"",
+  "Standalone no-screen evidence active production Worker binding",
+);
+mustInclude(
+  standaloneNoScreenValidator,
+  "activeWorkerMismatches",
+  "Standalone no-screen evidence rejects stale Worker provenance",
+);
 
 const navigationCore = read("../src/native/GuidePupNavigationCore.ts");
 mustInclude(navigationCore, "playAudioCue", "Audio cue path");
+mustInclude(navigationCore, "getDistributionEvidence", "Native distribution evidence");
 mustInclude(navigationCore, "recordAudioCueSnapshot", "Audio cue path records diagnostics");
 mustInclude(navigationCore, "recordHapticSnapshot", "Haptic path records diagnostics");
 mustInclude(navigationCore, "AccessibilityInfo.announceForAccessibility", "VoiceOver announcement fallback");
@@ -205,6 +242,21 @@ mustInclude(voiceController, "result?.isFinal == true", "Native voice controller
 const diagnosticsScreen = read("../src/screens/DiagnosticsScreen.tsx");
 mustInclude(diagnosticsScreen, "Speech/listening invariant", "Diagnostics screen overlap invariant");
 mustInclude(diagnosticsScreen, "VoiceOver running", "Diagnostics screen VoiceOver status");
+mustInclude(
+  diagnosticsScreen,
+  "App transaction verified",
+  "Diagnostics screen verified app transaction",
+);
+mustInclude(
+  diagnosticsScreen,
+  "App identity matched",
+  "Diagnostics screen verified app identity match",
+);
+mustInclude(
+  diagnosticsScreen,
+  "Distribution environment",
+  "Diagnostics screen distribution environment",
+);
 mustInclude(diagnosticsScreen, "Audio cues", "Diagnostics screen audio cue evidence");
 mustInclude(diagnosticsScreen, "Last execution path", "Diagnostics screen haptic execution path");
 mustInclude(diagnosticsScreen, "Frame summary", "Diagnostics screen frame summary");
@@ -213,7 +265,9 @@ mustInclude(diagnosticsScreen, "Export no-screen JSON draft", "Diagnostics scree
 
 const noScreenEvidence = read("../docs/no-screen-smoke-evidence.md");
 for (const phrase of [
-  "expo/release/no-screen-smoke.latest.json",
+  "expo/release/no-screen-smoke.internal.latest.json",
+  "expo/release/no-screen-smoke.blind-participant.latest.json",
+  "expo/release/no-screen-smoke.testflight.latest.json",
   "check:no-screen-evidence",
   "Cold prompt",
   "start guidance",
@@ -228,16 +282,23 @@ for (const phrase of [
   "repeat",
   "what do you see",
   "stop guidance",
-  "Speech/listening invariant: PASS",
-  "Backend smoke artifact request IDs",
-  "walkability",
+  "Background and foreground",
+  "audio-route",
+  "App Store Connect build record identifier",
+  "apple-sandbox",
+  "apple-signed-app-identity-only",
+  "iOS 16",
+  "Sanitized native-core sampled frame summary.",
+  "Sanitized js fallback sampled frame summary.",
+  "identity/contact data",
 ]) {
   mustInclude(noScreenEvidence, phrase, `No-screen evidence phrase "${phrase}"`);
 }
 
 const releasePreflight = read("../scripts/release-preflight.mjs");
 mustInclude(releasePreflight, "validateNoScreenSmokeEvidence", "No-screen hardware evidence preflight gate");
-mustInclude(releasePreflight, "NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH", "No-screen hardware artifact path");
+mustInclude(releasePreflight, "NO_SCREEN_SMOKE_ARTIFACT_PATHS", "No-screen hardware artifact paths");
+mustInclude(releasePreflight, "validateNoScreenEvidenceProgression", "No-screen progression preflight gate");
 mustInclude(releasePreflight, "real-iPhone no-screen validation", "No-screen hardware missing-artifact message");
 mustInclude(releasePreflight, "artifact.health?.requestId", "Health request ID preflight gate");
 mustInclude(releasePreflight, "artifact.bootstrap?.requestId", "Bootstrap request ID preflight gate");
@@ -274,15 +335,19 @@ mustInclude(liveSmoke, "defaultRetryCount", "Live smoke records provider retry c
 
 const noScreenEvidenceSchema = read("../scripts/no-screen-smoke-evidence.mjs");
 mustInclude(noScreenEvidenceSchema, "REQUIRED_NO_SCREEN_SEQUENCE", "No-screen evidence required sequence");
-mustInclude(noScreenEvidenceSchema, "sequence.order", "No-screen evidence required sequence order");
+mustInclude(noScreenEvidenceSchema, "commandSequences", "No-screen evidence path-specific command sequences");
+mustInclude(noScreenEvidenceSchema, "sequencePrefix}.order", "No-screen evidence required sequence order");
 mustInclude(noScreenEvidenceSchema, "requireMatchingFields", "No-screen evidence provenance/device consistency");
 mustInclude(noScreenEvidenceSchema, "provenance.bundleIdentifier", "No-screen evidence bundle provenance consistency");
 mustInclude(noScreenEvidenceSchema, "helpIncludesBoundedCommandList", "No-screen evidence voice help proof");
-mustInclude(noScreenEvidenceSchema, "sequence.help.settingsChanged", "No-screen evidence help non-mutation proof");
-mustInclude(noScreenEvidenceSchema, "stopBargeIn.cutThrough", "No-screen evidence STOP cut-through proof");
-mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedCommand", "No-screen evidence STOP recognized command proof");
-mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedDuringSpeech", "No-screen evidence STOP during-speech proof");
-mustInclude(noScreenEvidenceSchema, "stopBargeIn.recognizedPhase", "No-screen evidence STOP recognition phase proof");
+mustInclude(noScreenEvidenceSchema, "sequencePrefix}.help.settingsChanged", "No-screen evidence help non-mutation proof");
+mustInclude(noScreenEvidenceSchema, "STOP_BARGE_IN_EVIDENCE_SHAPE", "No-screen evidence per-sequence STOP proof");
+mustInclude(noScreenEvidenceSchema, "audioCueOutcome", "No-screen evidence STOP audio outcome proof");
+mustInclude(noScreenEvidenceSchema, "hapticOutcome", "No-screen evidence STOP haptic outcome proof");
+mustInclude(noScreenEvidenceSchema, "eventId.matches-stop-step", "No-screen evidence STOP event binding");
+mustInclude(noScreenEvidenceSchema, "recognizedCommand", "No-screen evidence STOP recognized command proof");
+mustInclude(noScreenEvidenceSchema, "recognizedDuringSpeech", "No-screen evidence STOP during-speech proof");
+mustInclude(noScreenEvidenceSchema, "recognizedPhase", "No-screen evidence STOP recognition phase proof");
 mustInclude(noScreenEvidenceSchema, "settingsPersistence.nonDefaultSettingSurvivedRelaunch", "No-screen evidence settings persistence proof");
 mustInclude(noScreenEvidenceSchema, "settingsPersistence.afterVoiceChange.differsFromBefore", "No-screen evidence settings change proof");
 mustInclude(noScreenEvidenceSchema, "settingsPersistence.afterRelaunch.matchesAfterVoiceChange", "No-screen evidence settings relaunch proof");
@@ -290,8 +355,22 @@ mustInclude(noScreenEvidenceSchema, "captureHeuristics.uploadedHeightMatchesPath
 mustInclude(noScreenEvidenceSchema, "captureHeuristics.uploadedWidthMatchesPath", "No-screen evidence capture heuristic upload-width proof");
 mustInclude(noScreenEvidenceSchema, "nativeCore", "No-screen evidence native-core camera proof");
 mustInclude(noScreenEvidenceSchema, "jsFallback", "No-screen evidence JS fallback camera proof");
+mustInclude(noScreenEvidenceSchema, "participantRole", "No-screen evidence participant role");
+mustInclude(noScreenEvidenceSchema, "installationSource", "No-screen evidence installation source");
+mustInclude(noScreenEvidenceSchema, "interruptionRecovery", "No-screen interruption recovery proof");
 mustInclude(noScreenEvidenceSchema, "backendSmoke.walkability", "No-screen evidence walkability proof");
 mustInclude(noScreenEvidenceSchema, "privacy.containsRawMedia", "No-screen evidence privacy proof");
+mustInclude(
+  noScreenEvidenceSchema,
+  "expectedFrameSummary",
+  "No-screen evidence fixed frame-summary marker",
+);
+
+const evidencePrivacy = read("./evidence-privacy.mjs");
+mustInclude(evidencePrivacy, "free-form frame summary", "Evidence free-form frame-summary rejection");
+mustInclude(evidencePrivacy, "BOOTSTRAP_SIGNING_SECRET", "Evidence bootstrap signing secret rejection");
+mustInclude(evidencePrivacy, "EXPO_TOKEN", "Evidence Expo token rejection");
+mustInclude(evidencePrivacy, "legacy Apple device identifier", "Evidence legacy device identifier rejection");
 
 const iosDeviceReady = read("../scripts/check-ios-device-ready.mjs");
 mustInclude(iosDeviceReady, "--json", "iOS device readiness JSON output");

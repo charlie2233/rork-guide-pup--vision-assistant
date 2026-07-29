@@ -5,17 +5,29 @@ import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import {
+  fetchAppStoreConnectBuildEvidence,
+  resolveAppStoreConnectApiToken,
+} from "./app-store-connect-build-evidence.mjs";
 import { validateEvidencePrivacy } from "./evidence-privacy.mjs";
 import {
   formatNoScreenSmokeEvidenceIssues,
-  NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH,
+  NO_SCREEN_SMOKE_ARTIFACT_PATHS,
   readNoScreenSmokeEvidenceArtifact,
+  validateNoScreenEvidenceProgression,
   validateNoScreenSmokeEvidenceArtifact,
 } from "./no-screen-smoke-evidence.mjs";
 import {
+  buildExpectedReleaseRuntimeConfigs,
   DEFAULT_RELEASE_CANDIDATE_PATH,
-  validateReleaseCandidateEvidence,
+  validateReleaseCandidateEvidenceForLaunch,
+  validateReleaseCandidateEvidenceSourceBinding,
 } from "./release-candidate-evidence.mjs";
+import {
+  assessIosSubmissionEvidence,
+  DEFAULT_IOS_SUBMISSION_ARTIFACT_PATH,
+  expectedIosSubmissionEvidence,
+} from "./ios-submission-evidence.mjs";
 import { resolveReleaseSourceState } from "./release-source-state.mjs";
 import {
   isGitRevision,
@@ -48,8 +60,17 @@ const publicUrls = getPublicUrls();
 const validTracks = new Set(["preview", "testflight", "store", "all"]);
 const stagingSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-staging.latest.json");
 const productionSmokeArtifactPath = path.resolve(projectDir, "../backend/guidepup-api/eval/smoke-results-production.latest.json");
-const noScreenSmokeArtifactPath = path.resolve(projectDir, NO_SCREEN_SMOKE_ARTIFACT_RELATIVE_PATH);
+const noScreenSmokeArtifactPaths = Object.fromEntries(
+  Object.entries(NO_SCREEN_SMOKE_ARTIFACT_PATHS).map(([key, relativePath]) => [
+    key,
+    path.resolve(projectDir, relativePath),
+  ]),
+);
 const releaseCandidateArtifactPath = path.resolve(projectDir, DEFAULT_RELEASE_CANDIDATE_PATH);
+const iosSubmissionArtifactPath = path.resolve(
+  projectDir,
+  DEFAULT_IOS_SUBMISSION_ARTIFACT_PATH,
+);
 const supportPagePath = path.resolve(projectDir, "../site/support/index.html");
 const expoAppConfigPath = path.resolve(projectDir, "app.config.ts");
 const iosInfoPlistPath = path.resolve(projectDir, "ios/GuidePupVisionAssistant/Info.plist");
@@ -103,6 +124,17 @@ function hasFlag(argv, flag) {
   return argv.includes(flag);
 }
 
+function parseOptionValue(argv, option) {
+  const optionIndex = argv.findIndex((arg) => arg === option);
+  if (optionIndex !== -1) {
+    const value = argv[optionIndex + 1];
+    return value && !value.startsWith("--") ? value : undefined;
+  }
+
+  const inlineOption = argv.find((arg) => arg.startsWith(`${option}=`));
+  return inlineOption?.slice(`${option}=`.length) || undefined;
+}
+
 function readSmokeArtifact(filePath) {
   if (!fileExistsAbsolute(filePath)) {
     return undefined;
@@ -154,18 +186,93 @@ function validateReleaseCandidateArtifact(artifact, expectedSourceRevision) {
     return undefined;
   }
 
-  const result = validateReleaseCandidateEvidence(artifact, {
+  const result = validateReleaseCandidateEvidenceSourceBinding(artifact, {
     appVersion: launchInputs.iosMarketingVersion,
     buildNumber: launchInputs.iosBuildNumber,
     bundleIdentifier: launchInputs.iosBundleIdentifier,
+    releaseRuntimeConfigs: buildExpectedReleaseRuntimeConfigs(easJson),
     sourceRevision: expectedSourceRevision,
     teamIdentifier: launchInputs.appleTeamId,
   });
   expect(
     result.valid,
-    `Release candidate evidence must match the current signed archive, source revision, bundle, version/build, and Apple team. Invalid: ${result.errors.join(", ") || "none"}.`,
+    `Release candidate evidence must be structurally valid and bound to the exact source revision, bundle, version/build, and Apple team before fresh artifact inspection. Invalid: ${result.errors.join(", ") || "none"}.`,
   );
   return result.valid ? artifact : undefined;
+}
+
+function validateIosSubmissionForStore(
+  artifact,
+  candidateArtifact,
+  appStoreConnectBuildEvidence,
+) {
+  if (!artifact) {
+    expect(
+      false,
+      `Store preflight requires local upload-attempt evidence at ${path.relative(projectDir, iosSubmissionArtifactPath)}.`,
+    );
+    return;
+  }
+  if (!candidateArtifact || !appStoreConnectBuildEvidence) {
+    return;
+  }
+  const expected = expectedIosSubmissionEvidence(
+    candidateArtifact,
+    launchInputs.ascAppId,
+    artifact.track,
+  );
+  const validation = assessIosSubmissionEvidence({
+    appStoreConnectBuildEvidence,
+    artifact,
+    expected,
+  });
+  expect(
+    validation.submissionCorrelationReady,
+    `Store local upload-attempt evidence and independent App Store Connect correlation must match the candidate. Invalid: ${validation.errors.join(", ") || "none"}.`,
+  );
+}
+
+async function reinspectReleaseCandidateArtifact(
+  artifact,
+  expectedSourceRevision,
+  archivePath,
+  ipaPath,
+  validationIpaPath,
+) {
+  if (!artifact || !archivePath || !ipaPath || !validationIpaPath) {
+    return undefined;
+  }
+
+  try {
+    const validation = await validateReleaseCandidateEvidenceForLaunch(
+      artifact,
+      {
+        appVersion: launchInputs.iosMarketingVersion,
+        buildNumber: launchInputs.iosBuildNumber,
+        bundleIdentifier: launchInputs.iosBundleIdentifier,
+        releaseRuntimeConfigs: buildExpectedReleaseRuntimeConfigs(easJson),
+        sourceRevision: expectedSourceRevision,
+        teamIdentifier: launchInputs.appleTeamId,
+      },
+      {
+        archivePath,
+        ipaPath,
+        validationIpaPath,
+      },
+    );
+    expect(
+      validation.valid,
+      validation.errors.join(", ")
+        || "Release candidate launch-grade inspection failed.",
+    );
+    return validation.valid ? artifact : undefined;
+  } catch (error) {
+    expect(
+      false,
+      `Release candidate archive/Store IPA/validation IPA re-inspection failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
 }
 
 function loadMetadataConfig() {
@@ -283,6 +390,17 @@ function validateIosVersionOwnership() {
     expect(
       plistStringUsesBuildSetting(infoPlistXml, "CFBundleVersion", "CURRENT_PROJECT_VERSION"),
       "Native iOS Info.plist CFBundleVersion must reference $(CURRENT_PROJECT_VERSION).",
+    );
+    const nativeInfoPlist = plist.parse(infoPlistXml);
+    compare(
+      nativeInfoPlist.GuidePupAppStoreConnectAppID,
+      launchInputs.ascAppId,
+      "Native iOS StoreKit app ID expectation",
+    );
+    compare(
+      nativeInfoPlist.GuidePupExpectedBuildNumber,
+      buildNumber,
+      "Native iOS StoreKit build expectation",
     );
   }
 
@@ -777,6 +895,16 @@ function validateSentrySdkAbsent() {
       launchInputs.iosBundleIdentifier,
       "Resolved Expo iOS bundle identifier",
     );
+    compare(
+      resolvedConfig.ios?.infoPlist?.GuidePupAppStoreConnectAppID,
+      launchInputs.ascAppId,
+      "Resolved Expo StoreKit app ID expectation",
+    );
+    compare(
+      resolvedConfig.ios?.infoPlist?.GuidePupExpectedBuildNumber,
+      launchInputs.iosBuildNumber,
+      "Resolved Expo StoreKit build expectation",
+    );
     expect(
       !resolvedConfig.plugins?.some((plugin) =>
         (Array.isArray(plugin) ? plugin[0] : plugin) === "@sentry/react-native/expo"
@@ -975,18 +1103,24 @@ function validateExplicitSmokeFields(artifact) {
 function validateNoScreenSmokeEvidence(artifact, options) {
   const {
     allowWarning,
+    artifactPath,
     description,
     expectedApiBaseUrl,
     expectedApiEnvironment,
     expectedBackendSmokeArtifact,
     expectedBuildProfile,
     expectedCandidateBinarySha256,
+    expectedCandidateIdentifier,
+    expectedCandidateIpaSha256,
     expectedReleaseTrack,
     expectedSourceRevision,
+    expectedInstallationSource,
+    expectedParticipantRole,
+    expectedValidationIpaSha256,
   } = options;
 
   if (!artifact) {
-    const message = `${description} no-screen smoke evidence artifact is missing: ${path.relative(projectDir, noScreenSmokeArtifactPath)}. Run the real-iPhone no-screen validation and write sanitized evidence before TestFlight.`;
+    const message = `${description} no-screen smoke evidence artifact is missing: ${path.relative(projectDir, artifactPath)}. Run the real-iPhone no-screen validation and write sanitized evidence before TestFlight.`;
     if (allowWarning) {
       warn(false, message);
       return;
@@ -1006,13 +1140,19 @@ function validateNoScreenSmokeEvidence(artifact, options) {
       ? undefined
       : launchInputs.iosBundleIdentifier,
     expectedCandidateBinarySha256,
+    expectedCandidateIdentifier,
+    expectedCandidateIpaSha256,
+    expectedCandidateGeneratedAt: options.expectedCandidateGeneratedAt,
+    expectedInstallationSource,
+    expectedParticipantRole,
     expectedPromptVersion: launchInputs.productionPromptVersion,
     expectedReleaseTrack,
     expectedSourceRevision,
     expectedVisionModel: launchInputs.productionVisionModel,
+    expectedValidationIpaSha256,
     requireCandidateBinding: true,
   });
-  const message = `${description} no-screen smoke evidence must be recent and bind the real-iPhone voice/haptics/audio/VoiceOver sequence to app ${launchInputs.iosMarketingVersion} (${launchInputs.iosBuildNumber}), release track ${expectedReleaseTrack}, the current Git source revision, the signed candidate binary SHA-256, and the exact candidate backend smoke provenance/request IDs without raw media, secrets, signed URLs, or full device identifiers. ${formatNoScreenSmokeEvidenceIssues(result)}`;
+  const message = `${description} no-screen smoke evidence must be recent and bind the real-iPhone voice/haptics/audio/VoiceOver sequence to app ${launchInputs.iosMarketingVersion} (${launchInputs.iosBuildNumber}), release track ${expectedReleaseTrack}, the current Git source revision, the signed-config candidate identifier, the signed candidate binary SHA-256, the installed normalized validation-twin IPA SHA-256 for pre-upload runs, the Store IPA SHA-256 for TestFlight installs, and the exact candidate backend smoke provenance/request IDs without raw media, secrets, signed URLs, or full device identifiers. ${formatNoScreenSmokeEvidenceIssues(result)}`;
 
   if (allowWarning) {
     warn(result.valid, message);
@@ -1020,6 +1160,45 @@ function validateNoScreenSmokeEvidence(artifact, options) {
   }
 
   expect(result.valid, message);
+}
+
+function validateNoScreenEvidenceSet(artifacts, options) {
+  const result = validateNoScreenEvidenceProgression(artifacts, {
+    expectedApiBaseUrl: options.expectedApiBaseUrl,
+    expectedApiEnvironment: options.expectedApiEnvironment,
+    expectedAppVersion: launchInputs.iosMarketingVersion,
+    expectedBackendSmokeArtifact: options.expectedBackendSmokeArtifact,
+    expectedBuildNumber: launchInputs.iosBuildNumber,
+    expectedBuildProfile: options.expectedBuildProfile,
+    expectedBundleIdentifier: isPlaceholderValue(launchInputs.iosBundleIdentifier)
+      ? undefined
+      : launchInputs.iosBundleIdentifier,
+    expectedCandidateBinarySha256: options.candidate?.archive?.binarySha256,
+    expectedCandidateIdentifier:
+      options.candidate?.release?.candidateBinding?.candidateIdentifier,
+    expectedCandidateIpaSha256: options.candidate?.ipa?.sha256,
+    expectedCandidateGeneratedAt: options.candidate?.generatedAt,
+    expectedAppStoreConnectBuildEvidence:
+      options.expectedAppStoreConnectBuildEvidence,
+    expectedPromptVersion: launchInputs.productionPromptVersion,
+    expectedReleaseTrack: options.expectedReleaseTrack,
+    expectedSourceRevision: options.expectedSourceRevision,
+    expectedVisionModel: launchInputs.productionVisionModel,
+    expectedValidationIpaSha256: options.candidate?.validationIpa?.sha256,
+    requireCandidateBinding: true,
+    requireTestflightRepeat: options.requireTestflightRepeat,
+  });
+  const requiredPaths = [
+    NO_SCREEN_SMOKE_ARTIFACT_PATHS.internal,
+    NO_SCREEN_SMOKE_ARTIFACT_PATHS.blindParticipant,
+    ...(options.requireTestflightRepeat
+      ? [NO_SCREEN_SMOKE_ARTIFACT_PATHS.testflight]
+      : []),
+  ];
+  expect(
+    result.valid,
+    `${options.description} no-screen evidence progression must use separate sanitized v3 artifacts (${requiredPaths.join(", ")}), bind pre-upload runs to the installable normalized validation twin and the later TestFlight repeat to the Store IPA, keep per-step event IDs unique, bind STOP sensory outcomes to each path's STOP event, keep the pre-upload internal and blind-participant operators distinct, and complete the TestFlight-installed blind repeat before Store submission. Invalid: ${result.errors.join(", ") || "none"}.`,
+  );
 }
 
 function validatePublicSupportPageForStore() {
@@ -1334,6 +1513,10 @@ if (!validTracks.has(selectedTrack)) {
   process.exit(1);
 }
 const strictPreviewProvider = hasFlag(argv, "--strict-preview-provider");
+const releaseArchivePathValue = parseOptionValue(argv, "--archive");
+const releaseIpaPathValue = parseOptionValue(argv, "--ipa");
+const releaseValidationIpaPathValue =
+  parseOptionValue(argv, "--validation-ipa");
 
 const isAllTracks = selectedTrack === "all";
 const requiresPreview = selectedTrack === "preview" || isAllTracks;
@@ -1343,16 +1526,85 @@ const requiresStoreBackedDistribution = selectedTrack === "testflight" || select
 const requiresIos = requiresPreview || requiresStoreBackedDistribution;
 const stagingSmokeArtifact = readSmokeArtifact(stagingSmokeArtifactPath);
 const productionSmokeArtifact = readSmokeArtifact(productionSmokeArtifactPath);
-const noScreenSmokeArtifact = readNoScreenSmokeEvidenceArtifact(projectDir);
+const noScreenSmokeArtifacts = Object.fromEntries(
+  Object.entries(NO_SCREEN_SMOKE_ARTIFACT_PATHS).map(([key, relativePath]) => [
+    key,
+    readNoScreenSmokeEvidenceArtifact(projectDir, relativePath),
+  ]),
+);
 const releaseCandidateArtifact = readSmokeArtifact(releaseCandidateArtifactPath);
+const iosSubmissionArtifact = readSmokeArtifact(iosSubmissionArtifactPath);
 const currentSourceRevision = readCurrentGitSourceRevision();
 let validatedReleaseCandidateArtifact;
+let appStoreConnectBuildEvidence;
 
 if (requiresStoreBackedDistribution) {
+  expect(
+    Boolean(releaseArchivePathValue),
+    "Store-backed preflight requires --archive pointing to the exact signed .xcarchive.",
+  );
+  expect(
+    Boolean(releaseIpaPathValue),
+    "Store-backed preflight requires --ipa pointing to the exact exported IPA.",
+  );
+  expect(
+    Boolean(releaseValidationIpaPathValue),
+    "Store-backed preflight requires --validation-ipa pointing to the separately exported device-installable validation twin.",
+  );
   validateReleaseSourceState(currentSourceRevision);
   validatedReleaseCandidateArtifact = validateReleaseCandidateArtifact(
     releaseCandidateArtifact,
     currentSourceRevision,
+  );
+  validatedReleaseCandidateArtifact = await reinspectReleaseCandidateArtifact(
+    validatedReleaseCandidateArtifact,
+    currentSourceRevision,
+    releaseArchivePathValue
+      ? path.resolve(projectDir, releaseArchivePathValue)
+      : undefined,
+    releaseIpaPathValue
+      ? path.resolve(projectDir, releaseIpaPathValue)
+      : undefined,
+    releaseValidationIpaPathValue
+      ? path.resolve(projectDir, releaseValidationIpaPathValue)
+      : undefined,
+  );
+  const candidateBuildProfile = validatedReleaseCandidateArtifact?.release?.buildProfile;
+  const candidateRuntimeTrack = validatedReleaseCandidateArtifact?.release?.runtimeTrack;
+  if (requiresStore) {
+    expect(
+      candidateBuildProfile === "store" && candidateRuntimeTrack === "app-store",
+      `Store preflight requires an app-store candidate normalized to store evidence, found runtime track "${candidateRuntimeTrack ?? "missing"}" and build profile "${candidateBuildProfile ?? "missing"}".`,
+    );
+  } else if (requiresTestflight) {
+    expect(
+      candidateBuildProfile === "testflight" || candidateBuildProfile === "store",
+      `TestFlight preflight requires a testflight or app-store candidate, found build profile "${candidateBuildProfile ?? "missing"}".`,
+    );
+  }
+}
+
+if (requiresStore) {
+  try {
+    const appStoreConnectApiToken =
+      resolveAppStoreConnectApiToken();
+    appStoreConnectBuildEvidence =
+      await fetchAppStoreConnectBuildEvidence({
+        appId: launchInputs.ascAppId,
+        buildNumber: launchInputs.iosBuildNumber,
+        marketingVersion: launchInputs.iosMarketingVersion,
+        token: appStoreConnectApiToken,
+      });
+  } catch (error) {
+    expect(
+      false,
+      `Authenticated App Store Connect build verification failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  validateIosSubmissionForStore(
+    iosSubmissionArtifact,
+    validatedReleaseCandidateArtifact,
+    appStoreConnectBuildEvidence,
   );
 }
 
@@ -1376,11 +1628,6 @@ if (requiresStoreBackedDistribution) {
   checkPlaceholder(launchInputs.appReviewLastName, "App Review last name");
   checkPlaceholder(launchInputs.appReviewEmail, "App Review email");
   checkPlaceholder(launchInputs.appReviewPhone, "App Review phone");
-}
-
-if (isAllTracks) {
-  checkPlaceholder(launchInputs.androidPackage, "Android package");
-  compare(appJson.expo.android?.package, launchInputs.androidPackage, "app.json Android package");
 }
 
 expect(Boolean(publicUrls.websiteUrl), "Website URL is unresolved.");
@@ -1429,6 +1676,13 @@ const previewProfile = easJson.build?.preview;
 const testflightProfile = easJson.build?.testflight;
 const storeProfile = easJson.build?.store;
 
+if (requiresIos) {
+  expect(
+    easJson.cli?.requireCommit === true,
+    "EAS CLI must require a committed source snapshot for iOS builds.",
+  );
+}
+
 if (requiresPreview) {
   expect(Boolean(previewProfile), "Missing build.preview profile.");
 }
@@ -1471,16 +1725,21 @@ if (requiresPreview) {
     requireProviderBacked: strictPreviewProvider,
     targetUrl: launchInputs.stagingApiBaseUrl,
   });
-  validateNoScreenSmokeEvidence(noScreenSmokeArtifact, {
-    allowWarning: true,
-    description: "Preview / staging",
-    expectedApiBaseUrl: launchInputs.stagingApiBaseUrl,
-    expectedApiEnvironment: "staging",
-    expectedBackendSmokeArtifact: stagingSmokeArtifact,
-    expectedBuildProfile: "preview",
-    expectedReleaseTrack: "preview",
-    expectedSourceRevision: currentSourceRevision,
-  });
+  if (!isAllTracks) {
+    validateNoScreenSmokeEvidence(noScreenSmokeArtifacts.internal, {
+      allowWarning: true,
+      artifactPath: noScreenSmokeArtifactPaths.internal,
+      description: "Preview / staging",
+      expectedApiBaseUrl: launchInputs.stagingApiBaseUrl,
+      expectedApiEnvironment: "staging",
+      expectedBackendSmokeArtifact: stagingSmokeArtifact,
+      expectedBuildProfile: "preview",
+      expectedInstallationSource: "ad-hoc",
+      expectedParticipantRole: "internal-tester",
+      expectedReleaseTrack: "preview",
+      expectedSourceRevision: currentSourceRevision,
+    });
+  }
 }
 
 for (const [profileName, profile] of Object.entries({ testflight: testflightProfile, store: storeProfile })) {
@@ -1523,16 +1782,19 @@ if (requiresStoreBackedDistribution) {
     requireProviderBacked: true,
     targetUrl: launchInputs.productionApiBaseUrl,
   });
-  validateNoScreenSmokeEvidence(noScreenSmokeArtifact, {
-    allowWarning: false,
+  const candidateEvidenceTrack = validatedReleaseCandidateArtifact?.release?.evidenceTrack;
+  const candidateBuildProfile = validatedReleaseCandidateArtifact?.release?.buildProfile;
+  validateNoScreenEvidenceSet(noScreenSmokeArtifacts, {
+    expectedAppStoreConnectBuildEvidence: appStoreConnectBuildEvidence,
+    candidate: validatedReleaseCandidateArtifact,
     description: "Production",
     expectedApiBaseUrl: launchInputs.productionApiBaseUrl,
     expectedApiEnvironment: "production",
     expectedBackendSmokeArtifact: productionSmokeArtifact,
-    expectedBuildProfile: selectedTrack === "testflight" ? "testflight" : "store",
-    expectedCandidateBinarySha256: validatedReleaseCandidateArtifact?.archive?.binarySha256,
-    expectedReleaseTrack: selectedTrack === "testflight" ? "testflight" : "store",
+    expectedBuildProfile: candidateBuildProfile,
+    expectedReleaseTrack: candidateEvidenceTrack,
     expectedSourceRevision: currentSourceRevision,
+    requireTestflightRepeat: requiresStore,
   });
 }
 

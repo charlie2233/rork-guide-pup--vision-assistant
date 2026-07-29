@@ -62,6 +62,37 @@ function syntheticWebpBase64(width, height) {
   return bytes.toString("base64");
 }
 
+function allowedRateLimitDecision(limit = 20) {
+  return {
+    allowed: true,
+    limit,
+    reason: "allowed",
+    remaining: limit - 1,
+    resetAt: "2099-01-01T00:00:00.000Z",
+  };
+}
+
+function createObservedRequestBody() {
+  const state = {
+    cancelCalls: 0,
+    pullCalls: 0,
+  };
+  const body = new ReadableStream({
+    cancel() {
+      state.cancelCalls += 1;
+    },
+    pull(controller) {
+      state.pullCalls += 1;
+      controller.enqueue(new TextEncoder().encode("{}"));
+      controller.close();
+    },
+  }, {
+    highWaterMark: 0,
+  });
+
+  return { body, state };
+}
+
 function loadVisionSchema() {
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -175,16 +206,26 @@ test("analyze request validates actual JPEG and WebP dimensions against declared
   }
 });
 
-function loadWorker() {
+function loadWorker({
+  allowProviderSummary = false,
+  analyzeIpRateLimitDecision = allowedRateLimitDecision(60),
+  deviceRateLimitDecision = allowedRateLimitDecision(),
+  useActualSessionVerifier = false,
+} = {}) {
   const moduleCache = new Map();
   const providerCalls = [];
+  const rateLimitCalls = [];
+  const sessionVerificationCalls = [];
   const moduleOverrides = new Map([
-    [new URL("../src/lib/session.ts", import.meta.url).href, {
-      verifySessionToken: async () => true,
-    }],
     [new URL("../src/providers/index.ts", import.meta.url).href, {
       getProviderSummary: () => {
         providerCalls.push("summary");
+        if (allowProviderSummary) {
+          return {
+            model: "test-model",
+            provider: "openai",
+          };
+        }
         throw new Error("Invalid requests must not reach provider summary.");
       },
       getVisionProvider: () => {
@@ -192,7 +233,26 @@ function loadWorker() {
         throw new Error("Invalid requests must not reach provider routing.");
       },
     }],
+    [new URL("../src/lib/rate-limit.ts", import.meta.url).href, {
+      DeviceRateLimiter: class {},
+      enforceAnalyzeIpRateLimit: async (...args) => {
+        rateLimitCalls.push(["analyze-ip", ...args]);
+        return analyzeIpRateLimitDecision;
+      },
+      enforceRateLimit: async (...args) => {
+        rateLimitCalls.push(["device", ...args]);
+        return deviceRateLimitDecision;
+      },
+    }],
   ]);
+  if (!useActualSessionVerifier) {
+    moduleOverrides.set(new URL("../src/lib/session.ts", import.meta.url).href, {
+      verifySessionToken: async (...args) => {
+        sessionVerificationCalls.push(args);
+        return true;
+      },
+    });
+  }
 
   function load(relativePathOrUrl) {
     const moduleUrl = relativePathOrUrl instanceof URL
@@ -264,20 +324,44 @@ function loadWorker() {
 
   return {
     providerCalls,
+    rateLimitCalls,
+    sessionVerificationCalls,
     worker: load("../src/index.ts").default,
   };
 }
 
-async function fetchInvalidAnalyze(body) {
-  const { providerCalls, worker } = loadWorker();
+async function fetchInvalidAnalyze(body, {
+  allowProviderSummary = false,
+  analyzeIpRateLimitDecision,
+  deviceRateLimitDecision,
+  headers = {},
+  includeCredentials = true,
+  useActualSessionVerifier = false,
+} = {}) {
+  const {
+    providerCalls,
+    rateLimitCalls,
+    sessionVerificationCalls,
+    worker,
+  } = loadWorker({
+    allowProviderSummary,
+    analyzeIpRateLimitDecision,
+    deviceRateLimitDecision,
+    useActualSessionVerifier,
+  });
+  const requestHeaders = {
+    "content-type": "application/json",
+    ...headers,
+  };
+  if (includeCredentials) {
+    requestHeaders.authorization = "Bearer valid-test-session";
+    requestHeaders["x-guidepup-device-id"] = "test-device";
+  }
   const request = new Request("https://api.example.test/v1/vision/analyze", {
     body,
-    headers: {
-      authorization: "Bearer valid-test-session",
-      "content-type": "application/json",
-      "x-guidepup-device-id": "test-device",
-    },
+    headers: requestHeaders,
     method: "POST",
+    ...(typeof body === "string" ? {} : { duplex: "half" }),
   });
   const response = await worker.fetch(request, {
     ALLOWED_ORIGINS: "*",
@@ -286,7 +370,13 @@ async function fetchInvalidAnalyze(body) {
     waitUntil: () => undefined,
   });
 
-  return { body: await response.json(), providerCalls, response };
+  return {
+    body: await response.json(),
+    providerCalls,
+    rateLimitCalls,
+    response,
+    sessionVerificationCalls,
+  };
 }
 
 test("worker maps unsupported interaction mode to sanitized deterministic 400", async () => {
@@ -317,4 +407,115 @@ test("worker maps malformed analyze JSON to the same sanitized 400", async () =>
     },
   });
   assert.deepEqual(result.providerCalls, []);
+});
+
+test("analyze authenticates and rate-limits before rejecting a declared oversized body", async () => {
+  const result = await fetchInvalidAnalyze("{}", {
+    headers: {
+      "content-length": "1600001",
+    },
+  });
+
+  assert.equal(result.response.status, 413);
+  assert.match(result.response.headers.get("x-request-id") || "", /\S/);
+  assert.deepEqual(result.body, {
+    error: {
+      code: "payload_too_large",
+      message: "Request payload is too large.",
+    },
+  });
+  assert.equal(result.sessionVerificationCalls.length, 1);
+  assert.deepEqual(result.rateLimitCalls.map(([scope]) => scope), ["device", "analyze-ip"]);
+  assert.deepEqual(result.providerCalls, []);
+});
+
+test("analyze stream cap stays enforced after authentication and rate limiting", async () => {
+  const oversizedBody = JSON.stringify({ padding: "a".repeat(1_600_000) });
+  for (const headers of [{}, { "content-length": "1" }]) {
+    const result = await fetchInvalidAnalyze(oversizedBody, { headers });
+
+    assert.equal(result.response.status, 413);
+    assert.deepEqual(result.body, {
+      error: {
+        code: "payload_too_large",
+        message: "Request payload is too large.",
+      },
+    });
+    assert.equal(result.sessionVerificationCalls.length, 1);
+    assert.deepEqual(result.rateLimitCalls.map(([scope]) => scope), ["device", "analyze-ip"]);
+    assert.deepEqual(result.providerCalls, []);
+  }
+});
+
+test("unauthorized analyze cancels an unread body without pulling it", async () => {
+  const observed = createObservedRequestBody();
+  const result = await fetchInvalidAnalyze(observed.body, {
+    includeCredentials: false,
+  });
+
+  assert.equal(result.response.status, 401);
+  assert.equal(observed.state.pullCalls, 0);
+  assert.equal(observed.state.cancelCalls, 1);
+  assert.deepEqual(result.sessionVerificationCalls, []);
+  assert.deepEqual(result.rateLimitCalls, []);
+  assert.deepEqual(result.providerCalls, []);
+});
+
+test("rate-limited analyze cancels an unread body without pulling it", async () => {
+  const observed = createObservedRequestBody();
+  const result = await fetchInvalidAnalyze(observed.body, {
+    allowProviderSummary: true,
+    deviceRateLimitDecision: {
+      allowed: false,
+      limit: 20,
+      reason: "limit-exceeded",
+      remaining: 0,
+      resetAt: "2099-01-01T00:00:00.000Z",
+    },
+  });
+
+  assert.equal(result.response.status, 429);
+  assert.equal(observed.state.pullCalls, 0);
+  assert.equal(observed.state.cancelCalls, 1);
+  assert.equal(result.sessionVerificationCalls.length, 1);
+  assert.deepEqual(result.rateLimitCalls.map(([scope]) => scope), ["device"]);
+  assert.deepEqual(result.providerCalls, ["summary"]);
+});
+
+test("declared oversized analyze cancels its unread body after preflight", async () => {
+  const observed = createObservedRequestBody();
+  const result = await fetchInvalidAnalyze(observed.body, {
+    headers: {
+      "content-length": "1600001",
+    },
+  });
+
+  assert.equal(result.response.status, 413);
+  assert.equal(observed.state.pullCalls, 0);
+  assert.equal(observed.state.cancelCalls, 1);
+  assert.equal(result.sessionVerificationCalls.length, 1);
+  assert.deepEqual(result.rateLimitCalls.map(([scope]) => scope), ["device", "analyze-ip"]);
+  assert.deepEqual(result.providerCalls, []);
+});
+
+test("malformed bearer tokens return sanitized 401 rather than throwing", async () => {
+  for (const authorization of [
+    "Bearer v1.only-two-parts",
+    "Bearer v1.payload.%%%",
+    `Bearer v1.${"a".repeat(2050)}.signature`,
+  ]) {
+    const result = await fetchInvalidAnalyze(JSON.stringify(validAnalyzePayload()), {
+      headers: { authorization },
+      useActualSessionVerifier: true,
+    });
+
+    assert.equal(result.response.status, 401);
+    assert.deepEqual(result.body, {
+      error: {
+        code: "unauthorized",
+        message: "Invalid or expired device bootstrap token.",
+      },
+    });
+    assert.deepEqual(result.providerCalls, []);
+  }
 });
