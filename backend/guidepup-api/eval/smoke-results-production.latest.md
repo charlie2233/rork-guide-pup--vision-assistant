@@ -1,55 +1,36 @@
 # Guide Pup Smoke Results
 
-Date: 2026-07-25
+Date: 2026-07-29
 Environment: production
 Operator: Codex
 Artifact version: 2
 
 ## Provenance and freshness
 
-- Worker deployment: `bc22532c-73be-487a-8bc5-653c0b2053f5`
-- Worker version: `5f48006b-4b0a-400c-96a1-1c701b09b46a`
+- Worker deployment: `74e15080-4800-48d0-b777-c167a45f56f8`
+- Worker version: `9c20ff03-6500-4de5-bb81-68bbf2e44ef0`
 - Worker identity: `guidepup-api-production`
-- Worker version created: `2026-07-25T01:49:59.26475Z`
-- source revision: `87196ef75b322d0b6f2f535a3164d9c098511bef`
-- evidence expires: `2026-07-26T01:50:48.430Z`
+- Worker version created: `2026-07-29T23:52:26.55568Z`
+- source revision: `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
+- evidence expires: `2026-07-30T23:53:45.984Z`
 - maximum age: `86400s`
 
 ## Worker smoke
 
 - API: `https://guidepup-api-production.charliehan-lifepage.workers.dev`
-- health: `200 OK`, request `ec738267-0fff-40c6-b2c3-675deb8e659d`
-- bootstrap: `200 OK`, request `238122f6-9e6b-434b-b37b-9bf802225846`
+- health: `200 OK`, request `1b75e3bb-36a8-45ab-b6da-487d5482848f`
+- bootstrap: `200 OK`, request `68071eb9-6084-49c1-a07f-4bd641652cf6`
 - provider/model: `openai-compatible / gpt-5.6-sol`
 - prompt version: `2026-07-18.v1`
 - structured output mode: `json_schema_strict`
-- runtime Worker version: `5f48006b-4b0a-400c-96a1-1c701b09b46a`
-- runtime source revision: `87196ef75b322d0b6f2f535a3164d9c098511bef`
+- runtime Worker version: `9c20ff03-6500-4de5-bb81-68bbf2e44ef0`
+- runtime source revision: `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
 
 ## Analyze lanes
 
 ### guidance
 
-- request id: `11f66d6b-7bf4-4509-9f8a-be244dade670`
-- status: `200 OK`
-- execution path: `provider-backed`
-- provider/model: `openai-compatible / gpt-5.6-sol`
-- prompt version: `2026-07-18.v1`
-- structured output valid: `yes`
-- direction/hazard/walkability: `stop / high / uncertain`
-- obstacle/confidence: `true / 0.45`
-- lighting/surface: `unknown / unknown`
-- fallback reason: `path-not-clear`
-- message: `Stop. Path is not clear.`
-- scene description: `Blank, featureless frame with no visible walking path.`
-- sampled frame: `yes`
-- native path: `js-fallback`
-- dimensions: `40x40`
-- frame summary: `Synthetic sampled js-fallback guidance smoke frame, source 40x40, upload 40x40.`
-
-### scene-query
-
-- request id: `b12859ee-bd84-4a66-b3bf-baf0ef3a003c`
+- request id: `aca939c4-4418-4b1a-b82b-19f03d0c168f`
 - status: `200 OK`
 - execution path: `provider-backed`
 - provider/model: `openai-compatible / gpt-5.6-sol`
@@ -60,7 +41,26 @@ Artifact version: 2
 - lighting/surface: `bright / unknown`
 - fallback reason: `path-not-clear`
 - message: `Stop. Path is not clear.`
-- scene description: `The frame appears blank; no walking path or hazards are visible.`
+- scene description: `Blank bright frame with no visible walking surface or surroundings.`
+- sampled frame: `yes`
+- native path: `js-fallback`
+- dimensions: `40x40`
+- frame summary: `Synthetic sampled js-fallback guidance smoke frame, source 40x40, upload 40x40.`
+
+### scene-query
+
+- request id: `2b7a226a-cb01-4317-b668-e24f92a8696a`
+- status: `200 OK`
+- execution path: `provider-backed`
+- provider/model: `openai-compatible / gpt-5.6-sol`
+- prompt version: `2026-07-18.v1`
+- structured output valid: `yes`
+- direction/hazard/walkability: `stop / high / uncertain`
+- obstacle/confidence: `true / 0.45`
+- lighting/surface: `bright / unknown`
+- fallback reason: `path-not-clear`
+- message: `Stop. Path is not clear.`
+- scene description: `The frame appears blank white; no walking surface, obstacles, or route are visible.`
 - sampled frame: `yes`
 - native path: `js-fallback`
 - dimensions: `40x40`

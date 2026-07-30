@@ -17,8 +17,18 @@ Commit at phase start: `c2b8781`
   Cloudflare diagnostics, OpenAI default retention limits, and
   `charliehan112@gmail.com`.
 - Cloudflare OAuth is authenticated. Staging and production expose
-  `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY` without revealing values, but
-  the uncommitted source is not deployed and has no launch-valid dual-lane smoke.
+  `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY` without revealing values. No
+  secret value was read or logged.
+- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
+  was deployed to both environments and passed strict provider-backed
+  guidance/scene-query smoke. Staging analyze request IDs were
+  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` and
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4`; production analyze request IDs were
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f` and
+  `2b7a226a-cb01-4317-b668-e24f92a8696a`.
+- The final candidate HEAD must be redeployed and re-smoked after this
+  evidence/documentation commit. Generated latest smoke files are the only
+  allowed dirty backend evidence and must match the archive source revision.
 - The pending launch source removes the Sentry client dependency, Expo plugin, CocoaPods, native wrapper/upload phase, DSN configuration, and orphaned `sentry.properties`. Shipping diagnostics remain sanitized and local. Release preflight rejects the return of any SDK, pod, plugin, native phase, DSN variable, or properties file; archive verification separately rejects embedded Sentry payloads, a configured DSN, and Crash Data privacy-manifest declarations.
 - The latest suffix-only iPhone readiness probe is `blocked`. Pairing,
   Developer Mode, and `xctrace` visibility remain, but developer services and

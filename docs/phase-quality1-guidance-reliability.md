@@ -7,9 +7,9 @@ Contract-tightening continuation start: `bf3da45`
 
 ## Current gate on 2026-07-29
 
-- The candidate cloud/iOS source is being frozen. Current Workers and all older
-  request IDs are superseded; no launch-valid exact-revision provider smoke is
-  claimed.
+- The candidate cloud/iOS source is being frozen. Reviewed commit `5ad0b74...`
+  has exact-revision provider smoke; the final evidence/documentation HEAD must
+  be redeployed and re-smoked before archive generation.
 - The earlier provider smoke at `3cc852c` is superseded historical proof only,
   not current exact-revision evidence.
 - The configured launch backend uses strict Structured Outputs on
@@ -31,6 +31,15 @@ Contract-tightening continuation start: `bf3da45`
   smoke/provenance passes `32/32`, both typechecks pass, and Expo lint plus Expo
   Doctor `17/17` pass. Independent no-screen and candidate-evidence reviews
   report no open P0/P1/P2 findings.
+- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
+  passed strict provider-backed guidance and scene-query smoke in staging and
+  production. Analyze request IDs were
+  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` /
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4` and
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f` /
+  `2b7a226a-cb01-4317-b668-e24f92a8696a`, respectively. Both synthetic blank
+  frames failed closed with STOP guidance. This is contract evidence, not a
+  real-scene quality score.
 - The latest iPhone readiness probe is `blocked`: paired with Developer Mode
   enabled and visible to `xctrace`, but without developer services, a
   CoreDevice tunnel, USB-or-same-LAN execution, an Xcode destination, or a
@@ -57,8 +66,8 @@ npm --prefix expo run lint
 npm --prefix backend/guidepup-api run typecheck
 ```
 
-Current blockers: commit and deploy the exact source, collect fresh dual-lane
-request IDs, build and inspect the signed candidate twins, complete real-iPhone
+Current blockers: keep final HEAD and fresh dual-lane request IDs aligned,
+build and inspect the signed candidate twins, complete real-iPhone
 native/fallback internal and blind-participant validation, repeat the blind run
 from TestFlight, and gather labeled real-scene guidance-quality evidence.
 MiniCPM remains experimental and is not a launch provider.

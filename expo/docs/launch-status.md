@@ -4,7 +4,7 @@ Last updated: 2026-07-29
 
 ## Current decision
 
-Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, and distribution signing are verified, but the candidate is not yet exact-revision deployed or built and the current iPhone execution path is blocked. Submission remains intentionally blocked on exact-revision backend and binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
+Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, distribution signing, exact-revision dual-lane provider smoke, and a clean Release simulator build are verified, but the current iPhone execution path is blocked and no signed Store/validation twin exists. Submission remains intentionally blocked on signed-binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
 
 Current hard blockers:
 
@@ -14,14 +14,25 @@ Current hard blockers:
   `xctrace` visibility remain, but developer services, the CoreDevice tunnel,
   USB-or-connected-same-LAN execution, Xcode destination discovery, and the
   active CoreDevice process probe do not pass.
-- Redeploy and strictly smoke staging/production after the final tracked commit, then bind the sanitized request IDs and signed binary hash into candidate and no-screen evidence.
+- Keep the generated staging/production smoke artifacts matched to the final
+  tracked candidate commit, then bind their sanitized request IDs and the
+  signed binary hash into candidate and no-screen evidence.
 - Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, App Accessibility, build selection, agreements, App Review metadata, and a final authenticated URL recheck in App Store Connect.
 
 The launch iOS client vendors no Sentry SDK, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
 
 Current local evidence:
 
-- Commit `87196ef` was deployed to staging and production; strict dual-lane smoke passed provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured Outputs, and sanitized request IDs. The pending no-Sentry source supersedes that proof, so both Workers must be redeployed and re-smoked after the final commit.
+- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
+  was deployed to staging and production; strict dual-lane smoke passed
+  provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured
+  Outputs, and sanitized request IDs. Staging guidance/scene-query IDs were
+  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` /
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4`; production IDs were
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f` /
+  `2b7a226a-cb01-4317-b668-e24f92a8696a`. The resulting
+  evidence/documentation commit must be redeployed and re-smoked before the
+  signed archive so the generated latest artifacts match candidate HEAD.
 - A signed `87196ef` Ad Hoc candidate previously installed and launched on the paired/trusted Developer Mode iPhone. Its archive, IPA, candidate manifest, smoke files, and physical launch are superseded by the pending no-Sentry source and must not be submitted.
 - Apple's Environment Scanning category is declared as linked, for App Functionality and Analytics, with no tracking. Derived confidence, direction, and hazard-level results support bounded service-quality analysis; Photos or Videos remains App Functionality only.
 - The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. No current build is selected; App Privacy and App Accessibility are not published. Four truthful `1284 x 2778` screenshots are saved in the live 6.5-inch slot, and support, marketing, and privacy URLs are present.
@@ -30,9 +41,9 @@ Current local evidence:
   Node contracts `295/295`, no-screen/privacy integration `97/97`, release
   evidence `62/62`, backend typecheck, backend privacy/safety `58/58`, backend
   smoke/evidence `32/32`, both Cloudflare required-secret checks, both Worker
-  dry-runs, and `git diff --check`. Native Release correctly rejects the dirty
-  source through the clean-revision guard; a clean exact-revision build is
-  still required and is not physical accessibility or camera evidence.
+  dry-runs, and `git diff --check`. Clean exact-revision Release simulator
+  build, install, and launch pass with no fatal launch-log match. This is not
+  signed-device, physical accessibility, or camera evidence.
 - EAS is not authenticated and no `EXPO_TOKEN` is present. App Store Connect
   authentication and live build state must be reverified before live build or
   metadata changes.

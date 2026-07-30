@@ -28,7 +28,14 @@ Conversation-lane continuation start: `55622a1`
   blind-participant evidence exists. Real self-echo resistance, STOP
   cut-through, Apple Speech input, VoiceOver, haptics, earcons, interruption
   recovery, persistence, and both camera paths remain hardware gates.
-- Current Workers are superseded and have no launch-valid smoke for this source.
+- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
+  passed provider-backed staging and production guidance/scene-query smoke.
+  Analyze request IDs were `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` /
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4` and
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f` /
+  `2b7a226a-cb01-4317-b668-e24f92a8696a`, respectively. These prove cloud lane
+  separation and fail-closed synthetic-frame behavior, not microphone,
+  speaker, VoiceOver, haptic, or camera behavior.
 
 Later dated sections retain phase history. The current owner-scoped listener and VoiceOver interruption behavior is described by the gate above and the latest bullets below.
 

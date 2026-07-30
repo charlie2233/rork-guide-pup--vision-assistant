@@ -38,7 +38,15 @@ Latest continuation start: `b5c1c5e`
   passes `62/62`; Expo typecheck, lint, and Expo Doctor `17/17` also pass.
   Independent no-screen and candidate-evidence reviews report no open
   P0/P1/P2 findings. These are code and schema results only.
-  No exact validation IPA is installed, and no internal, blind-participant, or
+- The first reviewed candidate commit, `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`,
+  passed provider-backed dual-lane smoke in staging and production. Guidance
+  and scene-query analyze request IDs were
+  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` /
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4` in staging and
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f` /
+  `2b7a226a-cb01-4317-b668-e24f92a8696a` in production. This cloud proof does
+  not replace physical sensory validation.
+- No exact validation IPA is installed, and no internal, blind-participant, or
   TestFlight no-screen v3 artifact exists.
 
 Commands:
@@ -55,9 +63,10 @@ xcrun devicectl list devices --timeout 30 --json-output '<private-temporary-file
 system_profiler SPUSBDataType -json
 ```
 
-Current blocker: commit the reviewed exact source, build and inspect the
-normalized Store/validation twins, install the validation IPA, and complete both
-native-core and explicit JavaScript-fallback runs with separate internal and
+Current blocker: keep final HEAD and latest cloud smoke provenance aligned,
+build and inspect the normalized Store/validation twins, install the validation
+IPA, and complete both native-core and explicit JavaScript-fallback runs with
+separate internal and
 blind participants. Prior transport, simulator, install, or schema evidence does
 not replace current-binary sensory validation.
 

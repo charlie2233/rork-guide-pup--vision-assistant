@@ -10,13 +10,22 @@ Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
   and production each expose `OPENAI_API_KEY` and
   `BOOTSTRAP_SIGNING_SECRET`; values were not read, printed, or written to the
   repository.
-- The candidate source represented by this gate has not been deployed. Current
-  live Workers still identify the pushed `80c6e7a...` revision, which is
-  superseded by the candidate backend and iOS changes.
-- The latest live smoke attempts correctly rejected themselves because the
-  runner emitted `health.benchmarkProviders` while its strict evidence schema
-  omitted that field. Older provider-backed request IDs therefore remain
-  historical and are not launch-valid for the pending candidate.
+- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4` was deployed
+  to staging Worker version `15a4ce57-89a3-4718-a01d-c701dea74298` and
+  production Worker version `9c20ff03-6500-4de5-bb81-68bbf2e44ef0`.
+- Strict provider-backed dual-lane smoke passed in both environments with
+  `gpt-5.6-sol`, prompt `2026-07-18.v1`, and
+  `json_schema_strict`. Staging health/guidance/scene-query request IDs were
+  `e594eaaa-64d9-4b3b-a212-bee2b0799fe4`,
+  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77`, and
+  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4`. Production IDs were
+  `1b75e3bb-36a8-45ab-b6da-487d5482848f`,
+  `aca939c4-4418-4b1a-b82b-19f03d0c168f`, and
+  `2b7a226a-cb01-4317-b668-e24f92a8696a`.
+- The checked-in latest artifacts capture that `5ad0b74...` proof. Committing
+  these evidence records creates a new documentation/evidence HEAD, so the
+  final candidate workflow must redeploy that resulting HEAD and regenerate
+  the allowed uncommitted latest artifacts before archive generation.
 - Reviewed local remediation covers the closed health schema, bounded analyze bodies,
   malformed session tokens, centered medium-distance obstacle normalization,
   client diagnostics provenance, and `store: false` on OpenAI-compatible
@@ -24,12 +33,9 @@ Commit at audit start: `54d6d8ef2535ef51bcb28bed3ef85b29d8dac869`
   `58/58`, and the complete smoke/provenance/release-preflight suite passes
   `32/32`.
 - Both required-secret checks and both Wrangler staging/production dry-runs
-  pass. The dry-runs truthfully stamp `SOURCE_REVISION="development"` and are
-  bundle proof only; they are not deployments or provider-backed smoke.
-- No current staging or production guidance or scene-query request ID is
-  claimed. Commit and push the exact source, deploy both environments with that
-  revision stamp, then require strict provider-backed dual-lane smoke before
-  building the release candidate.
+  pass. Exact-revision deployments and provider-backed smoke also pass for
+  `5ad0b74...`; release validity still requires the regenerated latest evidence
+  to match the final candidate HEAD.
 
 All later dated sections are retained as phase history. Older deployment,
 model, request-ID, and blocker statements do not override this gate.
