@@ -278,6 +278,15 @@ function writeMatchingStoreAndValidationIpas(candidate) {
   );
 }
 
+function writeStoreIpaFromCopiedApp(candidate, mutateCopiedApp) {
+  const exportRoot = path.join(candidate.root, "store-export-copy");
+  const copiedAppPath = path.join(exportRoot, path.basename(candidate.appPath));
+  fs.mkdirSync(exportRoot, { recursive: true });
+  fs.cpSync(candidate.appPath, copiedAppPath, { recursive: true });
+  mutateCopiedApp(copiedAppPath);
+  writeIpaFromApp(candidate.root, copiedAppPath, candidate.ipaPath);
+}
+
 const PROFILE_PLIST_MARKER = "profile plist marker";
 const ENTITLEMENTS_PLIST_MARKER = "entitlements plist marker";
 const IPA_ENTITLEMENTS_PLIST_MARKER = "ipa entitlements plist marker";
@@ -777,7 +786,7 @@ test("generates a valid privacy-safe candidate artifact atomically", async (t) =
     ).valid,
     true,
   );
-  assert.equal(artifact.artifactVersion, 5);
+  assert.equal(artifact.artifactVersion, 6);
   assert.match(artifact.archive.binarySha256, /^[0-9a-f]{64}$/);
   assert.equal(artifact.archive.betaReportsActive, true);
   assert.match(artifact.archive.entitlementsSha256, /^[0-9a-f]{64}$/);
@@ -1342,6 +1351,187 @@ test("requires Store and validation IPA paths and validates their names and hash
   await assert.rejects(
     inspectReleaseCandidate(missingValidationIpaPathOptions),
     /Installable validation IPA path is required/,
+  );
+});
+
+test("normalizes semantically identical property-list serialization across exports", async (t) => {
+  const { candidate, options } = makeStructuredPlistCandidate(t);
+  writeStoreIpaFromCopiedApp(candidate, (copiedAppPath) => {
+    requireMacPlutil([
+      "-convert",
+      "binary1",
+      "--",
+      path.join(copiedAppPath, "Info.plist"),
+    ]);
+  });
+
+  const artifact = await inspectReleaseCandidate(options);
+
+  assert.equal(
+    artifact.archive.normalizedPayloadSha256,
+    artifact.ipa.normalizedPayloadSha256,
+  );
+  assert.equal(
+    artifact.archive.normalizedPayloadSha256,
+    artifact.validationIpa.normalizedPayloadSha256,
+  );
+});
+
+test("rejects semantic property-list value and type changes", async (t) => {
+  for (const mutation of [
+    {
+      name: "value",
+      prepare(candidate) {
+        const infoPath = path.join(candidate.appPath, "Info.plist");
+        requireMacPlutil([
+          "-insert",
+          "GuidePupFixture",
+          "-string",
+          "original",
+          "--",
+          infoPath,
+        ]);
+        fs.copyFileSync(
+          infoPath,
+          path.join(candidate.validationAppPath, "Info.plist"),
+        );
+        writeMatchingStoreAndValidationIpas(candidate);
+      },
+      mutate(infoPath) {
+        requireMacPlutil([
+          "-replace",
+          "GuidePupFixture",
+          "-string",
+          "changed",
+          "--",
+          infoPath,
+        ]);
+      },
+    },
+    {
+      name: "type",
+      prepare(candidate) {
+        const infoPath = path.join(candidate.appPath, "Info.plist");
+        requireMacPlutil([
+          "-insert",
+          "GuidePupFixture",
+          "-integer",
+          "1",
+          "--",
+          infoPath,
+        ]);
+        fs.copyFileSync(
+          infoPath,
+          path.join(candidate.validationAppPath, "Info.plist"),
+        );
+        writeMatchingStoreAndValidationIpas(candidate);
+      },
+      mutate(infoPath) {
+        requireMacPlutil([
+          "-replace",
+          "GuidePupFixture",
+          "-float",
+          "1",
+          "--",
+          infoPath,
+        ]);
+      },
+    },
+    {
+      name: "array order",
+      prepare(candidate) {
+        const infoPath = path.join(candidate.appPath, "Info.plist");
+        requireMacPlutil([
+          "-insert",
+          "GuidePupFixture",
+          "-json",
+          "[\"first\",\"second\"]",
+          "--",
+          infoPath,
+        ]);
+        fs.copyFileSync(
+          infoPath,
+          path.join(candidate.validationAppPath, "Info.plist"),
+        );
+        writeMatchingStoreAndValidationIpas(candidate);
+      },
+      mutate(infoPath) {
+        requireMacPlutil([
+          "-replace",
+          "GuidePupFixture",
+          "-json",
+          "[\"second\",\"first\"]",
+          "--",
+          infoPath,
+        ]);
+      },
+    },
+  ]) {
+    await t.test(mutation.name, async (subtest) => {
+      const { candidate, options } = makeStructuredPlistCandidate(subtest);
+      mutation.prepare(candidate);
+      writeStoreIpaFromCopiedApp(candidate, (copiedAppPath) => {
+        mutation.mutate(path.join(copiedAppPath, "Info.plist"));
+      });
+
+      await assert.rejects(
+        inspectReleaseCandidate(options),
+        /archive and IPA contain different normalized app payloads/,
+      );
+    });
+  }
+});
+
+test("rejects malformed and Mach-O root Info.plist payloads", async (t) => {
+  for (const mutation of [
+    {
+      name: "malformed",
+      mutate(infoPath) {
+        fs.writeFileSync(infoPath, "not a property list");
+      },
+    },
+    {
+      name: "Mach-O bytes",
+      mutate(infoPath) {
+        fs.copyFileSync("/usr/bin/true", infoPath);
+      },
+    },
+  ]) {
+    await t.test(mutation.name, async (subtest) => {
+      const { candidate, options } = makeStructuredPlistCandidate(subtest);
+      writeStoreIpaFromCopiedApp(candidate, (copiedAppPath) => {
+        mutation.mutate(path.join(copiedAppPath, "Info.plist"));
+      });
+
+      await assert.rejects(
+        inspectReleaseCandidate(options),
+        /Store IPA app Info\.plist\..+ extraction failed/,
+      );
+    });
+  }
+});
+
+test("keeps non-root property-list resources byte-bound", async (t) => {
+  const { candidate, options } = makeStructuredPlistCandidate(t);
+  const resourceRelativePath = path.join("Resources", "Fixture.plist");
+  for (const appPath of [candidate.appPath, candidate.validationAppPath]) {
+    const resourcePath = path.join(appPath, resourceRelativePath);
+    fs.mkdirSync(path.dirname(resourcePath), { recursive: true });
+    writeXmlPlist(resourcePath, { value: "unchanged" });
+  }
+  writeMatchingStoreAndValidationIpas(candidate);
+  writeStoreIpaFromCopiedApp(candidate, (copiedAppPath) => {
+    requireMacPlutil([
+      "-convert",
+      "binary1",
+      "--",
+      path.join(copiedAppPath, resourceRelativePath),
+    ]);
+  });
+
+  await assert.rejects(
+    inspectReleaseCandidate(options),
+    /archive and IPA contain different normalized app payloads/,
   );
 });
 

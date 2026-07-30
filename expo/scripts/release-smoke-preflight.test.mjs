@@ -340,6 +340,20 @@ function hashFile(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
 }
 
+function hashFixturePropertyList(filePath) {
+  const result = spawnSync(
+    "plutil",
+    ["-convert", "xml1", "-o", "-", "--", filePath],
+    { encoding: "utf8" },
+  );
+  assert.equal(
+    result.status,
+    0,
+    `plutil failed: ${result.stderr || result.stdout}`,
+  );
+  return createHash("sha256").update(result.stdout, "utf8").digest("hex");
+}
+
 function hashFixtureNormalizedPayload(appPath) {
   const files = [];
   const pending = [appPath];
@@ -378,8 +392,11 @@ function hashFixtureNormalizedPayload(appPath) {
   )) {
     const { entryPath } = filesByRelativePath.get(normalizedPath);
     const mode = require("node:fs").statSync(entryPath).mode & 0o777;
+    const fileHash = normalizedPath === "Info.plist"
+      ? hashFixturePropertyList(entryPath)
+      : hashFile(entryPath);
     manifestHash.update(
-      `${normalizedPath}\0${mode.toString(8)}\0${hashFile(entryPath)}\n`,
+      `${normalizedPath}\0${mode.toString(8)}\0${fileHash}\n`,
       "utf8",
     );
   }

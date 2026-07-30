@@ -18,7 +18,7 @@ const {
   createGuidePupCandidateBinding,
 } = require("../release/release-binding.js");
 
-export const RELEASE_CANDIDATE_ARTIFACT_VERSION = 5;
+export const RELEASE_CANDIDATE_ARTIFACT_VERSION = 6;
 export const RELEASE_CANDIDATE_ARTIFACT_TYPE = "guidepup-ios-release-candidate";
 export const DEFAULT_RELEASE_CANDIDATE_PATH = "release/candidate-build.latest.json";
 
@@ -813,6 +813,22 @@ async function hashCodeWithoutSignature(
   }
 }
 
+function hashCanonicalPropertyList(filePath, commandRunner) {
+  const result = requireCommand(
+    commandRunner,
+    "plutil",
+    ["-convert", "xml1", "-o", "-", "--", filePath],
+    {},
+    "Normalized app payload property-list conversion",
+  );
+  if (typeof result.stdout !== "string" || result.stdout.length === 0) {
+    throw new Error(
+      "Normalized app payload property-list conversion produced no data.",
+    );
+  }
+  return createHash("sha256").update(result.stdout, "utf8").digest("hex");
+}
+
 async function hashNormalizedAppPayload(
   appPath,
   commandRunner,
@@ -863,9 +879,11 @@ async function hashNormalizedAppPayload(
     files.map(({ relativePath }) => relativePath),
   )) {
     const { entryPath } = filesByNormalizedPath.get(normalizedPath);
-    const fileHash = hasMachOMagic(entryPath)
-      ? await hashCodeWithoutSignature(entryPath, commandRunner, hashFile)
-      : (await hashFile(entryPath)).toLowerCase();
+    const fileHash = normalizedPath === "Info.plist"
+      ? hashCanonicalPropertyList(entryPath, commandRunner)
+      : hasMachOMagic(entryPath)
+        ? await hashCodeWithoutSignature(entryPath, commandRunner, hashFile)
+        : (await hashFile(entryPath)).toLowerCase();
     const mode = fs.statSync(entryPath).mode & 0o777;
     manifestHash.update(
       `${normalizedPath}\0${mode.toString(8)}\0${fileHash}\n`,
