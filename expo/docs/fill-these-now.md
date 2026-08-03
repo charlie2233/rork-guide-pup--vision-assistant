@@ -2,17 +2,20 @@
 
 ## Current Decision
 
-Guide Pup is not ready to upload to TestFlight or submit to App Review yet.
-Account identity and transport are mostly resolved, but the exact candidate has
-not cleared the cloud, binary, physical no-screen, and TestFlight repeat gates.
+Guide Pup is not ready to upload to TestFlight or submit to App Review yet. The
+signed candidate from `064cf7f` is superseded by the privacy-declaration fix and
+must not be uploaded. Account identity is resolved, but the replacement source
+has not cleared the cloud, binary, physical no-screen, or TestFlight repeat
+gates.
 
 Do not attach a build, submit for review, or merge this branch to `main` until
 every required item below has real evidence.
 
 ## Required Next
 
-1. Finish review, run the complete validation matrix, commit, and push the exact
-   source on `codex/guidepup-credentialed-launch`.
+1. Finish the privacy correction and independent review, run the complete
+   validation matrix, commit, and push the exact source on
+   `codex/guidepup-credentialed-launch`.
 2. Deploy that commit to staging and production. Run strict provider-backed
    guidance and scene-query smokes against both environments, and retain the
    sanitized request IDs and exact source revision.
@@ -30,8 +33,9 @@ every required item below has real evidence.
 6. Install the processed build through TestFlight and repeat the blind-participant
    no-screen v3 run. The TestFlight evidence must bind to the processed build and
    candidate Store IPA hash.
-7. Publish App Privacy and accessibility answers that match the inspected
-   archive and deployed provider behavior. Recheck agreements, export
+7. Publish App Privacy answers that match the inspected archive and deployed
+   provider behavior. Prepare the optional accessibility label from blind-user
+   evidence for publication after `1.0` is live. Recheck agreements, export
    compliance, review notes, contact fields, screenshots, release controls, and
    selected build before submission.
 
@@ -51,24 +55,29 @@ every required item below has real evidence.
 
 ## Current External State
 
-- Cloudflare OAuth is active.
-- Staging and production expose the required secret names
-  `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`; values were not read or
-  recorded.
-- The live Workers still represent a superseded revision. No launch-valid
-  request IDs are claimed for the pending source.
-- The wired iPhone transport probe is ready: pairing, trust, Developer Mode,
-  developer services, tunnel, runnable Xcode destination, and a live CoreDevice
-  process probe pass. This is transport evidence only.
+- The user is signed in to Cloudflare in the browser, but Wrangler is not
+  authenticated because the callback arrived after the CLI listener expired.
+  Run a fresh CLI OAuth round, then verify only required secret names and the
+  absence of `SENTRY_DSN`; do not read secret values.
+- The live staging and production Workers are healthy and provider-backed but
+  still report superseded source `14747bb`. No launch-valid request IDs are
+  claimed for the pending source.
+- The wired iPhone is paired, trusted, in Developer Mode, USB-visible, and
+  visible to `xctrace`, but CoreDevice/DDI services, the tunnel, active process
+  probe, and runnable Xcode destination fail. It is not device-ready.
 - The public privacy, support, and safety pages are reachable and disclose
   sampled frames, Apple Speech behavior, Cloudflare diagnostics, OpenAI's
-  default abuse-monitoring retention limit, and the support email.
-- App Store Connect previously showed version `1.0.0` as Prepare for
-  Submission, four 6.5-inch screenshots, no selected build, the correct review
-  email, no login requirement, and manual release. The later TestFlight view did
-  not finish loading before the Apple session expired, so no current TestFlight
-  build state is claimed.
-- Expo/EAS authentication is still pending direct Apple passkey approval.
+  default abuse-monitoring retention limit, and the support email. The corrected
+  raw-audio and support-retention wording is not live until the replacement
+  commit is deployed and verified.
+- App Store Connect currently shows version `1.0.0` as Prepare for Submission,
+  four accepted 6.5-inch screenshots, no selected build, the correct review
+  email, no login requirement, and manual release. TestFlight has only expired
+  build `2`. App Privacy is an unpublished draft and must be corrected before
+  publication.
+- EAS is logged out and `EXPO_TOKEN` is absent. Expo authentication is required
+  only if the EAS path is selected; direct Xcode/App Store upload remains
+  available after every earlier gate passes.
 
 ## Privacy And Release Boundaries
 
@@ -78,6 +87,9 @@ every required item below has real evidence.
   be answered `No` only after the submitted archive confirms that state.
 - Camera frames are sampled rather than continuous video. They may be processed
   by OpenAI through the Guide Pup backend.
+- Guide Pup does not collect or retain raw Apple Speech audio. A support email
+  may provide and retain the sender's name, email address, message, and
+  voluntarily supplied troubleshooting details; users may request deletion.
 - `store: false` is requested for provider calls, but Guide Pup does not claim
   zero retention. OpenAI default abuse-monitoring retention may still apply
   unless the account has separately approved retention controls.

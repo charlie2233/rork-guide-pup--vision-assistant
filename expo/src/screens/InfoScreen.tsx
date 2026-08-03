@@ -39,7 +39,7 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
   privacy: {
     title: "Privacy Summary",
     summary:
-      "This short summary covers sampled camera frames, optional Apple speech recognition, an installation-scoped identifier, and bounded diagnostics.",
+      "This short summary covers sampled camera frames, optional Apple speech recognition, support requests, an installation-scoped identifier, and bounded diagnostics.",
     sections: [
       {
         title: "Scene guidance",
@@ -47,7 +47,11 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
       },
       {
         title: "Voice and Apple Speech",
-        body: "Hands-free commands are optional. Guide Pup prefers on-device speech recognition when iOS supports it; otherwise Apple speech recognition may process voice audio. Guide Pup does not intentionally send raw voice audio to its vision providers.",
+        body: "Hands-free commands are optional. Guide Pup prefers on-device speech recognition when iOS supports it; otherwise Apple speech recognition may process voice audio. Guide Pup does not collect or retain raw voice audio and does not send it to its vision providers.",
+      },
+      {
+        title: "Support requests",
+        body: "Opening support and sending an email may provide the sender name, email address, message, and troubleshooting details. The support mailbox may retain that information as needed to respond to and manage requests. Do not send camera images, voice recordings, credentials, or medical details.",
       },
       {
         title: "Diagnostics",
@@ -83,7 +87,7 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
     sections: [
       {
         title: "What to include",
-        body: "Stop guidance first, then include the screen you were on, the device model, the app version, and whether the issue happened on iPhone or Android.",
+        body: "Stop guidance first, then include the screen you were on, the device model, the app version, and whether the issue happened on iPhone or Android. Emailing support may share your sender name, email address, message, and these troubleshooting details; the support mailbox may retain them as needed to respond to and manage your request.",
       },
       {
         title: "What support is for",

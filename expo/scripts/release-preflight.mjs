@@ -1271,6 +1271,9 @@ function getLivePublicPageSpecs() {
       requiredMarkers: [
         "guide pup privacy policy",
         "voice and apple speech",
+        "guide pup does not collect or retain raw voice audio",
+        "sender's name, email address, message",
+        "support emails may remain in the support mailbox as needed to answer and manage the request",
         "cloudflare observability",
         "openai",
         launchInputs.supportEmail,
@@ -1284,6 +1287,7 @@ function getLivePublicPageSpecs() {
         "support - guide pup",
         "camera permission",
         "emergency services",
+        "the support mailbox may retain that information as needed to respond to and manage your request",
         launchInputs.supportEmail,
       ],
       url: publicUrls.supportUrl,
@@ -1454,7 +1458,9 @@ function validateIosPrivacySurface() {
   const expectedCollectedData = new Map([
     ["NSPrivacyCollectedDataTypePhotosorVideos", { linked: true, purposes: [appFunctionality] }],
     ["NSPrivacyCollectedDataTypeEnvironmentScanning", { linked: true, purposes: [appFunctionality, analytics] }],
-    ["NSPrivacyCollectedDataTypeAudioData", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeName", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeEmailAddress", { linked: true, purposes: [appFunctionality] }],
+    ["NSPrivacyCollectedDataTypeCustomerSupport", { linked: true, purposes: [appFunctionality] }],
     ["NSPrivacyCollectedDataTypeDeviceID", { linked: true, purposes: [appFunctionality] }],
     ["NSPrivacyCollectedDataTypeProductInteraction", { linked: true, purposes: [appFunctionality, analytics] }],
     ["NSPrivacyCollectedDataTypePerformanceData", { linked: true, purposes: [appFunctionality, analytics] }],

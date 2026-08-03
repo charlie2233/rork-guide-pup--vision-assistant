@@ -144,8 +144,8 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     appJson.expo.plugins.push("@sentry/react-native/expo");
     writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
 
-    const audioEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
-      (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeAudioData",
+    const emailEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
+      (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeEmailAddress",
     );
     const photosEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
       (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypePhotosorVideos",
@@ -156,8 +156,8 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     const environmentScanningEntry = privacyManifest.NSPrivacyCollectedDataTypes.find(
       (entry) => entry.NSPrivacyCollectedDataType === "NSPrivacyCollectedDataTypeEnvironmentScanning",
     );
-    assert.ok(audioEntry && photosEntry && interactionEntry && environmentScanningEntry);
-    audioEntry.NSPrivacyCollectedDataTypeLinked = false;
+    assert.ok(emailEntry && photosEntry && interactionEntry && environmentScanningEntry);
+    emailEntry.NSPrivacyCollectedDataTypeLinked = false;
     photosEntry.NSPrivacyCollectedDataTypeTracking = true;
     interactionEntry.NSPrivacyCollectedDataTypePurposes = ["NSPrivacyCollectedDataTypePurposeAnalytics"];
     environmentScanningEntry.NSPrivacyCollectedDataTypeLinked = false;
@@ -288,7 +288,7 @@ test("preview preflight is order-independent and rejects unsafe release mutation
     assert.match(output, /Direct Xcode EAS testflight effective EXPO_PUBLIC_API_BASE_URL must be .*found "https:\/\/wrong-testflight\.example"/);
     assert.match(output, /Direct Xcode EAS store effective EXPO_PUBLIC_SUPPORT_URL must be .*found "https:\/\/wrong-store\.example"/);
     assert.match(output, /Direct Xcode EAS preview effective EXPO_PUBLIC_PRIVACY_POLICY_URL must be .*found "https:\/\/wrong-eas-runner\.example"/);
-    assert.match(output, /AudioData linked flag must be "true", found "false"/);
+    assert.match(output, /EmailAddress linked flag must be "true", found "false"/);
     assert.match(output, /PhotosorVideos tracking flag must be "false", found "true"/);
     assert.match(output, /ProductInteraction purposes must be exactly/);
     assert.match(output, /EnvironmentScanning linked flag must be "true", found "false"/);

@@ -159,9 +159,11 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
   assert.deepEqual(
     collectedTypes,
     new Set([
-      "NSPrivacyCollectedDataTypeAudioData",
+      "NSPrivacyCollectedDataTypeCustomerSupport",
       "NSPrivacyCollectedDataTypeDeviceID",
+      "NSPrivacyCollectedDataTypeEmailAddress",
       "NSPrivacyCollectedDataTypeEnvironmentScanning",
+      "NSPrivacyCollectedDataTypeName",
       "NSPrivacyCollectedDataTypeOtherDiagnosticData",
       "NSPrivacyCollectedDataTypePerformanceData",
       "NSPrivacyCollectedDataTypePhotosorVideos",
@@ -190,6 +192,8 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
     "sampled compressed camera frames",
     "installation-scoped bootstrap token",
     "Apple speech recognition may process voice audio",
+    "Guide Pup does not collect or retain raw voice audio",
+    "The support mailbox may retain that information as needed to respond to and manage requests",
     "Derived guidance results such as confidence, direction, and hazard level support service-quality analytics, not tracking",
     "does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers",
   ]) {
@@ -200,7 +204,9 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
   for (const disclosure of [
     "sampled camera frames",
     "image-derived environment-scanning data",
-    "voice audio used for Apple speech recognition",
+    "Guide Pup does not collect or retain raw voice audio",
+    "sender's name, email address, message",
+    "Support emails may remain in the support mailbox as needed to answer and manage the request",
     "installation-scoped device identifier",
     "product interactions, request identifiers",
     "latency and performance measurements",
@@ -217,6 +223,10 @@ test("native manifest, in-app summary, and public privacy policy disclose the sa
   const privacyMatrix = normalizeWhitespace(read("../docs/privacy-answer-matrix.md"));
   assert.match(privacyMatrix, /SecureStore uses the iOS Keychain, so these values may persist after uninstall/i);
   assert.match(privacyMatrix, /request deletion by emailing `charliehan112@gmail\.com`/i);
+  assert.match(privacyMatrix, /Audio Data: `No`/i);
+  assert.match(privacyMatrix, /Name: `Yes`/i);
+  assert.match(privacyMatrix, /Email Address: `Yes`/i);
+  assert.match(privacyMatrix, /Customer Support: `Yes`/i);
   assert.doesNotMatch(privacyMatrix, /uninstall[^.]*deletes?[^.]*installation/i);
 });
 

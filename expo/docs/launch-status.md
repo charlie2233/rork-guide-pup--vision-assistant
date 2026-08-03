@@ -1,13 +1,26 @@
 # Guide Pup Launch Status
 
-Last updated: 2026-07-29
+Last updated: 2026-08-02
 
 ## Current decision
 
-Guide Pup is **not ready for App Store submission yet**. Cloud provider routing, required Cloudflare secret names, Apple identifiers, distribution signing, exact-revision dual-lane provider smoke, and a clean Release simulator build are verified, but the current iPhone execution path is blocked and no signed Store/validation twin exists. Submission remains intentionally blocked on signed-binary evidence, sensory no-screen validation, TestFlight retest, and final App Store Connect completion.
+Guide Pup is **not ready for TestFlight upload or App Store submission**. The
+locally signed `1.0.0 (4)` Store/validation candidate from `064cf7f` is
+superseded by a required privacy-declaration correction and must not be
+uploaded. A new exact-revision candidate does not exist yet. Submission remains
+blocked on a committed replacement source, matching cloud deployment and smoke,
+physical no-screen validation, a processed TestFlight repeat, and final App
+Store Connect completion.
 
 Current hard blockers:
 
+- Commit and push the corrected privacy manifest, in-app summary, public policy,
+  App Privacy answer matrix, release gate, and tests; then rerun the full source,
+  backend, release-evidence, and iOS archive/export matrix from that exact clean
+  revision.
+- Reauthenticate Wrangler, reverify staging and production secret **names**
+  without reading values, prove `SENTRY_DSN` absent, deploy the exact replacement
+  revision, and run strict provider-backed guidance and scene-query smokes.
 - Rebuild the exact post-fix revision, install it on the wired iPhone, and complete the no-screen sequence with spoken input/output, VoiceOver, audible earcons, felt haptics, interruption recovery, settings persistence, native camera capture, explicit JS fallback capture, and partial STOP cut-through. No sensory pass is inferred from process liveness.
 - Restore the iPhone execution path for the exact-candidate run. The latest
   suffix-only readiness check is `blocked`: pairing, Developer Mode, and
@@ -17,40 +30,48 @@ Current hard blockers:
 - Keep the generated staging/production smoke artifacts matched to the final
   tracked candidate commit, then bind their sanitized request IDs and the
   signed binary hash into candidate and no-screen evidence.
-- Upload that same archive to TestFlight, wait for processing, install it, repeat the no-screen smoke, then finish screenshots, App Privacy, App Accessibility, build selection, agreements, App Review metadata, and a final authenticated URL recheck in App Store Connect.
+- Complete separate internal-tester and blind-participant validation on the
+  validation IPA before uploading the normalized-payload-equivalent Store IPA.
+- After Apple processes that Store build, install it through TestFlight and
+  repeat the blind-participant no-screen run. Only then publish matching App
+  Privacy answers, select the build, recheck agreements/compliance/review
+  metadata, and submit. Apple's optional accessibility label can be prepared
+  from the blind run and published after version `1.0` is live; it is not a
+  substitute for the required blind validation.
 
 The launch iOS client vendors no Sentry SDK, so missing Sentry credentials are not a blocker. EAS authentication is required only if the EAS path is selected; direct Xcode/App Store upload remains an alternative.
 
-Current local evidence:
+Current evidence:
 
-- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
-  was deployed to staging and production; strict dual-lane smoke passed
-  provider-backed with `gpt-5.6-sol`, prompt `2026-07-18.v1`, strict Structured
-  Outputs, and sanitized request IDs. Staging guidance/scene-query IDs were
-  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` /
-  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4`; production IDs were
-  `aca939c4-4418-4b1a-b82b-19f03d0c168f` /
-  `2b7a226a-cb01-4317-b668-e24f92a8696a`. The resulting
-  evidence/documentation commit must be redeployed and re-smoked before the
-  signed archive so the generated latest artifacts match candidate HEAD.
-- A signed `87196ef` Ad Hoc candidate previously installed and launched on the paired/trusted Developer Mode iPhone. Its archive, IPA, candidate manifest, smoke files, and physical launch are superseded by the pending no-Sentry source and must not be submitted.
-- Apple's Environment Scanning category is declared as linked, for App Functionality and Analytics, with no tracking. Derived confidence, direction, and hazard-level results support bounded service-quality analysis; Photos or Videos remains App Functionality only.
-- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. No current build is selected; App Privacy and App Accessibility are not published. Four truthful `1284 x 2778` screenshots are saved in the live 6.5-inch slot, and support, marketing, and privacy URLs are present.
-- Wrangler is authenticated to the intended Cloudflare account, and staging/production each contain `OPENAI_API_KEY` and `BOOTSTRAP_SIGNING_SECRET`. Secret values were not read or logged.
-- Current validation passes Expo typecheck, lint, Expo Doctor `17/17`, all Expo
-  Node contracts `295/295`, no-screen/privacy integration `97/97`, release
-  evidence `62/62`, backend typecheck, backend privacy/safety `58/58`, backend
-  smoke/evidence `32/32`, both Cloudflare required-secret checks, both Worker
-  dry-runs, and `git diff --check`. Clean exact-revision Release simulator
-  build, install, and launch pass with no fatal launch-log match. This is not
-  signed-device, physical accessibility, or camera evidence.
-- EAS is not authenticated and no `EXPO_TOKEN` is present. App Store Connect
-  authentication and live build state must be reverified before live build or
-  metadata changes.
-- Runtime/backend, no-screen, and candidate-evidence reviews are closed with no
-  open P0/P1/P2 findings. Focused dependency exploitability review found no
-  P0/P1 production-iOS path; build-host parser exposure and final bundle
-  exclusion of DevTools/Babel `wrapRegExp` remain documented residual checks.
+- Staging and production are healthy and provider-backed on `gpt-5.6-sol`,
+  prompt `2026-07-18.v1`, and strict Structured Outputs, but both report source
+  revision `14747bb`. That revision is stale and no existing request ID is
+  launch evidence for the pending replacement commit.
+- `npx --yes wrangler@4.79.0 whoami` currently reports unauthenticated. The user
+  completed browser sign-in after the CLI listener expired, so a fresh CLI OAuth
+  round is required. Required secret names and absence of `SENTRY_DSN` must be
+  reverified after authentication; no secret value may be read or logged.
+- The clean `064cf7f` archive, Store IPA, and device-authorized validation IPA
+  passed local signing, normalized-payload, production-config, and forbidden
+  client-secret inspection. They are nevertheless superseded by the privacy
+  source change and must not be uploaded or used for physical evidence.
+- The replacement manifest removes Guide Pup Audio Data and declares Name,
+  Email Address, and Customer Support for support emails. Together with Photos
+  or Videos, Environment Scanning, Device ID, Product Interaction, Performance
+  Data, and Other Diagnostic Data, the source now contains nine collected-data
+  types, all no-tracking. The focused privacy and adversarial release suite
+  passes `23/23`; the full matrix and signed artifacts must be rerun after commit.
+- The App Store record is `6756947790`, version `1.0.0`, build target `4`, bundle
+  `app.rork.guide-pup-vision-assist`, team `K99RADPB9G`. The authenticated record
+  has four accepted `1284 x 2778` screenshots, no selected build, and only
+  expired TestFlight build `2`. App Privacy is an unpublished draft and must be
+  synchronized to the corrected nine-category matrix. No submission was made.
+- The iPhone is paired, trusted, in Developer Mode, physically visible over USB,
+  and visible to `xctrace`, but CoreDevice/DDI services, the tunnel, active probe,
+  and runnable Xcode destination do not pass. No physical accessibility, audio,
+  haptic, camera, internal-tester, or blind-participant pass is claimed.
+- EAS is not authenticated and no `EXPO_TOKEN` is present. Direct Xcode archive
+  and App Store upload remain available once every earlier gate passes.
 - The unused direct `axios` dependency is removed. `bun audit` still reports
   `50` advisories (`1` critical, `27` high, `17` moderate, `5` low) in Expo,
   React Native, Metro, Babel, ESLint, and React DevTools dependency chains.
@@ -60,7 +81,9 @@ Current local evidence:
   migration; the nonzero audit remains documented dependency-maintenance and
   build-host risk, with final Release-bundle inspection still required.
 
-All detailed backend and release sections below are retained as phase history. The decision and evidence above are authoritative for the current candidate.
+All detailed backend and release sections below are retained as phase history.
+Only the decision and evidence above are authoritative for the pending
+replacement candidate.
 
 ## Public site
 
@@ -130,7 +153,7 @@ All detailed backend and release sections below are retained as phase history. T
 - Sentry mode: `disabled`; client SDK absent
 - Sentry build behavior: preview/TestFlight/store and direct Xcode builds contain no Sentry dependency, plugin, pod, wrapper, upload phase, or DSN variable
 - Sentry archive gate: candidate verification rejects an embedded Sentry payload, configured DSN, or Crash Data privacy-manifest declaration
-- Privacy manifest gate: preflight validates the authoritative six collected-data categories, exact purposes, linked flags, and no-tracking flags without depending on entry or purpose order
+- Privacy manifest gate: preflight validates the authoritative collected-data set, exact purposes, linked flags, and no-tracking flags without depending on entry or purpose order
 - Expo auth status:
   - `printenv EXPO_TOKEN`: empty
   - `npx --yes eas-cli whoami`: `Not logged in`

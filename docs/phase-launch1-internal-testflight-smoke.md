@@ -4,83 +4,88 @@ Date: 2026-05-22
 Branch: `codex/guidepup-credentialed-launch`
 Commit at phase start: `c2b8781`
 
-## Current gate on 2026-07-29
+## Current gate on 2026-08-02
 
-- Apple identifiers are confirmed: App Store Connect app `6756947790`, bundle `app.rork.guide-pup-vision-assist`, version `1.0.0`, target build `4`, team `K99RADPB9G`, SKU `EX1766553072106`, and copyright `2026 XIANMIN CHEN`. Support email is `charliehan112@gmail.com`.
-- App Store Connect version `1.0.0` was last authenticated as Prepare for Submission. App Store Connect accepted all four truthful direct-capture iPhone screenshots at `1284 x 2778`: `01-welcome.png`, `02-how-to-use.png`, `03-voice-settings.png`, `04-safe-stop-fallback.png`. No current build is selected.
-- Current review metadata uses `charliehan112@gmail.com`, does not require
-  account login, and uses manual release. The later TestFlight page did not
-  finish loading before the Apple session expired, so no current TestFlight
-  build state is claimed.
-- The live public privacy, support, and safety pages are reachable and match the
-  repository. They disclose sampled frames, Apple Speech behavior, bounded
-  Cloudflare diagnostics, OpenAI default retention limits, and
-  `charliehan112@gmail.com`.
-- Cloudflare OAuth is authenticated. Staging and production expose
-  `BOOTSTRAP_SIGNING_SECRET` and `OPENAI_API_KEY` without revealing values. No
-  secret value was read or logged.
-- Reviewed commit `5ad0b740669fdfd70cabbf5e06ff5ccc742fc5c4`
-  was deployed to both environments and passed strict provider-backed
-  guidance/scene-query smoke. Staging analyze request IDs were
-  `dd8abaa0-e0ad-4612-be43-7ec20fe1dc77` and
-  `cda8632c-c11e-4ad7-8919-3a4ee4882eb4`; production analyze request IDs were
-  `aca939c4-4418-4b1a-b82b-19f03d0c168f` and
-  `2b7a226a-cb01-4317-b668-e24f92a8696a`.
-- The final candidate HEAD must be redeployed and re-smoked after this
-  evidence/documentation commit. Generated latest smoke files are the only
-  allowed dirty backend evidence and must match the archive source revision.
-- The pending launch source removes the Sentry client dependency, Expo plugin, CocoaPods, native wrapper/upload phase, DSN configuration, and orphaned `sentry.properties`. Shipping diagnostics remain sanitized and local. Release preflight rejects the return of any SDK, pod, plugin, native phase, DSN variable, or properties file; archive verification separately rejects embedded Sentry payloads, a configured DSN, and Crash Data privacy-manifest declarations.
-- The latest suffix-only iPhone readiness probe is `blocked`. Pairing,
-  Developer Mode, and `xctrace` visibility remain, but developer services and
-  the CoreDevice tunnel are unavailable, no USB or connected same-LAN path is
-  present, Xcode has no runnable destination, and the active CoreDevice process
-  probe fails.
-- Runtime and backend P0/P1 review is closed. The complete Expo script matrix
-  passes `295/295`; the no-screen/privacy integration passes `97/97`; release
-  evidence passes `62/62`; backend privacy/runtime passes `58/58`; backend
-  smoke/provenance passes `32/32`; both typechecks, Expo lint, Expo Doctor
-  `17/17`, Worker dry-runs, and `git diff --check` pass. Independent no-screen
-  and candidate-evidence spec/code-quality reviews report no open P0/P1/P2
-  findings. Focused dependency exploitability review is also closed with the
-  documented build-host and final-bundle residual checks below.
-- EAS still reports unauthenticated and no `EXPO_TOKEN` is present. App Store
-  Connect authentication and live build state must be reverified before any
-  metadata or build mutation.
-- No exact Store and validation IPA twins, physical no-screen v3 evidence,
-  upload attempt, processed TestFlight build, or TestFlight blind repeat
-  exists.
-- `bun audit` remains nonzero at `50` advisories. Focused exploitability review
-  found no P0/P1 production-iOS path: React Native gates
-  `react-devtools-core` behind `__DEV__`, and the critical `shell-quote`
-  `quote()` API has no current caller. Build-host parser risk remains, and
-  `@babel/runtime` exclusion still needs final release-bundle inspection. No
-  broad transitive override is applied.
+Decision: **do not upload to TestFlight, submit to App Review, or merge to
+`main`**.
+
+- Apple identity is authenticated and confirmed: app `6756947790`, bundle
+  `app.rork.guide-pup-vision-assist`, version/build `1.0.0 (4)`, team
+  `K99RADPB9G`, SKU `EX1766553072106`, copyright `2026 XIANMIN CHEN`, and
+  support email `charliehan112@gmail.com`.
+- App Store Connect accepted all four truthful direct-capture iPhone screenshots
+  at `1284 x 2778`: `01-welcome.png`, `02-how-to-use.png`, `03-voice-settings.png`, `04-safe-stop-fallback.png`.
+  No current build is selected. TestFlight contains only expired build `2`.
+  Current review metadata uses `charliehan112@gmail.com`, requires no account
+  login, and uses manual release. App Privacy is an unpublished draft. No upload, TestFlight
+  processing, build attachment, App Review submission, or Apple acceptance is
+  claimed.
+- Independent privacy review found a P0 mismatch before publication. The source
+  now removes Guide Pup Audio Data because raw Apple Speech audio is not
+  collected or retained by Guide Pup. It adds Name, Email Address, and Customer
+  Support for support email, all linked, App Functionality, and no tracking.
+  Together with Photos or Videos, Environment Scanning, Device ID, Product
+  Interaction, Performance Data, and Other Diagnostic Data, the corrected
+  manifest has nine collected-data types.
+- The public privacy and support source now discloses support mailbox retention
+  and that Guide Pup does not collect raw Apple Speech audio. Store preflight
+  requires those exact live markers. The live Pages deployment is still the old
+  policy until the corrected commit is deployed; the App Privacy draft must not
+  be published before that verification.
+- The clean signed Store IPA and device-authorized validation IPA from `064cf7f`
+  passed local signing, normalized-payload, production-config, and forbidden
+  client-secret inspection. They are superseded by the privacy correction and
+  must not be uploaded or used as physical evidence.
+- Staging and production remain healthy, provider-backed on `gpt-5.6-sol`,
+  prompt `2026-07-18.v1`, and strict Structured Outputs, but both report source
+  `14747bb`. No existing request ID is launch-valid for the pending replacement
+  commit.
+- `wrangler whoami` is unauthenticated. The browser callback arrived after the
+  CLI listener expired. A fresh CLI OAuth round is required, followed by a
+  names-only check for `OPENAI_API_KEY`, `BOOTSTRAP_SIGNING_SECRET`, and absence
+  of `SENTRY_DSN`. No value may be read or logged.
+- The iPhone is paired, trusted, in Developer Mode, physically USB-visible, and
+  visible to `xctrace`, but CoreDevice/DDI services, the tunnel, active process
+  probe, and runnable Xcode destination fail. No physical voice, VoiceOver,
+  audible-cue, haptic, camera, interruption, persistence, internal-tester, or
+  blind-participant result is claimed.
+- EAS is logged out and `EXPO_TOKEN` is absent. EAS requires Expo authentication
+  only if selected; direct Xcode/App Store upload remains an alternative after
+  every earlier gate passes.
+- Independent reviewers found no remaining privacy-taxonomy P0/P1 after the
+  unverified backend-secret statement was corrected. Current local validation:
+  Expo contracts `304/304`, focused privacy/release tests `23/23`, backend
+  privacy/runtime `58/58`, backend smoke/provenance `32/32`, both typechecks,
+  Expo lint, Expo Doctor `17/17`, staging and production Worker dry-runs,
+  `plutil -lint`, and `git diff --check` pass. A new clean signed archive/export
+  remains required after commit.
 
 Commands:
 
 ```bash
-npm --prefix expo run release:preflight:preview
-npm --prefix expo run release:preflight:testflight
-npm --prefix expo run release:preflight:store
-npm --prefix backend/guidepup-api run test:smoke
-npm --prefix expo run check:no-screen-evidence
-npm --prefix expo run check:ios-device -- --json
+plutil -lint expo/ios/GuidePupVisionAssistant/PrivacyInfo.xcprivacy
+node --test expo/scripts/*.test.mjs
 npm --prefix expo run typecheck
 npm --prefix expo run lint
-(cd expo && npx expo-doctor)
-(cd expo && npx --yes bun@1.3.8 audit)
-npm --prefix backend/guidepup-api run check:staging
-npm --prefix backend/guidepup-api run check
+(cd expo && npx --yes expo-doctor)
+npm --prefix backend/guidepup-api run typecheck
+npm --prefix backend/guidepup-api run test:privacy
+npm --prefix backend/guidepup-api run test:smoke
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env staging
+npm --prefix backend/guidepup-api run deploy:dry-run -- --env production
+npm --prefix expo run release:preflight:preview
 git diff --check
 ```
 
-Submission decision: do not upload or submit yet. Required remaining order is
-close candidate-evidence and dependency review -> commit/push -> deploy and
-strictly smoke the exact revision -> build and inspect normalized
-Store/validation twins -> install the validation IPA and complete internal plus
-blind no-screen v3 evidence -> upload/process/install through TestFlight ->
-complete the blind TestFlight repeat -> publish truthful
-privacy/accessibility answers -> final authenticated review -> submit.
+Required remaining order: commit and push the corrected source -> authenticate
+Cloudflare -> verify secret names -> deploy and strictly smoke the exact revision
+-> deploy and verify public policy/support -> rebuild and inspect normalized
+Store/validation twins -> complete distinct internal and blind no-screen v3 runs
+on the validation IPA -> upload/process/install through TestFlight -> complete
+the blind TestFlight repeat -> publish App Privacy -> select the build and recheck
+agreements/compliance/review metadata -> submit. The optional Apple accessibility
+label is prepared from blind evidence and published after version `1.0` is live;
+it is not a substitute for blind validation or an App Review blocker.
 
 ## Current gate on 2026-07-20
 

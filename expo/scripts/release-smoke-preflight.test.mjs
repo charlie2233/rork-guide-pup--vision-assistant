@@ -1813,7 +1813,43 @@ test("store preflight rejects stale or unsuccessful live pages even when local p
     const staleOutput = staleResult.stdout + staleResult.stderr;
     assert.equal(staleResult.status, 1, staleOutput);
     assert.match(staleOutput, /Live support is missing required current marker "charliehan112@gmail\.com"/);
+    assert.match(
+      staleOutput,
+      /Live support is missing required current marker "the support mailbox may retain that information as needed to respond to and manage your request"/,
+    );
     assert.match(staleOutput, /Live support still contains stale or launch-internal marker "launch rehearsal"/);
+
+    const obsoletePrivacyPages = buildPublicPageResponses();
+    obsoletePrivacyPages[launchInputs.privacyPolicyUrl].body = [
+      "Guide Pup Privacy Policy",
+      "Voice and Apple Speech",
+      "Cloudflare observability",
+      "OpenAI",
+      launchInputs.supportEmail,
+    ].join(". ");
+    const obsoletePrivacyResult = runPreflight(
+      fixtureExpo,
+      "store",
+      fakeBin,
+      publicFetchPreload,
+      {
+        GUIDEPUP_TEST_PUBLIC_PAGE_RESPONSES: JSON.stringify(obsoletePrivacyPages),
+      },
+    );
+    const obsoletePrivacyOutput = obsoletePrivacyResult.stdout + obsoletePrivacyResult.stderr;
+    assert.equal(obsoletePrivacyResult.status, 1, obsoletePrivacyOutput);
+    assert.match(
+      obsoletePrivacyOutput,
+      /Live privacy policy is missing required current marker "guide pup does not collect or retain raw voice audio"/,
+    );
+    assert.match(
+      obsoletePrivacyOutput,
+      /Live privacy policy is missing required current marker "sender's name, email address, message"/,
+    );
+    assert.match(
+      obsoletePrivacyOutput,
+      /Live privacy policy is missing required current marker "support emails may remain in the support mailbox as needed to answer and manage the request"/,
+    );
 
     const unavailablePages = buildPublicPageResponses();
     unavailablePages[launchInputs.privacyPolicyUrl].status = 503;
