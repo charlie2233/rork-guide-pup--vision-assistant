@@ -1350,4 +1350,13 @@ test("native voice startup failure is not mislabeled as a JS recognition fallbac
 
   assert.match(catchBlock, /available: true,[\s\S]*executionPath: "native-voice"/);
   assert.doesNotMatch(catchBlock, /executionPath: "js-fallback"/);
+
+  const home = read("../src/screens/HomeScreen.tsx");
+  const homeStartVoiceBlock = home
+    .split("const startVoiceSession = useCallback")[1]
+    .split("const speakVoiceResponse = useCallback")[0];
+  const homeCatchBlock = homeStartVoiceBlock.slice(homeStartVoiceBlock.lastIndexOf("catch (error)"));
+
+  assert.match(homeCatchBlock, /available: true,[\s\S]*executionPath: "native-voice"/);
+  assert.doesNotMatch(homeCatchBlock, /executionPath: "js-fallback"/);
 });

@@ -247,7 +247,7 @@ export default function HomeScreen() {
     } catch (error) {
       recordVoiceSnapshot({
         available: true,
-        executionPath: "js-fallback",
+        executionPath: "native-voice",
         lastError: error instanceof Error ? error.message : "Unable to start voice control.",
         listening: false,
       });
