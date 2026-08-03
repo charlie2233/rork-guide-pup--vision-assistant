@@ -16,11 +16,6 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
-function cleanOptionalText(value?: string) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 function deriveConfidence(raw: ProviderVision) {
   if (typeof raw.confidence === "number") {
     return clamp(raw.confidence);
@@ -50,7 +45,7 @@ function deriveHazardLevel(raw: ProviderVision, tags: string[]) {
     return "medium";
   }
 
-  return "low";
+  return raw.pathClear === true ? "none" : "low";
 }
 
 function deriveDirection(raw: ProviderVision, hazardLevel: VisionAnalyzeResponse["hazardLevel"]) {
@@ -126,17 +121,23 @@ function buildMessage(response: Omit<VisionAnalyzeResponse, "message">, raw: Pro
 export function createSafeFallbackResponse(
   metadata: NormalizeMetadata,
   message = "Stop. Vision guidance is unavailable.",
+  fallbackReason = "safe-fallback",
 ) {
   return VisionAnalyzeResponseSchema.parse({
     confidence: 0,
     direction: "stop",
+    fallbackReason,
     hazardLevel: "high",
     latencyMs: metadata.latencyMs,
+    lighting: "unknown",
     message,
     model: metadata.model,
     obstacle: true,
     promptVersion: metadata.promptVersion,
     provider: metadata.provider,
+    sceneDescription: "Vision guidance is unavailable.",
+    surfaceType: "unknown",
+    walkability: "uncertain",
   });
 }
 
@@ -145,11 +146,21 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
   const hazardLevel = deriveHazardLevel(raw, safetyTags);
   const confidence = clamp(deriveConfidence(raw));
   const direction = deriveDirection(raw, hazardLevel);
-  const obstacle = hazardLevel !== "none" || raw.obstacles.length > 0 || direction === "stop";
+  const hasCloseObstacle = raw.obstacles.some((obstacle) =>
+    obstacle.distance === "very-close" || obstacle.distance === "close");
+  const hasPathBlockingObstacle = raw.obstacles.some((obstacle) =>
+    obstacle.position === "center" && obstacle.distance !== "far");
+  const obstacle =
+    direction === "stop"
+    || hasCloseObstacle
+    || hasPathBlockingObstacle
+    || hazardLevel === "medium"
+    || hazardLevel === "high";
 
   const normalizedBase: Omit<VisionAnalyzeResponse, "message"> = {
     confidence,
     direction,
+    fallbackReason: null,
     hazardLevel,
     latencyMs: metadata.latencyMs,
     lighting: raw.lighting,
@@ -157,8 +168,9 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
     obstacle,
     promptVersion: metadata.promptVersion,
     provider: metadata.provider,
-    sceneDescription: cleanOptionalText(raw.sceneDescription),
-    surfaceType: cleanOptionalText(raw.surfaceType),
+    sceneDescription: raw.sceneDescription,
+    surfaceType: raw.surfaceType,
+    walkability: raw.walkability,
   };
 
   const normalized = VisionAnalyzeResponseSchema.parse({
@@ -168,6 +180,10 @@ export function normalizeProviderVision(raw: ProviderVision, metadata: Normalize
 
   return applySafetyOverrides(normalized, {
     confidence,
+    hasCloseObstacle,
+    hasPathBlockingObstacle,
+    lighting: raw.lighting,
+    pathClear: raw.pathClear,
     safetyTags,
     walkability: raw.walkability,
   });

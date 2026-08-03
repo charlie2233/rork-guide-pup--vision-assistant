@@ -1,9 +1,11 @@
-import { type AnalyzeFrameInput, VisionAI, VisionAnalysis } from "./VisionAI";
+import { type AnalyzeFrameInput, type AnalyzeFrameOptions, VisionAI } from "./VisionAI";
+import { applyDeterministicVisionSafetyGuard } from "../lib/runtimeSafety";
 
 export interface GuideAIDirection {
   confidence?: number;
   direction: "turn-left" | "turn-right" | "forward" | "stop";
   hazardLevel?: "none" | "low" | "medium" | "high";
+  fallbackReason?: string | null;
   latencyMs?: number;
   obstacle: boolean;
   message: string;
@@ -13,6 +15,7 @@ export interface GuideAIDirection {
   sceneDescription?: string;
   surfaceType?: string;
   lighting?: string;
+  walkability?: "clear" | "caution" | "uncertain";
 }
 
 type Direction = GuideAIDirection["direction"];
@@ -325,46 +328,59 @@ export const GuideAI = {
   },
 
   async analyzeWithVision(
-    frame: AnalyzeFrameInput
+    frame: AnalyzeFrameInput,
+    options?: AnalyzeFrameOptions,
   ): Promise<GuideAIDirection | null> {
-    const result = await VisionAI.analyzeFrame(frame);
+    const analysisStartedAtMs = Date.now();
+    const result = await VisionAI.analyzeFrame(frame, options);
+    const updateNavigationMemory =
+      options?.interactionMode !== "scene-query" && options?.updateNavigationMemory !== false;
 
     if (!result.success || !result.analysis) {
-      lastDirection = "stop";
-      lastConfidence = 0;
+      if (updateNavigationMemory) {
+        lastDirection = "stop";
+        lastConfidence = 0;
+      }
       return {
         direction: "stop",
+        fallbackReason: "analysis-unavailable",
+        hazardLevel: "high",
+        lighting: "unknown",
+        sceneDescription: "Vision guidance is unavailable.",
+        surfaceType: "unknown",
+        walkability: "uncertain",
         obstacle: true,
         message: "Stopping: guidance connection unavailable.",
       };
     }
 
-    const analysis = result.analysis;
+    const analysis = applyDeterministicVisionSafetyGuard(result.analysis, {
+      analysisLatencyMs: Date.now() - analysisStartedAtMs,
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      recoveryGateActive: options?.recoveryGateActive,
+    });
 
-    const smoothed = smoothDirection(
-      analysis.direction,
-      analysis.confidence,
-      analysis.obstacle
-    );
-
-    const message =
-      smoothed.direction === analysis.direction
-        ? analysis.message
-        : buildMessage(smoothed.direction, analysis.obstacle, false);
+    if (updateNavigationMemory) {
+      lastDirection = analysis.direction;
+      lastConfidence = analysis.confidence;
+    }
 
     return {
       confidence: analysis.confidence,
-      direction: smoothed.direction,
+      direction: analysis.direction,
+      fallbackReason: analysis.fallbackReason,
       hazardLevel: analysis.hazardLevel,
       latencyMs: analysis.latencyMs,
       model: analysis.model,
       obstacle: analysis.obstacle,
-      message,
+      message: analysis.message,
       promptVersion: analysis.promptVersion,
       provider: analysis.provider,
       sceneDescription: analysis.sceneDescription,
       surfaceType: analysis.surfaceType,
       lighting: analysis.lighting,
+      walkability: analysis.walkability,
     };
   },
 

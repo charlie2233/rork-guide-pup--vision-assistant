@@ -8,7 +8,7 @@ import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { appConfig, isConfiguredUrl } from "@/src/lib/config";
 import { useGuidePupRouter } from "@/src/lib/router";
-import { captureAppError } from "@/src/lib/sentry";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 
 type InfoPageKey = "privacy" | "support" | "safety";
 
@@ -37,25 +37,33 @@ interface InfoPage {
 
 const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
   privacy: {
-    title: "Privacy Policy",
+    title: "Privacy Summary",
     summary:
-      "Review how Guide Pup handles camera frames, anonymous device data, and support requests before you rely on it.",
+      "This short summary covers sampled camera frames, optional Apple speech recognition, support requests, an installation-scoped identifier, and bounded diagnostics.",
     sections: [
       {
-        title: "What gets sent",
-        body: "Guide Pup sends compressed camera frames, a device bootstrap token, and minimal request metadata to the backend for navigation analysis.",
+        title: "Scene guidance",
+        body: "Guide Pup sends sampled compressed camera frames, an installation-scoped bootstrap token, a session identifier, and bounded request metadata to its backend for scene analysis, authentication, safety controls, and rate limiting.",
       },
       {
-        title: "What stays limited",
-        body: "The shipping client keeps provider secrets off device and is designed to collect only what is needed for navigation, debugging, and safety.",
+        title: "Voice and Apple Speech",
+        body: "Hands-free commands are optional. Guide Pup prefers on-device speech recognition when iOS supports it; otherwise Apple speech recognition may process voice audio. Guide Pup does not collect or retain raw voice audio and does not send it to its vision providers.",
       },
       {
-        title: "What to verify before launch",
-        body: "Confirm the final privacy policy URL, App Store privacy answers, and backend logging settings before TestFlight or App Store review.",
+        title: "Support requests",
+        body: "Opening support and sending an email may provide the sender name, email address, message, and troubleshooting details. The support mailbox may retain that information as needed to respond to and manage requests. Do not send camera images, voice recordings, credentials, or medical details.",
+      },
+      {
+        title: "Diagnostics",
+        body: "Guide Pup may retain bounded product-interaction, performance, provider, request, and sanitized error data. Derived guidance results such as confidence, direction, and hazard level support service-quality analytics, not tracking. Guide Pup does not intentionally log raw camera frames, raw voice audio, credentials, signed URLs, or installation identifiers.",
+      },
+      {
+        title: "Temporary camera files",
+        body: "The camera fallback removes temporary frame files after capture and retries bounded cleanup later if immediate deletion does not succeed. An operating-system cache file may remain until a retry or system cleanup.",
       },
     ],
-    actionLabel: "Open privacy policy",
-    actionHint: "Double tap to open the privacy policy in your browser.",
+    actionLabel: "Open full privacy policy",
+    actionHint: "Double tap to open the full privacy policy in your browser.",
     actionUrl: appConfig.privacyPolicyUrl,
     actionUrlMissingMessage: "Privacy policy URL is not configured yet.",
     relatedRoutes: [
@@ -79,7 +87,7 @@ const INFO_PAGES: Record<InfoPageKey, InfoPage> = {
     sections: [
       {
         title: "What to include",
-        body: "Stop guidance first, then include the screen you were on, the device model, the app version, and whether the issue happened on iPhone or Android.",
+        body: "Stop guidance first, then include the screen you were on, the device model, the app version, and whether the issue happened on iPhone or Android. Emailing support may share your sender name, email address, message, and these troubleshooting details; the support mailbox may retain them as needed to respond to and manage your request.",
       },
       {
         title: "What support is for",

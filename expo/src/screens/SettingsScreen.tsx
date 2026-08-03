@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import { useNavigation } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   Platform,
@@ -17,15 +17,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { useGuidePupRouter } from "@/src/lib/router";
+import { JS_FALLBACK_VALIDATION_CAMERA_PATH } from "@/src/lib/runtimeSafety";
 import { DescriptionMode, SpeechRate, useSettings } from "@/src/providers/SettingsProvider";
 
 export default function SettingsScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { settings, updateSpeechRate, updateDescriptionMode, toggleBoundingBoxes } = useSettings();
+  const {
+    settings,
+    updateDescriptionMode,
+    updateHapticsEnabled,
+    updateSpeechRate,
+  } = useSettings();
   const diagnosticsTapCountRef = useRef(0);
   const diagnosticsTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const appVersion = Constants.expoConfig?.version || "Not found in repo";
   const buildVersion =
@@ -53,39 +60,61 @@ export default function SettingsScreen() {
   }, [router, navigation]);
 
   const handleSpeechRateChange = useCallback(
-    (rate: SpeechRate) => {
-      updateSpeechRate(rate);
+    async (rate: SpeechRate) => {
+      const saved = await updateSpeechRate(rate);
       const rateLabel = rate === "slow" ? "Slow" : rate === "fast" ? "Fast" : "Normal";
+      const voiceOverEnabled = saved && Platform.OS === "ios"
+        ? await AccessibilityInfo.isScreenReaderEnabled().catch(() => true)
+        : false;
+      const message = saved
+        ? voiceOverEnabled
+          ? `App speech rate saved as ${rateLabel} for when VoiceOver is off. VoiceOver controls its own speech rate.`
+          : `Speech rate changed to ${rateLabel}`
+        : "Could not save the speech rate. The setting was not changed.";
+      setSettingsError(saved ? null : message);
       if (Platform.OS === "ios") {
-        AccessibilityInfo.announceForAccessibility(`Speech rate changed to ${rateLabel}`);
+        AccessibilityInfo.announceForAccessibility(message);
       }
     },
     [updateSpeechRate],
   );
 
   const handleDescriptionModeChange = useCallback(
-    (mode: DescriptionMode) => {
-      updateDescriptionMode(mode);
+    async (mode: DescriptionMode) => {
+      const saved = await updateDescriptionMode(mode);
       const modeLabel = mode === "short" ? "Short" : "Detailed";
+      const message = saved
+        ? `Descriptions changed to ${modeLabel}`
+        : "Could not save the description setting. The setting was not changed.";
+      setSettingsError(saved ? null : message);
       if (Platform.OS === "ios") {
-        AccessibilityInfo.announceForAccessibility(`Descriptions changed to ${modeLabel}`);
+        AccessibilityInfo.announceForAccessibility(message);
       }
     },
     [updateDescriptionMode],
   );
 
-  const handleBoundingBoxesToggle = useCallback(() => {
-    const newValue = !settings.showBoundingBoxes;
-    toggleBoundingBoxes();
+  const handleHapticsToggle = useCallback(async () => {
+    const nextValue = !settings.hapticsEnabled;
+    const saved = await updateHapticsEnabled(nextValue);
+    const message = saved
+      ? (nextValue ? "Haptics turned on" : "Haptics turned off")
+      : "Could not save the haptics setting. The setting was not changed.";
+    setSettingsError(saved ? null : message);
     if (Platform.OS === "ios") {
-      AccessibilityInfo.announceForAccessibility(
-        newValue ? "Bounding boxes turned on" : "Bounding boxes turned off",
-      );
+      AccessibilityInfo.announceForAccessibility(message);
     }
-  }, [settings.showBoundingBoxes, toggleBoundingBoxes]);
+  }, [settings.hapticsEnabled, updateHapticsEnabled]);
 
   const openDiagnostics = useCallback(() => {
     router.push("/diagnostics" as never);
+  }, [router]);
+
+  const openFallbackCameraValidation = useCallback(() => {
+    router.push({
+      pathname: "/navigation",
+      params: { cameraPath: JS_FALLBACK_VALIDATION_CAMERA_PATH },
+    } as never);
   }, [router]);
 
   const handleVersionPress = useCallback(() => {
@@ -134,6 +163,11 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {settingsError ? (
+          <Text accessibilityRole="alert" style={styles.settingsError} testID="settings-save-error">
+            {settingsError}
+          </Text>
+        ) : null}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Speech</Text>
           <Text style={styles.sectionDescription}>Control how fast Guide Pup speaks.</Text>
@@ -179,26 +213,26 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Debug / Visual</Text>
-          <Text style={styles.sectionDescription}>Advanced options for testing and troubleshooting.</Text>
+          <Text style={styles.sectionTitle}>Guidance feedback</Text>
+          <Text style={styles.sectionDescription}>Adjust haptic confirmations for spoken guidance.</Text>
           <View style={styles.toggleCard}>
             <View style={styles.toggleContent}>
               <View style={styles.toggleTextGroup}>
-                <Text style={styles.toggleLabel}>Bounding boxes</Text>
+                <Text style={styles.toggleLabel}>Haptics</Text>
                 <Text style={styles.toggleHint}>
-                  Show boxes around detected objects on the camera view.
+                  Vibrations that confirm spoken guidance and voice-command changes.
                 </Text>
               </View>
               <Switch
-                value={settings.showBoundingBoxes}
-                onValueChange={handleBoundingBoxesToggle}
+                value={settings.hapticsEnabled}
+                onValueChange={handleHapticsToggle}
                 thumbColor={Colors.palette.textPrimary}
                 trackColor={{ false: "#343843", true: Colors.palette.accent }}
                 accessibilityRole="switch"
-                accessibilityLabel="Show bounding boxes"
-                accessibilityHint="Double tap to toggle bounding boxes around detected objects"
-                accessibilityState={{ checked: settings.showBoundingBoxes }}
-                testID="settings-bounding-boxes-switch"
+                accessibilityLabel="Haptics"
+                accessibilityHint="Double tap to turn haptic guidance on or off"
+                accessibilityState={{ checked: settings.hapticsEnabled }}
+                testID="settings-haptics-switch"
               />
             </View>
           </View>
@@ -233,6 +267,22 @@ export default function SettingsScreen() {
               onPress={() => router.push("/safety" as never)}
               testID="settings-safety-link"
               title="Safety / emergency"
+            />
+            <InfoLinkButton
+              accessibilityHint="Double tap to review system status or export sanitized diagnostics"
+              accessibilityLabel="Diagnostics"
+              description="Review camera, voice, and service status. Export sanitized diagnostics for support."
+              onPress={openDiagnostics}
+              testID="settings-diagnostics-link"
+              title="Diagnostics"
+            />
+            <InfoLinkButton
+              accessibilityHint="Double tap to start guidance with the backup camera path"
+              accessibilityLabel="Test backup camera path"
+              description="Test the backup camera path used when native capture is unavailable."
+              onPress={openFallbackCameraValidation}
+              testID="settings-fallback-camera-validation"
+              title="Backup camera check"
             />
           </View>
         </View>
@@ -323,6 +373,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 40,
     gap: 36,
+  },
+  settingsError: {
+    color: "#FFB4B4",
+    fontSize: 16,
+    lineHeight: 22,
   },
   section: {
     gap: 12,

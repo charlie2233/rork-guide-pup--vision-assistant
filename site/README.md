@@ -18,8 +18,10 @@ Current live Pages URL:
 - Camera frames are sent to the Guide Pup backend.
 - Frames may be processed by third-party AI providers.
 - Anonymous device and session bootstrap state is used.
-- Optional crash reporting may be enabled.
-- The shipping navigation path does not request microphone access.
+- The launch iOS client does not vendor a crash-reporting SDK.
+- Optional voice commands use microphone and speech-recognition permissions for a bounded command set.
+- Guide Pup does not collect or retain raw voice audio; Apple speech-service processing may occur when on-device recognition is unavailable.
+- Support email may provide the sender's name, email address, message, and troubleshooting details, which the support mailbox may retain as needed to manage the request.
 - Guide Pup provides assistive guidance only and does not guarantee hazard detection or emergency response.
 
 ## Cloudflare Pages deployment

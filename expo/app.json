@@ -18,11 +18,13 @@
       "config": {
         "usesNonExemptEncryption": false
       },
-      "buildNumber": "1",
+      "buildNumber": "4",
       "supportsTablet": false,
-      "bundleIdentifier": "TODO_IOS_BUNDLE_IDENTIFIER",
+      "bundleIdentifier": "app.rork.guide-pup-vision-assist",
       "infoPlist": {
-        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers."
+        "NSCameraUsageDescription": "Guide Pup uses your camera to analyze what is ahead for assistive navigation. Camera frames are sent to Guide Pup's backend and may be processed by third-party AI providers.",
+        "NSMicrophoneUsageDescription": "Guide Pup uses the microphone for optional hands-free voice commands such as start, stop, repeat, and spoken settings changes.",
+        "NSSpeechRecognitionUsageDescription": "Guide Pup uses Apple speech recognition for optional hands-free voice commands. Recognition is preferred on-device when available and may otherwise be processed by Apple; commands are limited to a bounded control set."
       }
     },
     "android": {
@@ -42,7 +44,6 @@
     },
     "plugins": [
       "expo-router",
-      "@sentry/react-native/expo",
       "expo-font",
       "expo-web-browser",
       [

@@ -1,28 +1,25 @@
-# Guide Pup Screenshot Shotlist
+# Guide Pup Screenshot Shot List
 
-Capture these screens for App Store Connect and TestFlight review.
+An authenticated read-only observation on 2026-07-24 established that the live iOS 1.0.0 iPhone slot is labeled `6.5-inch Display` and accepts portrait `1242 x 2688` or `1284 x 2778` plus landscape equivalents. Four direct Release-app captures at `1284 x 2778` were subsequently uploaded with the user's authorization. App Store Connect accepted `4/10 screenshots` and confirms the order below.
 
-## Required Shots
+## Accepted Set
 
-1. Onboarding screen with the assistive guidance copy visible.
-2. Home screen with the primary start guidance action visible.
-3. Navigation screen while guidance is active.
-4. Navigation screen showing a safe STOP or paused state.
-5. Settings screen with the speech and description controls visible.
-6. Privacy page.
-7. Support page.
-8. Safety / emergency page.
+| Order | File | Visible target | Evidence boundary |
+| --- | --- | --- | --- |
+| 1 | `01-welcome.png` | Welcome, core safety disclosure, privacy/support links, and `Continue`. | Truthful onboarding state; no permission sheet or private content. |
+| 2 | `02-how-to-use.png` | Spoken movement cues, forward-facing phone guidance, STOP/reorient behavior, settings, and compressed-frame disclosure. | Truthful onboarding instructions; no claim of provider or hardware validation. |
+| 3 | `03-voice-settings.png` | `Speech`, `Descriptions`, `Haptics`, and privacy/safety links. | Truthful settings state; no Bounding boxes control or experimental feature is shown. |
+| 4 | `04-safe-stop-fallback.png` | Real `Backup camera unavailable` conservative STOP state. | Direct simulator fallback behavior; it is not labeled as provider-backed, network-loss, or physical-camera evidence. |
 
-## Notes
+The first three are the App Store installation-sheet set. A final authenticated App Store Connect recheck is still required after the processed build is selected and before submission.
 
-- Keep screenshots in the production visual style.
-- Use a clean device frame and avoid debug overlays.
-- Do not include raw camera imagery if it reveals personal or sensitive data.
-- If a screenshot needs to demonstrate an error state, use a short safe fallback message rather than a crash screen.
-- Do not include the experimental tabs in the production screenshot set.
+## Capture Rules
 
-## Review Copy
+- Prefer direct app captures at `1284 x 2778`; `1242 x 2688` is also listed for the observed portrait slot. Do not add a device frame.
+- Keep the production visual style and exclude debug overlays, experimental tabs, diagnostics evidence, and internal-validation wording.
+- Do not show raw camera content or any personal, sensitive, or identifying information.
+- Use only real app and provider states. Do not mock guidance, failures, banners, directions, or messages.
+- Do not describe the safe-stop screenshot as physical camera, provider, or network-loss proof.
+- Keep the focused set to three to five screenshots unless the final processed build exposes a materially better truthful state.
 
-- The app is voice-first and optimized for accessibility.
-- The shipping navigation path is onboarding, home, navigation, settings.
-- Experimental tabs should not appear in the production screenshot set.
+The screenshot upload is complete. This document does not claim that physical blind-user, VoiceOver, TestFlight-install, or App Review validation is complete.

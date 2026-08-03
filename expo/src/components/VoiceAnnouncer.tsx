@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
-import * as Speech from 'expo-speech';
+
+import { recordStopBargeInSnapshot, recordVoiceSnapshot } from "@/src/lib/diagnostics";
+import { canKeepListeningForStopBargeInDuringSpeech } from "@/src/lib/voiceCommands";
+import { GuidePupVoiceControl } from "@/src/native/GuidePupVoiceControl";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 interface VoiceContextType {
-  speak: (text: string, options?: Speech.SpeechOptions) => void;
+  speak: (text: string, options?: { keepListeningDuringSpeech?: boolean; language?: string; rate?: number }) => void;
   stop: () => void;
   isSpeaking: boolean;
 }
@@ -10,10 +14,11 @@ interface VoiceContextType {
 const VoiceContext = createContext<VoiceContextType | undefined>(undefined);
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
+  const { getSpeechRateValue } = useSettings();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const queueRef = useRef<string[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const optionsRef = useRef<Speech.SpeechOptions | undefined>(undefined);
+  const optionsRef = useRef<{ keepListeningDuringSpeech?: boolean; locale?: string; rate?: number } | undefined>(undefined);
   const sessionRef = useRef(0);
 
   const flushQueue = useCallback(() => {
@@ -28,34 +33,61 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     const combinedMessage = queueRef.current.join('. ');
     queueRef.current = [];
+    const speechOptions = optionsRef.current;
     const sessionId = sessionRef.current + 1;
     sessionRef.current = sessionId;
 
-    // Stop any ongoing speech so the new batch starts immediately.
-    Speech.stop();
-    setIsSpeaking(true);
+    void (async () => {
+      const voiceState = await GuidePupVoiceControl.getState().catch(() => null);
+      if (sessionRef.current !== sessionId) {
+        return;
+      }
+      const keepListeningDuringSpeech =
+        speechOptions?.keepListeningDuringSpeech === true
+        && Boolean(voiceState?.listening)
+        && canKeepListeningForStopBargeInDuringSpeech(combinedMessage);
 
-    Speech.speak(combinedMessage, {
-      ...optionsRef.current,
-      onStart: () => setIsSpeaking(true),
-      onDone: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
-      onStopped: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
-      onError: () => {
-        if (sessionRef.current === sessionId) setIsSpeaking(false);
-      },
+      if (sessionRef.current !== sessionId) {
+        return;
+      }
+      setIsSpeaking(true);
+      recordVoiceSnapshot({
+        listening: voiceState?.listening,
+        speaking: true,
+        speechListeningOverlapReason: keepListeningDuringSpeech ? "stop-barge-in" : undefined,
+      });
+      if (keepListeningDuringSpeech) {
+        recordStopBargeInSnapshot({
+          armedAt: Date.now(),
+          armedDuringSpeech: true,
+        });
+      }
+
+      await GuidePupVoiceControl.speak(combinedMessage, {
+        interrupt: true,
+        locale: speechOptions?.locale,
+        rate: speechOptions?.rate ?? getSpeechRateValue(),
+      }).catch(() => undefined);
+    })().finally(() => {
+      if (sessionRef.current === sessionId) {
+        setIsSpeaking(false);
+        recordVoiceSnapshot({
+          speaking: false,
+        });
+      }
     });
-  }, []);
+  }, [getSpeechRateValue]);
 
-  const speak = useCallback((text: string, options?: Speech.SpeechOptions) => {
+  const speak = useCallback((text: string, options?: { keepListeningDuringSpeech?: boolean; language?: string; rate?: number }) => {
     // Add to queue
     queueRef.current.push(text);
-    if (options) {
-      optionsRef.current = options;
-    }
+    optionsRef.current = options
+      ? {
+          locale: options.language,
+          keepListeningDuringSpeech: options.keepListeningDuringSpeech,
+          rate: options.rate,
+        }
+      : undefined;
 
     // Clear existing timeout to batch calls
     if (timeoutRef.current) {
@@ -67,14 +99,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, [flushQueue]);
 
   const stop = useCallback(() => {
+    sessionRef.current += 1; // invalidate queued and in-flight speech before native cancellation
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
     queueRef.current = [];
-    Speech.stop();
-    sessionRef.current += 1; // invalidate any in-flight callbacks
+    void GuidePupVoiceControl.stopSpeaking();
     setIsSpeaking(false);
+    recordVoiceSnapshot({
+      speaking: false,
+    });
   }, []);
 
   return (

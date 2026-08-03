@@ -1,4 +1,4 @@
-import { logWarn } from "./logging";
+import { logWarn, sanitizeLogData, sanitizeLogMessage } from "./logging";
 
 type ErrorContext = {
   requestId: string;
@@ -51,7 +51,11 @@ export function reportBackendError(
     const { dsn, ingestUrl } = parseSentryDsn(env.SENTRY_DSN);
     const { dist, environment, release } = getReleaseMetadata(env);
     const eventId = crypto.randomUUID().replace(/-/g, "");
-    const message = error instanceof Error ? error.message : String(error);
+    const message = sanitizeLogMessage(error instanceof Error ? error.message : String(error));
+    const extra = sanitizeLogData({
+      ...context,
+      environment,
+    });
     const envelope = [
       JSON.stringify({ dsn, sent_at: new Date().toISOString() }),
       JSON.stringify({ type: "event" }),
@@ -59,10 +63,7 @@ export function reportBackendError(
         dist,
         environment,
         event_id: eventId,
-        extra: {
-          ...context,
-          environment,
-        },
+        extra,
         level: "error",
         message: `[guidepup-api] ${message}`,
         platform: "javascript",

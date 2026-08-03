@@ -14,6 +14,7 @@
       "expectedDirection": "forward",
       "expectedHazard": false,
       "expectedHazardLevel": "none",
+      "expectedWalkability": "clear",
       "detail": "low",
       "scenario": "clear-path",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
@@ -25,6 +26,7 @@
       "expectedDirection": "stop",
       "expectedHazard": true,
       "expectedHazardLevel": "medium",
+      "expectedWalkability": "caution",
       "detail": "low",
       "scenario": "obstacle-ahead",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
@@ -36,6 +38,7 @@
       "expectedDirection": "stop",
       "expectedHazard": true,
       "expectedHazardLevel": "high",
+      "expectedWalkability": "uncertain",
       "detail": "high",
       "scenario": "stairs-curb-drop-off",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
@@ -47,6 +50,7 @@
       "expectedDirection": "forward",
       "expectedHazard": false,
       "expectedHazardLevel": "low",
+      "expectedWalkability": "clear",
       "detail": "low",
       "scenario": "doorway-hallway",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
@@ -58,6 +62,7 @@
       "expectedDirection": "stop",
       "expectedHazard": true,
       "expectedHazardLevel": "medium",
+      "expectedWalkability": "uncertain",
       "detail": "high",
       "scenario": "low-light",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."
@@ -69,6 +74,7 @@
       "expectedDirection": "stop",
       "expectedHazard": true,
       "expectedHazardLevel": "high",
+      "expectedWalkability": "uncertain",
       "detail": "high",
       "scenario": "stairs-curb-drop-off",
       "notes": "Local capture only. Replace with a real fixture before running a meaningful eval."

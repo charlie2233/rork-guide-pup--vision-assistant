@@ -1,9 +1,20 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { Platform } from "react-native";
 
-import { analyzeVision, type VisionAnalyzeResponse } from "@/src/lib/api";
+import {
+  analyzeVision,
+  type GuidePupCaptureHeuristics,
+  type VisionInteractionMode,
+  type VisionAnalyzeResponse,
+} from "@/src/lib/api";
 import { recordAnalyzeEvent } from "@/src/lib/diagnostics";
-import { captureAppError } from "@/src/lib/sentry";
+import {
+  assertFreshFrameForUpload,
+  isAbortError,
+  isStaleFrameError,
+  throwIfAborted,
+} from "@/src/lib/runtimeSafety";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 
 const MAX_UPLOAD_WIDTH = 768;
 
@@ -11,7 +22,10 @@ export type VisionAnalysis = VisionAnalyzeResponse;
 
 export interface AnalyzeFrameInput {
   base64?: string;
+  captureLatencyMs?: number;
   height?: number;
+  source?: "native-core" | "js-fallback";
+  timestampMs?: number;
   uri?: string;
   width?: number;
 }
@@ -23,7 +37,53 @@ export interface VisionAIResult {
   timestamp: number;
 }
 
-async function preprocessFrame(input: AnalyzeFrameInput) {
+export interface AnalyzeFrameOptions {
+  detail?: "low" | "high";
+  frameId?: string;
+  interactionMode?: VisionInteractionMode;
+  minimumFrameTimestampMs?: number;
+  priorGuidance?: string;
+  recoveryGateActive?: boolean;
+  sessionId?: string;
+  signal?: AbortSignal;
+  updateNavigationMemory?: boolean;
+}
+
+type PreparedFrame = {
+  base64: string;
+  height?: number;
+  mimeType: "image/jpeg";
+  resizedForUpload: boolean;
+  width?: number;
+};
+
+function buildCaptureHeuristics(frame: AnalyzeFrameInput, prepared?: PreparedFrame): GuidePupCaptureHeuristics {
+  const frameAgeMs = frame.timestampMs ? Math.max(0, Date.now() - frame.timestampMs) : undefined;
+
+  return {
+    captureLatencyMs: frame.captureLatencyMs,
+    frameAgeMs,
+    imageSource: frame.uri ? "uri" : frame.base64 ? "base64" : "unknown",
+    resizedForUpload: prepared?.resizedForUpload,
+    uploadedHeight: prepared?.height,
+    uploadedWidth: prepared?.width,
+  };
+}
+
+function buildFrameSummary(frame: AnalyzeFrameInput, heuristics: GuidePupCaptureHeuristics) {
+  const sourcePath = frame.source || "unknown";
+  const sourceSize = frame.width && frame.height ? `${frame.width}x${frame.height}` : "unknown-size";
+  const uploadedSize = heuristics.uploadedWidth && heuristics.uploadedHeight
+    ? `${heuristics.uploadedWidth}x${heuristics.uploadedHeight}`
+    : "unknown-upload-size";
+  const captureLatency = typeof heuristics.captureLatencyMs === "number"
+    ? `${Math.round(heuristics.captureLatencyMs)}ms-capture`
+    : "unknown-capture-latency";
+
+  return `Sampled ${sourcePath} frame, source ${sourceSize}, upload ${uploadedSize}, ${captureLatency}.`;
+}
+
+async function preprocessFrame(input: AnalyzeFrameInput): Promise<PreparedFrame> {
   if (input.uri) {
     const shouldResize = Boolean(input.width && input.width > MAX_UPLOAD_WIDTH);
     const manipulated = await ImageManipulator.manipulateAsync(
@@ -44,6 +104,7 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
       base64: manipulated.base64,
       height: manipulated.height,
       mimeType: "image/jpeg" as const,
+      resizedForUpload: shouldResize,
       width: manipulated.width,
     };
   }
@@ -53,6 +114,7 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
       base64: input.base64,
       height: input.height,
       mimeType: "image/jpeg" as const,
+      resizedForUpload: false,
       width: input.width,
     };
   }
@@ -60,18 +122,46 @@ async function preprocessFrame(input: AnalyzeFrameInput) {
   throw new Error("No image data was available for vision analysis.");
 }
 
-export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIResult> {
+export async function analyzeFrame(frame: AnalyzeFrameInput, options?: AnalyzeFrameOptions): Promise<VisionAIResult> {
   const timestamp = Date.now();
+  const detail = options?.detail ?? (Platform.OS === "web" ? "high" : "low");
 
   try {
+    throwIfAborted(options?.signal);
+    assertFreshFrameForUpload({
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
+    });
     const prepared = await preprocessFrame(frame);
+    throwIfAborted(options?.signal);
+    assertFreshFrameForUpload({
+      capturedAtMs: frame.timestampMs,
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
+    });
+    const captureHeuristics = buildCaptureHeuristics(frame, prepared);
+    const frameSummary = buildFrameSummary(frame, captureHeuristics);
 
     const analysis = await analyzeVision({
-      detail: Platform.OS === "web" ? "high" : "low",
+      captureHeuristics,
+      detail,
+      frameId: options?.frameId,
+      frameSummary,
+      hasImage: true,
       imageBase64: prepared.base64,
+      interactionMode: options?.interactionMode ?? "guidance",
       mimeType: prepared.mimeType,
+      nativePath: frame.source,
+      priorGuidance: options?.priorGuidance,
+      sampledFrame: true,
+      sessionId: options?.sessionId,
       sourceHeight: prepared.height,
       sourceWidth: prepared.width,
+      timestampMs: frame.timestampMs,
+    }, {
+      minimumCapturedAtMs: options?.minimumFrameTimestampMs,
+      signal: options?.signal,
     });
 
     return {
@@ -80,12 +170,22 @@ export async function analyzeFrame(frame: AnalyzeFrameInput): Promise<VisionAIRe
       timestamp,
     };
   } catch (error) {
+    if (isAbortError(error) || isStaleFrameError(error)) {
+      throw error;
+    }
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const captureHeuristics = buildCaptureHeuristics(frame);
     recordAnalyzeEvent({
-      detail: Platform.OS === "web" ? "high" : "low",
+      captureHeuristics,
+      detail,
       error: errorMessage,
+      frameSummary: buildFrameSummary(frame, captureHeuristics),
+      frameTimestampMs: frame.timestampMs,
+      hasImage: Boolean(frame.uri || frame.base64),
       latencyMs: Date.now() - timestamp,
+      nativePath: frame.source,
       outcome: "preprocess-failure",
+      sampledFrame: Boolean(frame.uri || frame.base64),
       safeReason: "image-preprocessing",
       sourceHeight: frame.height,
       sourceWidth: frame.width,

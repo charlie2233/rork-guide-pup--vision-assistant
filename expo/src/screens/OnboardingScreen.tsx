@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InfoLinkButton } from "@/src/components/InfoLinkButton";
 import { ONBOARDING_STEPS_NOTE } from "@/src/lib/onboarding";
@@ -9,7 +9,8 @@ import { useSettings } from "@/src/providers/SettingsProvider";
 const onboardingSteps = [
   {
     title: "Welcome to Guide Pup",
-    description: "I use your camera and voice to guide you through any space.",
+    description:
+      "Guide Pup uses your camera and voice for assistive guidance. It may miss hazards, so stop whenever you are uncertain.",
     buttonLabel: "Continue",
   },
   {
@@ -37,19 +38,35 @@ export default function OnboardingScreen() {
   const router = useGuidePupRouter();
   const insets = useSafeAreaInsets();
   const [stepIndex, setStepIndex] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { markOnboardingComplete } = useSettings();
 
   const currentStep = useMemo(() => onboardingSteps[stepIndex], [stepIndex]);
   const isLastStep = stepIndex === onboardingSteps.length - 1;
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = useCallback(async () => {
     if (isLastStep) {
-      markOnboardingComplete();
-      router.replace("/");
+      if (isSaving) {
+        return;
+      }
+      setIsSaving(true);
+      const saved = await markOnboardingComplete();
+      setIsSaving(false);
+      if (saved) {
+        setSaveError(null);
+        router.replace("/");
+      } else {
+        const message = "Guide Pup could not save setup. Please try again.";
+        setSaveError(message);
+        if (Platform.OS === "ios") {
+          AccessibilityInfo.announceForAccessibility(message);
+        }
+      }
       return;
     }
     setStepIndex((prev) => Math.min(prev + 1, onboardingSteps.length - 1));
-  }, [isLastStep, markOnboardingComplete, router, stepIndex]);
+  }, [isLastStep, isSaving, markOnboardingComplete, router]);
 
   return (
     <ScrollView
@@ -64,6 +81,11 @@ export default function OnboardingScreen() {
       <Text style={styles.kicker}>Guide Pup</Text>
       <Text style={styles.headline}>{currentStep.title}</Text>
       <Text style={styles.subtitle}>{currentStep.description}</Text>
+      {saveError ? (
+        <Text accessibilityRole="alert" style={styles.saveError} testID="onboarding-save-error">
+          {saveError}
+        </Text>
+      ) : null}
       {isLastStep ? (
         <View style={styles.howToCard} testID="onboarding-how-to-card">
           {howToBullets.map((bullet) => (
@@ -83,13 +105,14 @@ export default function OnboardingScreen() {
       )}
       <Pressable
         onPress={handleContinue}
+        disabled={isSaving}
         accessibilityLabel={currentStep.buttonLabel}
         accessibilityHint={isLastStep ? "Double tap to open the main screen" : "Double tap to advance"}
         accessibilityRole="button"
         style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
         testID="onboarding-primary-action"
       >
-        <Text style={styles.primaryButtonText}>{currentStep.buttonLabel}</Text>
+        <Text style={styles.primaryButtonText}>{isSaving ? "Saving..." : currentStep.buttonLabel}</Text>
       </Pressable>
 
       <View style={styles.learnMoreSection}>
@@ -155,6 +178,11 @@ const styles = StyleSheet.create({
     color: "#CDD0DC",
     fontSize: 20,
     lineHeight: 30,
+  },
+  saveError: {
+    color: "#FFB4B4",
+    fontSize: 18,
+    lineHeight: 26,
   },
   permissionCard: {
     backgroundColor: "#0B0D16",

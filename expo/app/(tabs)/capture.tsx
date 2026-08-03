@@ -17,7 +17,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { GuideAI, GuideAIDirection } from "@/src/logic/GuideAI";
 import { useVoice } from "@/src/components/VoiceAnnouncer";
-import { captureAppError } from "@/src/lib/sentry";
+import { captureAppError } from "@/src/lib/clientDiagnostics";
 
 const filterOptions = ["Solstice", "Neon Drift", "Midnight Bloom"] as const;
 const captureModes = ["Photo", "Video", "Story"] as const;

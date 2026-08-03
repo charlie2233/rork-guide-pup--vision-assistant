@@ -1,4 +1,12 @@
 const DEV_FALLBACK_SIGNING_SECRET = "guidepup-local-dev-secret-change-me";
+const BETA_SESSION_TTL_SECONDS = 60 * 60;
+const MIN_BETA_SESSION_TTL_SECONDS = 15 * 60;
+const MAX_BETA_SESSION_TTL_SECONDS = 4 * 60 * 60;
+const MAX_DEVELOPMENT_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+const MAX_SESSION_TOKEN_CHARACTERS = 2048;
+const MAX_SESSION_PAYLOAD_CHARACTERS = 1024;
+const MAX_SESSION_SIGNATURE_CHARACTERS = 128;
+const BASE64_URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 type SessionPayload = {
   deviceId: string;
@@ -7,21 +15,28 @@ type SessionPayload = {
   v: 1;
 };
 
-function getSessionTtlSeconds(env: Env) {
-  const parsed = Number.parseInt(env.SESSION_TTL_SECONDS || "86400", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
+export function getSessionTtlSeconds(env: Env) {
+  const environment = env.ENVIRONMENT || "development";
+  const isBetaEnvironment = environment === "staging" || environment === "production";
+  const fallback = isBetaEnvironment ? BETA_SESSION_TTL_SECONDS : 24 * 60 * 60;
+  const maximum = isBetaEnvironment ? MAX_BETA_SESSION_TTL_SECONDS : MAX_DEVELOPMENT_SESSION_TTL_SECONDS;
+  const minimum = isBetaEnvironment ? MIN_BETA_SESSION_TTL_SECONDS : 5 * 60;
+  const parsed = Number.parseInt(env.SESSION_TTL_SECONDS || "", 10);
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
-function getSigningSecret(env: Env) {
-  if (env.BOOTSTRAP_SIGNING_SECRET) {
-    return env.BOOTSTRAP_SIGNING_SECRET;
+export function getBootstrapSigningSecret(env: Env) {
+  const configured = env.BOOTSTRAP_SIGNING_SECRET?.trim();
+  if (configured) {
+    return configured;
   }
 
-  if ((env.ENVIRONMENT || "development") !== "production") {
+  if ((env.ENVIRONMENT || "development") === "development") {
     return DEV_FALLBACK_SIGNING_SECRET;
   }
 
-  throw new Error("BOOTSTRAP_SIGNING_SECRET is required in production.");
+  throw new Error("BOOTSTRAP_SIGNING_SECRET is required outside development.");
 }
 
 function encodeBase64Url(bytes: Uint8Array) {
@@ -48,7 +63,7 @@ function decodeBase64Url(value: string) {
 async function importSigningKey(env: Env) {
   return crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(getSigningSecret(env)),
+    new TextEncoder().encode(getBootstrapSigningSecret(env)),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
@@ -92,8 +107,35 @@ export async function issueSessionToken(deviceId: string, env: Env) {
 }
 
 export async function verifySessionToken(token: string, deviceId: string, env: Env) {
-  const [version, encodedPayload, encodedSignature] = token.split(".");
-  if (version !== "v1" || !encodedPayload || !encodedSignature) {
+  if (
+    typeof token !== "string"
+    || token.length === 0
+    || token.length > MAX_SESSION_TOKEN_CHARACTERS
+  ) {
+    return false;
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+  const [version, encodedPayload, encodedSignature] = parts;
+  if (
+    version !== "v1"
+    || !encodedPayload
+    || encodedPayload.length > MAX_SESSION_PAYLOAD_CHARACTERS
+    || !BASE64_URL_PATTERN.test(encodedPayload)
+    || !encodedSignature
+    || encodedSignature.length > MAX_SESSION_SIGNATURE_CHARACTERS
+    || !BASE64_URL_PATTERN.test(encodedSignature)
+  ) {
+    return false;
+  }
+
+  let actual: Uint8Array;
+  try {
+    actual = decodeBase64Url(encodedSignature);
+  } catch {
     return false;
   }
 
@@ -101,16 +143,31 @@ export async function verifySessionToken(token: string, deviceId: string, env: E
   const expected = new Uint8Array(
     await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(encodedPayload)),
   );
-  const actual = decodeBase64Url(encodedSignature);
 
   if (!timingSafeEqual(expected, actual)) {
     return false;
   }
 
-  const payloadJson = new TextDecoder().decode(decodeBase64Url(encodedPayload));
-  const payload = JSON.parse(payloadJson) as SessionPayload;
+  let payload: SessionPayload;
+  try {
+    const payloadJson = new TextDecoder().decode(decodeBase64Url(encodedPayload));
+    payload = JSON.parse(payloadJson) as SessionPayload;
+  } catch {
+    return false;
+  }
 
-  if (payload.deviceId !== deviceId || payload.exp < Math.floor(Date.now() / 1000)) {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (
+    !payload
+    || typeof payload !== "object"
+    || payload.v !== 1
+    || payload.deviceId !== deviceId
+    || !Number.isInteger(payload.iat)
+    || !Number.isInteger(payload.exp)
+    || payload.iat > nowSeconds + 5 * 60
+    || payload.exp <= nowSeconds
+    || payload.exp <= payload.iat
+  ) {
     return false;
   }
 

@@ -8,7 +8,6 @@ const RawConfigSchema = z.object({
   enableExperimentalTabs: z.string().optional(),
   privacyPolicyUrl: z.string().optional(),
   releaseTrack: z.string().optional(),
-  sentryDsn: z.string().optional(),
   supportEmail: z.string().optional(),
   supportUrl: z.string().optional(),
   websiteUrl: z.string().optional(),
@@ -22,7 +21,6 @@ const rawConfig = RawConfigSchema.parse({
   enableExperimentalTabs: process.env.EXPO_PUBLIC_ENABLE_EXPERIMENTAL_TABS,
   privacyPolicyUrl: process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL,
   releaseTrack: process.env.EXPO_PUBLIC_RELEASE_TRACK,
-  sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
   supportEmail: process.env.EXPO_PUBLIC_SUPPORT_EMAIL,
   supportUrl: process.env.EXPO_PUBLIC_SUPPORT_URL,
   websiteUrl: process.env.EXPO_PUBLIC_WEBSITE_URL,
@@ -66,7 +64,6 @@ export const appConfig = {
   privacyPolicyUrl: trimConfiguredValue(rawConfig.privacyPolicyUrl) || derivedPublicPageUrl("/privacy"),
   releaseTrack: trimToUndefined(rawConfig.releaseTrack) || (__DEV__ ? "development-client" : "app-store"),
   safetyUrl: derivedPublicPageUrl("/safety"),
-  sentryDsn: trimToUndefined(rawConfig.sentryDsn),
   supportEmail,
   supportUrl:
     trimConfiguredValue(rawConfig.supportUrl) ||

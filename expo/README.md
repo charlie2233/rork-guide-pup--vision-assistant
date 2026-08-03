@@ -23,11 +23,9 @@ Update the release file first when finalizing the app identity, public URLs, and
 
 ## Observability
 
-- `@sentry/react-native` `8.6.0` is the pinned SDK.
-- `reactNavigationIntegration()` handles route transactions from the Expo Router navigation container ref.
-- `wrapExpoRouter()` is applied to router instances for the SDK's official Expo Router prefetch instrumentation.
-- This SDK does not expose a separate Expo Router route-tracking integration that replaces React Navigation tracking.
-- The app keeps privacy scrubbing enabled and disables Sentry cleanly when `EXPO_PUBLIC_SENTRY_DSN` is not set.
+- The launch iOS client does not vendor a crash-reporting SDK.
+- Sanitized local diagnostics remain available for no-screen validation and support export.
+- Backend logs retain bounded request, performance, and structured-result metadata without raw images, raw audio, credentials, signed URLs, or installation identifiers.
 
 ## Expo setup
 
@@ -46,6 +44,21 @@ npm run ios
 npm run web
 ```
 
+Native-capable iOS spike:
+
+- `modules/guidepup-navigation-core/` is the local Expo module that now owns the first native camera/accessibility seam.
+- `npm run ios` now uses `expo run:ios` against the checked-in `ios/` project.
+- `npm run start:ios` still keeps the JS-first Metro/dev-client path available.
+- Local native generation command:
+
+```bash
+npx expo prebuild --platform ios --no-install
+cd ios
+pod install
+```
+
+- The current CocoaPods install succeeds locally with 99 dependencies and no Sentry pods.
+
 Required Expo env vars:
 
 - `EXPO_PUBLIC_API_BASE_URL`
@@ -56,7 +69,6 @@ Required Expo env vars:
 Optional Expo env vars:
 
 - `EXPO_PUBLIC_API_TIMEOUT_MS`
-- `EXPO_PUBLIC_SENTRY_DSN`
 - `EXPO_PUBLIC_WEBSITE_URL`
 - `EXPO_PUBLIC_PRIVACY_POLICY_URL`
 - `EXPO_PUBLIC_SUPPORT_URL`
@@ -64,15 +76,6 @@ Optional Expo env vars:
 - `EXPO_PUBLIC_EMERGENCY_DISCLAIMER`
 
 If `EXPO_PUBLIC_WEBSITE_URL` is set, the app derives `/privacy`, `/support`, and `/safety` automatically unless a more specific URL override is provided.
-
-Sentry release env vars:
-
-- `SENTRY_AUTH_TOKEN`
-- `SENTRY_ORG`
-- `SENTRY_PROJECT`
-
-The Expo config plugin is enabled in `app.json`. For EAS Build, Sentry uploads source maps during the native build when the release env vars are present. If OTA updates are introduced later, publish the update and then run `npm run sentry:upload-sourcemaps:update` against the generated `dist/` folder.
-Keep `EXPO_PUBLIC_APP_ENV`, the EAS build profile, and the backend release metadata aligned so source maps and crash events group under the same release.
 
 Run locally:
 
@@ -125,6 +128,8 @@ Optional provider / gateway vars:
 cd backend/guidepup-api
 npm run check
 npm run check:staging
+npm run smoke:staging
+npm run smoke:production
 npm run deploy:staging
 npm run deploy
 ```
@@ -140,8 +145,11 @@ npx wrangler pages deploy .
 
 ```bash
 cd expo
-npm run release:preflight
-npx eas-cli metadata:push --profile store --platform ios
+npx eas-cli whoami
+npm run release:preflight:preview
+npm run release:preflight:testflight
+npm run release:preflight:store
+npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
 npx eas-cli build --profile testflight --platform ios
 npx eas-cli submit --profile testflight --platform ios
@@ -157,13 +165,13 @@ npx eas-cli submit --profile store --platform ios
 - `store` for final App Store submission builds
 
 Both store-upload profiles pin `macos-sequoia-15.6-xcode-26.2` to satisfy the current App Store upload requirement for Xcode 26 / iOS 26 SDK builds.
-`expo/package.json` also includes `sentry:upload-sourcemaps:update` for OTA release handling if Expo Updates is enabled later.
+`testflight` and `store` now hard-fail release preflight unless `backend/guidepup-api/eval/smoke-results-production.latest.json` proves production analyze is provider-backed. `preview` keeps staging mapped, but only warns on fallback-only staging smoke unless you opt into stricter enforcement.
 
 If you need a quick release rehearsal sequence:
 
 ```bash
 npm run dev
-npm run release:preflight
+npm run release:preflight:testflight
 npx eas-cli metadata:push --profile store
 npx eas-cli build --profile preview --platform ios
 npx eas-cli build --profile testflight --platform ios
@@ -178,20 +186,19 @@ Minimum launch steps:
 
 1. Fill [Launch Inputs](./docs/launch-inputs.md).
 2. Deploy the public `site/` pages and set the website/privacy/support URLs in Expo env.
-3. Run `npm run release:preflight`.
-4. Push App Store metadata with `npx eas-cli metadata:push --profile store --platform ios`.
-5. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
-6. Submit the TestFlight build only after smoke testing passes.
-7. Build the `store` profile only when you are ready for App Store submission.
-8. Verify the camera permission text and App Store disclosure text.
-9. Confirm backend rate limiting, logging, and provider credentials in production.
-10. Complete the TestFlight smoke plan from the checklist.
+3. Run `npx eas-cli whoami` and log in, or export `EXPO_TOKEN`.
+4. Run `npm run release:preflight:preview`, `npm run release:preflight:testflight`, and `npm run release:preflight:store`.
+5. Push App Store metadata with `npx eas-cli metadata:push --profile store`.
+6. Build an internal preview binary, then a true TestFlight binary, and install the preview build on a physical iPhone.
+7. Submit the TestFlight build only after smoke testing passes.
+8. Build the `store` profile only when you are ready for App Store submission.
+9. Verify the camera permission text and App Store disclosure text.
+10. Confirm backend rate limiting, logging, and provider credentials in production.
+11. Complete the TestFlight smoke plan from the checklist.
 
 ## Safety and release TODOs
 
-- TODO: publish a privacy policy URL and wire it into the app release materials.
-- TODO: publish a support URL and wire it into the app release materials.
-- TODO: finalize the emergency / safety disclaimer copy with legal review.
+- TODO: keep the finalized emergency / safety disclaimer copy available for legal review before store submission.
 - TODO: add App Store metadata copy for camera usage and third-party AI image processing.
 - TODO: replace placeholder SOS behavior with a real emergency flow and legal review.
 - TODO: if microphone capture is ever added, add the matching permission string and privacy disclosures before shipping.

@@ -18,10 +18,14 @@ import Colors from "@/constants/colors";
 import { fetchHealthCheck } from "@/src/lib/api";
 import {
   buildDiagnosticsReport,
+  buildNoScreenSmokeEvidenceDraftJson,
+  findDiagnosticsExportPrivacyIssues,
   formatDiagnosticsEventSummary,
+  getAnalyzeExecutionPath,
   useDiagnostics,
 } from "@/src/lib/diagnostics";
 import { useGuidePupRouter } from "@/src/lib/router";
+import { useSettings } from "@/src/providers/SettingsProvider";
 
 type StateTone = "neutral" | "warning" | "critical";
 
@@ -44,16 +48,33 @@ function formatMs(value?: number) {
   return `${Math.round(value)}ms`;
 }
 
+function formatTimestamp(value?: number) {
+  if (typeof value !== "number") {
+    return "Not found in repo";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
 export default function DiagnosticsScreen() {
   const router = useGuidePupRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const diagnostics = useDiagnostics();
+  const { settings } = useSettings();
   const [isRunningHealthCheck, setIsRunningHealthCheck] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [healthMessage, setHealthMessage] = useState<string>("No health check has run yet.");
 
   const report = useMemo(() => buildDiagnosticsReport(diagnostics), [diagnostics]);
+  const noScreenEvidenceDraft = useMemo(
+    () => buildNoScreenSmokeEvidenceDraftJson(diagnostics, { settings }),
+    [diagnostics, settings],
+  );
+  const voiceInvariantPass =
+    diagnostics.voice.unexpectedSpeechListeningOverlapCount === 0
+    && (!diagnostics.voice.speechListeningOverlapActive
+      || diagnostics.voice.lastSpeechListeningOverlapReason === "stop-barge-in");
 
   const handleBack = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -86,26 +107,49 @@ export default function DiagnosticsScreen() {
     }
   }, []);
 
-  const handleShare = useCallback(async () => {
+  const shareText = useCallback(async (message: string, title: string, successMessage: string) => {
     try {
       setShareError(null);
+      const privacyIssues = findDiagnosticsExportPrivacyIssues(message);
+      if (privacyIssues.length > 0) {
+        const errorMessage = `Export blocked because it may contain private data: ${privacyIssues.join(", ")}.`;
+        setShareError(errorMessage);
+        Alert.alert("Export blocked", errorMessage);
+        if (Platform.OS === "ios") {
+          AccessibilityInfo.announceForAccessibility("Export blocked because private data was detected.");
+        }
+        return;
+      }
+
       if (Platform.OS === "web" && globalThis.navigator?.clipboard?.writeText) {
-        await globalThis.navigator.clipboard.writeText(report);
-        setHealthMessage("Diagnostics report copied to clipboard.");
+        await globalThis.navigator.clipboard.writeText(message);
+        setHealthMessage(successMessage);
         return;
       }
 
       await Share.share({
-        message: report,
-        title: "Guide Pup Diagnostics",
+        message,
+        title,
       });
-      setHealthMessage("Diagnostics report opened in the share sheet.");
+      setHealthMessage(successMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to share diagnostics.";
-      setShareError(message);
-      Alert.alert("Share failed", message);
+      const errorMessage = error instanceof Error ? error.message : "Unable to share diagnostics.";
+      setShareError(errorMessage);
+      Alert.alert("Share failed", errorMessage);
     }
-  }, [report]);
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    await shareText(report, "Guide Pup Diagnostics", "Diagnostics report opened in the share sheet.");
+  }, [report, shareText]);
+
+  const handleShareNoScreenEvidence = useCallback(async () => {
+    await shareText(
+      noScreenEvidenceDraft,
+      "Guide Pup No-Screen Evidence Draft",
+      "No-screen evidence draft opened in the share sheet.",
+    );
+  }, [noScreenEvidenceDraft, shareText]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]} testID="diagnostics-screen">
@@ -134,8 +178,31 @@ export default function DiagnosticsScreen() {
           <KeyValue label="Build" value={diagnostics.runtime.buildVersion || "Not found in repo"} />
           <KeyValue label="Environment" value={diagnostics.runtime.appEnv} />
           <KeyValue label="Release track" value={diagnostics.runtime.releaseTrack} />
+          <KeyValue
+            label="Candidate identifier"
+            value={diagnostics.runtime.candidateIdentifier || "Not found in repo"}
+          />
+          <KeyValue
+            label="Source revision"
+            value={diagnostics.runtime.sourceRevision || "Not found in repo"}
+          />
+          <KeyValue
+            label="App transaction verified"
+            value={diagnostics.distribution.transactionVerified ? "yes" : "no"}
+          />
+          <KeyValue
+            label="App identity matched"
+            value={diagnostics.distribution.identityMatched ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Distribution environment"
+            value={diagnostics.distribution.environment}
+          />
           <KeyValue label="API base URL" value={diagnostics.runtime.apiBaseUrl || "Not configured"} />
-          <KeyValue label="Sentry" value={diagnostics.runtime.sentryEnabled ? "enabled" : "disabled"} />
+          <KeyValue
+            label="Crash reporting"
+            value={diagnostics.runtime.crashReportingEnabled ? "enabled" : "not embedded"}
+          />
           <KeyValue
             label="Experimental tabs"
             value={diagnostics.runtime.experimentalTabsEnabled ? "enabled" : "disabled"}
@@ -173,8 +240,149 @@ export default function DiagnosticsScreen() {
         >
           <KeyValue label="Status" value={diagnostics.session.status} />
           <KeyValue label="Device suffix" value={diagnostics.session.deviceIdSuffix || "Not found in repo"} />
+          <KeyValue label="Bootstrap request ID" value={diagnostics.session.requestId || "Not found in repo"} />
           <KeyValue label="Expires at" value={diagnostics.session.expiresAt || "Not found in repo"} />
           <KeyValue label="Error" value={diagnostics.session.error || "None"} />
+        </InfoCard>
+
+        <InfoCard
+          tone={diagnostics.voice.lastError || !voiceInvariantPass ? "warning" : "neutral"}
+          title="Voice control"
+        >
+          <KeyValue
+            label="Native voice module available"
+            value={diagnostics.voice.available ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Execution path"
+            value={diagnostics.voice.executionPath}
+          />
+          <KeyValue
+            label="Microphone permission"
+            value={diagnostics.voice.microphonePermission || "Not found in repo"}
+          />
+          <KeyValue
+            label="Speech recognition permission"
+            value={diagnostics.voice.speechPermission || "Not found in repo"}
+          />
+          <KeyValue
+            label="Listening active"
+            value={diagnostics.voice.listening ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Speaking active"
+            value={diagnostics.voice.speaking ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Speech/listening invariant"
+            value={voiceInvariantPass ? "PASS" : "FAIL"}
+          />
+          <KeyValue
+            label="Overlap active"
+            value={diagnostics.voice.speechListeningOverlapActive ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Overlap count"
+            value={`${diagnostics.voice.speechListeningOverlapCount}`}
+          />
+          <KeyValue
+            label="Unexpected overlap count"
+            value={`${diagnostics.voice.unexpectedSpeechListeningOverlapCount}`}
+          />
+          <KeyValue
+            label="Last overlap reason"
+            value={diagnostics.voice.lastSpeechListeningOverlapReason || "None"}
+          />
+          <KeyValue
+            label="Last overlap time"
+            value={formatTimestamp(diagnostics.voice.lastSpeechListeningOverlapAt)}
+          />
+          <KeyValue
+            label="Last recognized command"
+            value={diagnostics.voice.lastRecognizedCommand || "None"}
+          />
+          <KeyValue
+            label="Last recognition phase"
+            value={diagnostics.voice.lastRecognizedCommandPhase || "None"}
+          />
+          <KeyValue
+            label="Last recognition time"
+            value={formatTimestamp(diagnostics.voice.lastRecognizedAt)}
+          />
+          <KeyValue
+            label="Last voice state time"
+            value={formatTimestamp(diagnostics.voice.lastVoiceStateChangedAt)}
+          />
+          <KeyValue
+            label="Last voice-module error"
+            value={diagnostics.voice.lastError || "None"}
+          />
+        </InfoCard>
+
+        <InfoCard
+          tone={diagnostics.navigationLoop.lastError ? "warning" : "neutral"}
+          title="Guidance loop"
+        >
+          <KeyValue
+            label="Native module available"
+            value={diagnostics.navigationLoop.available ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Execution path"
+            value={diagnostics.navigationLoop.executionPath}
+          />
+          <KeyValue
+            label="Native session active"
+            value={diagnostics.navigationLoop.sessionActive ? "yes" : "no"}
+          />
+          <KeyValue
+            label="VoiceOver running"
+            value={diagnostics.navigationLoop.voiceOverRunning ? "yes" : "no"}
+          />
+          <KeyValue
+            label="Last capture latency"
+            value={formatMs(diagnostics.navigationLoop.lastCaptureLatencyMs)}
+          />
+          <KeyValue
+            label="Last analyze latency"
+            value={formatMs(diagnostics.lastAnalyze?.latencyMs)}
+          />
+          <KeyValue
+            label="Last total guidance loop latency"
+            value={formatMs(diagnostics.navigationLoop.lastTotalGuidanceLoopLatencyMs)}
+          />
+          <KeyValue
+            label="Last native/core error"
+            value={diagnostics.navigationLoop.lastError || "None"}
+          />
+        </InfoCard>
+
+        <InfoCard
+          tone={diagnostics.audioCue.lastOutcome === "failure" ? "warning" : "neutral"}
+          title="Audio cues"
+        >
+          <KeyValue label="Last type" value={diagnostics.audioCue.lastType || "None"} />
+          <KeyValue label="Last outcome" value={diagnostics.audioCue.lastOutcome} />
+          <KeyValue label="Last execution path" value={diagnostics.audioCue.lastExecutionPath || "Not found in repo"} />
+          <KeyValue label="Last attempted" value={formatTimestamp(diagnostics.audioCue.lastAttemptedAt)} />
+          <KeyValue label="Last completed" value={formatTimestamp(diagnostics.audioCue.lastCompletedAt)} />
+          <KeyValue label="Success count" value={`${diagnostics.audioCue.successCount}`} />
+          <KeyValue label="Failure count" value={`${diagnostics.audioCue.failureCount}`} />
+          <KeyValue label="Last error" value={diagnostics.audioCue.lastError || "None"} />
+        </InfoCard>
+
+        <InfoCard
+          tone={diagnostics.haptics.lastOutcome === "failure" ? "warning" : "neutral"}
+          title="Haptics"
+        >
+          <KeyValue label="Last type" value={diagnostics.haptics.lastType || "None"} />
+          <KeyValue label="Last outcome" value={diagnostics.haptics.lastOutcome} />
+          <KeyValue label="Last execution path" value={diagnostics.haptics.lastExecutionPath || "Not found in repo"} />
+          <KeyValue label="Last attempted" value={formatTimestamp(diagnostics.haptics.lastAttemptedAt)} />
+          <KeyValue label="Last completed" value={formatTimestamp(diagnostics.haptics.lastCompletedAt)} />
+          <KeyValue label="Success count" value={`${diagnostics.haptics.successCount}`} />
+          <KeyValue label="Failure count" value={`${diagnostics.haptics.failureCount}`} />
+          <KeyValue label="Last error" value={diagnostics.haptics.lastError || "None"} />
         </InfoCard>
 
         <InfoCard
@@ -254,11 +462,14 @@ export default function DiagnosticsScreen() {
             value={diagnostics.lastAnalyze?.outcome || "Not found in repo"}
           />
           <KeyValue
+            label="Execution path"
+            value={getAnalyzeExecutionPath(diagnostics.lastAnalyze)}
+          />
+          <KeyValue
             label="Latency"
             value={formatMs(diagnostics.lastAnalyze?.latencyMs)}
           />
           <KeyValue label="Direction" value={diagnostics.lastAnalyze?.direction || "Not found in repo"} />
-          <KeyValue label="Obstacle" value={diagnostics.lastAnalyze?.obstacle ? "true" : "false"} />
           <KeyValue
             label="Hazard"
             value={diagnostics.lastAnalyze?.hazardLevel || "Not found in repo"}
@@ -278,7 +489,82 @@ export default function DiagnosticsScreen() {
             label="Prompt version"
             value={diagnostics.lastAnalyze?.promptVersion || "Not found in repo"}
           />
+          <KeyValue label="App version" value={diagnostics.lastAnalyze?.appVersion || "Not found in repo"} />
+          <KeyValue label="Session ID" value={diagnostics.lastAnalyze?.sessionId || "Not found in repo"} />
+          <KeyValue label="Frame ID" value={diagnostics.lastAnalyze?.frameId || "Not found in repo"} />
+          <KeyValue label="Frame summary" value={diagnostics.lastAnalyze?.frameSummary || "Not found in repo"} />
+          <KeyValue label="Frame time" value={formatTimestamp(diagnostics.lastAnalyze?.frameTimestampMs)} />
+          <KeyValue
+            label="Sampled frame"
+            value={
+              typeof diagnostics.lastAnalyze?.sampledFrame === "boolean"
+                ? String(diagnostics.lastAnalyze.sampledFrame)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue
+            label="Has image"
+            value={
+              typeof diagnostics.lastAnalyze?.hasImage === "boolean"
+                ? String(diagnostics.lastAnalyze.hasImage)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue label="Native path" value={diagnostics.lastAnalyze?.nativePath || "Not found in repo"} />
+          <KeyValue label="Platform" value={diagnostics.lastAnalyze?.platform || "Not found in repo"} />
+          <KeyValue
+            label="Capture latency"
+            value={formatMs(diagnostics.lastAnalyze?.captureHeuristics?.captureLatencyMs)}
+          />
+          <KeyValue
+            label="Frame age"
+            value={formatMs(diagnostics.lastAnalyze?.captureHeuristics?.frameAgeMs)}
+          />
+          <KeyValue
+            label="Image source"
+            value={diagnostics.lastAnalyze?.captureHeuristics?.imageSource || "Not found in repo"}
+          />
+          <KeyValue
+            label="Resized upload"
+            value={
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.resizedForUpload === "boolean"
+                ? String(diagnostics.lastAnalyze.captureHeuristics.resizedForUpload)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue
+            label="Uploaded size"
+            value={
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.uploadedWidth === "number" &&
+              typeof diagnostics.lastAnalyze?.captureHeuristics?.uploadedHeight === "number"
+                ? `${diagnostics.lastAnalyze.captureHeuristics.uploadedWidth}x${diagnostics.lastAnalyze.captureHeuristics.uploadedHeight}`
+                : "Not found in repo"
+            }
+          />
+          <KeyValue
+            label="Source size"
+            value={
+              typeof diagnostics.lastAnalyze?.sourceWidth === "number" &&
+              typeof diagnostics.lastAnalyze?.sourceHeight === "number"
+                ? `${diagnostics.lastAnalyze.sourceWidth}x${diagnostics.lastAnalyze.sourceHeight}`
+                : "Not found in repo"
+            }
+          />
+          <KeyValue label="Prior guidance" value={diagnostics.lastAnalyze?.priorGuidanceSummary || "None"} />
           <KeyValue label="Message" value={diagnostics.lastAnalyze?.message || "Not found in repo"} />
+          <KeyValue
+            label="Obstacle"
+            value={
+              typeof diagnostics.lastAnalyze?.obstacle === "boolean"
+                ? String(diagnostics.lastAnalyze.obstacle)
+                : "Not found in repo"
+            }
+          />
+          <KeyValue label="Lighting" value={diagnostics.lastAnalyze?.lighting || "Not found in repo"} />
+          <KeyValue label="Surface" value={diagnostics.lastAnalyze?.surfaceType || "Not found in repo"} />
+          <KeyValue label="Walkability" value={diagnostics.lastAnalyze?.walkability || "Not found in repo"} />
+          <KeyValue label="Scene" value={diagnostics.lastAnalyze?.sceneDescription || "Not found in repo"} />
+          <KeyValue label="Fallback reason" value={diagnostics.lastAnalyze?.fallbackReason || "None"} />
           <KeyValue label="Error" value={diagnostics.lastAnalyze?.error || "None"} />
           <KeyValue label="Safe reason" value={diagnostics.lastAnalyze?.safeReason || "None"} />
           {shareError ? <Text style={styles.errorText}>{shareError}</Text> : null}
@@ -319,6 +605,17 @@ export default function DiagnosticsScreen() {
           >
             <FileText color={Colors.palette.textPrimary} size={16} />
             <Text style={styles.secondaryButtonText}>Export sanitized log</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleShareNoScreenEvidence}
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Export no-screen evidence draft"
+            accessibilityHint="Double tap to share or copy a sanitized JSON draft for the real iPhone no-screen validation artifact"
+            testID="diagnostics-export-no-screen-evidence"
+          >
+            <FileText color={Colors.palette.textPrimary} size={16} />
+            <Text style={styles.secondaryButtonText}>Export no-screen JSON draft</Text>
           </Pressable>
         </InfoCard>
       </ScrollView>

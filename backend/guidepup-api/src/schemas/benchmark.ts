@@ -1,12 +1,17 @@
 import { z } from "zod";
-import { AnalyzeVisionRequestSchema, DirectionSchema, HazardLevelSchema } from "./vision";
+import {
+  BaseAnalyzeVisionRequestSchema,
+  DirectionSchema,
+  HazardLevelSchema,
+  validateAnalyzeVisionRequest,
+} from "./vision";
 
 export const BenchmarkProviderNameSchema = z.enum(["openai-compatible", "huggingface-minicpm-o"]);
 
-export const BenchmarkVisionRequestSchema = AnalyzeVisionRequestSchema.extend({
+export const BenchmarkVisionRequestSchema = BaseAnalyzeVisionRequestSchema.extend({
   providers: z.array(BenchmarkProviderNameSchema).min(1).max(2).default(["openai-compatible"]),
   samples: z.number().int().min(1).max(3).default(1),
-});
+}).superRefine(validateAnalyzeVisionRequest);
 
 export const BenchmarkVisionResultSchema = z.object({
   averageLatencyMs: z.number().min(0),
